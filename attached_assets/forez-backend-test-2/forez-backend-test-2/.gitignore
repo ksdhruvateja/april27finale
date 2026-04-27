@@ -1,0 +1,5 @@
+node_modules/
+quickboo/node_modules/
+quickboo/**/node_modules/
+quickboo/.pnpm-store/
+quickboo/.local/share/pnpm/store/

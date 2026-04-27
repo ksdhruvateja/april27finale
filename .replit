@@ -1,0 +1,97 @@
+modules = ["nodejs-24", "postgresql-16"]
+
+[deployment]
+router = "application"
+deploymentTarget = "autoscale"
+
+[deployment.postBuild]
+args = ["pnpm", "store", "prune"]
+env = { "CI" = "true" }
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "COREPACK_ENABLE_STRICT=0 PORT=5173 /nix/store/9z31jjxbgf3i10z97r7yv2jvv7g9csms-pnpm-9.15.9/bin/pnpm --filter @workspace/dashboard run dev & COREPACK_ENABLE_STRICT=0 PORT=3000 /nix/store/9z31jjxbgf3i10z97r7yv2jvv7g9csms-pnpm-9.15.9/bin/pnpm --filter @workspace/api-server run start"
+waitForPort = 5173
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[agent]
+stack = "PNPM_WORKSPACE"
+expertMode = true
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 20000
+
+[[ports]]
+localPort = 3000
+externalPort = 6000
+
+[[ports]]
+localPort = 5173
+externalPort = 6800
+
+[[ports]]
+localPort = 5174
+externalPort = 8008
+
+[[ports]]
+localPort = 8080
+externalPort = 8080
+
+[[ports]]
+localPort = 8081
+externalPort = 80
+
+[[ports]]
+localPort = 8082
+externalPort = 3003
+
+[[ports]]
+localPort = 8083
+externalPort = 3002
+
+[[ports]]
+localPort = 8084
+externalPort = 5173
+
+[[ports]]
+localPort = 23183
+externalPort = 3000
+
+[[ports]]
+localPort = 23184
+externalPort = 3001
+
+[[ports]]
+localPort = 23185
+externalPort = 4200
+
+[[ports]]
+localPort = 23186
+externalPort = 5000
+
+[nix]
+channel = "stable-25_05"
+
+[userenv]
+
+[userenv.shared]
+GITHUB_TOKEN = "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"

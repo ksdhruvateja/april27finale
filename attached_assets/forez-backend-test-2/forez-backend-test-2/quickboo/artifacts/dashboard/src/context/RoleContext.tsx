@@ -1,0 +1,87 @@
+import { createContext, useContext, useState, ReactNode } from "react";
+
+export type UserRole = "developer" | "admin" | "sales" | "shipper" | "accountant" | "viewer" | "custom";
+
+export interface CustomPermissions {
+  allowedPaths: string[];
+  readOnly: boolean;
+  hidePrices: boolean;
+}
+
+export interface CurrentUser {
+  id?: number;
+  email: string;
+  name?: string;
+  role: UserRole;
+  customPermissions?: CustomPermissions;
+}
+
+interface RoleContextType {
+  currentUser: CurrentUser | null;
+  setCurrentUser: (user: CurrentUser | null) => void;
+  hasAccess: (path: string) => boolean;
+  canEdit: boolean;
+  canManageUsers: boolean;
+  isShipper: boolean;
+  hidePrices: boolean;
+}
+
+const RoleContext = createContext<RoleContextType | null>(null);
+
+export const ROLE_ACCESS: Record<Exclude<UserRole, "custom">, string[]> = {
+  developer:  ["*"],
+  admin:      ["*"],
+  sales:      ["/", "/auctions", "/customers", "/quotes", "/invoices", "/purchase-orders", "/products", "/shipments", "/sales-leads"],
+  shipper:    ["/purchase-orders", "/shipments"],
+  accountant: ["/", "/auctions", "/customers", "/invoices", "/vendors", "/purchase-orders", "/bills", "/tax-rates", "/accounting", "/banking"],
+  viewer:     ["/", "/auctions", "/quotes", "/invoices", "/purchase-orders", "/shipments"],
+};
+
+export function checkAccess(role: UserRole, path: string, customPermissions?: CustomPermissions): boolean {
+  if (role === "custom") {
+    if (!customPermissions) return false;
+    const allowed = customPermissions.allowedPaths;
+    return allowed.some(p => path === p || (p !== "/" && path.startsWith(p)));
+  }
+  const allowed = ROLE_ACCESS[role as Exclude<UserRole, "custom">];
+  if (!allowed) return false;
+  if (allowed.includes("*")) return true;
+  return allowed.some(p => path === p || (p !== "/" && path.startsWith(p)));
+}
+
+export function RoleProvider({ children }: { children: ReactNode }) {
+  const [currentUser, setCurrentUserState] = useState<CurrentUser | null>(null);
+
+  const setCurrentUser = (user: CurrentUser | null) => {
+    setCurrentUserState(user);
+  };
+
+  const hasAccess = (path: string) =>
+    currentUser ? checkAccess(currentUser.role, path, currentUser.customPermissions) : false;
+
+  const canEdit = currentUser
+    ? currentUser.role === "custom"
+      ? !(currentUser.customPermissions?.readOnly ?? true)
+      : !["viewer"].includes(currentUser.role)
+    : false;
+
+  const canManageUsers = currentUser
+    ? ["developer", "admin"].includes(currentUser.role)
+    : false;
+
+  const isShipper  = currentUser?.role === "shipper";
+  const hidePrices = currentUser?.role === "shipper"
+    || (currentUser?.role === "custom" && (currentUser.customPermissions?.hidePrices ?? false));
+
+  return (
+    <RoleContext.Provider value={{ currentUser, setCurrentUser, hasAccess, canEdit, canManageUsers, isShipper, hidePrices }}>
+      {children}
+    </RoleContext.Provider>
+  );
+}
+
+export function useRole() {
+  const ctx = useContext(RoleContext);
+  if (!ctx) throw new Error("useRole must be used inside RoleProvider");
+  return ctx;
+}
