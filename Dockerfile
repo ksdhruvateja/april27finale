@@ -6,6 +6,8 @@ WORKDIR /app
 RUN corepack enable
 
 COPY . .
+RUN pnpm config set auto-install-peers false
+RUN pnpm config set strict-peer-dependencies false
 RUN pnpm install --frozen-lockfile --prod=false --ignore-scripts
 RUN pnpm run build:railway
 
