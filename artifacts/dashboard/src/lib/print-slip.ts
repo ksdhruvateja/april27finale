@@ -1,4 +1,4 @@
-import forézLogo from "@assets/forez_logo_1775627603527.png";
+const forézLogo = "/favicon.svg";
 
 const BUSINESS = {
   name:    "Forez Corp",
