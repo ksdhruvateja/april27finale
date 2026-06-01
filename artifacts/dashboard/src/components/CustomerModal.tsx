@@ -201,17 +201,20 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
       quickbooksExtras: qbExtrasFromForm(qbForm),
     };
 
+    const onSaved = () => {
+      queryClient.invalidateQueries({ queryKey: getListCustomersQueryKey() });
+    };
     if (isEdit) {
       update.mutate({ id: customer.id, data }, {
-        onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListCustomersQueryKey() }); onClose(); }
+        onSuccess: () => { onSaved(); onClose(); },
       });
     } else {
       create.mutate({ data }, {
         onSuccess: (result: any) => {
-          queryClient.invalidateQueries({ queryKey: getListCustomersQueryKey() });
+          onSaved();
           if (onCreated && result?.id) onCreated(result.id);
           onClose();
-        }
+        },
       });
     }
   };

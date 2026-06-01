@@ -1,6 +1,22 @@
 import { useEffect } from "react";
 import { Router as WouterRouter, Switch, Route, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider, MutationCache } from "@tanstack/react-query";
+import { toast } from "sonner";
+import {
+  getListBillsQueryKey,
+  getListCustomersQueryKey,
+  getListEstimatesQueryKey,
+  getListInventoryQueryKey,
+  getListInvoicesQueryKey,
+  getListProductsQueryKey,
+  getListPurchaseOrdersQueryKey,
+  getListQuotesQueryKey,
+  getListSalesLeadsQueryKey,
+  getListShipmentsQueryKey,
+  getListTaxRatesQueryKey,
+  getListVendorsQueryKey,
+} from "@workspace/api-client-react";
+import { Toaster } from "@/components/ui/sonner";
 import { RoleProvider, useRole } from "@/context/RoleContext";
 import { logAudit, setAuditUser, getCurrentAuditUser, AuditEntityType } from "@/lib/auditLog";
 import UserSelectModal from "@/components/UserSelectModal";
@@ -75,6 +91,60 @@ const MUTATION_LOG_MAP: Record<string, MutationLogDef> = {
   deleteSalesLead:            { entityType: "other",    action: "deleted",   label: "Sales lead deleted" },
 };
 
+/** After any API mutation, refetch list queries so the UI matches the database. */
+const MUTATION_INVALIDATE: Record<string, Array<() => readonly unknown[]>> = {
+  createCustomer: [getListCustomersQueryKey],
+  updateCustomer: [getListCustomersQueryKey],
+  deleteCustomer: [getListCustomersQueryKey],
+  createVendor: [getListVendorsQueryKey],
+  updateVendor: [getListVendorsQueryKey],
+  deleteVendor: [getListVendorsQueryKey],
+  createProduct: [getListProductsQueryKey, getListInventoryQueryKey],
+  updateProduct: [getListProductsQueryKey],
+  deleteProduct: [getListProductsQueryKey, getListInventoryQueryKey],
+  updateInventoryItem: [getListInventoryQueryKey, getListProductsQueryKey],
+  createQuote: [getListQuotesQueryKey],
+  updateQuote: [getListQuotesQueryKey],
+  deleteQuote: [getListQuotesQueryKey],
+  convertQuoteToInvoice: [getListQuotesQueryKey, getListInvoicesQueryKey],
+  createEstimate: [getListEstimatesQueryKey],
+  updateEstimate: [getListEstimatesQueryKey],
+  deleteEstimate: [getListEstimatesQueryKey],
+  convertEstimateToInvoice: [getListEstimatesQueryKey, getListInvoicesQueryKey],
+  createInvoice: [getListInvoicesQueryKey, getListCustomersQueryKey],
+  updateInvoice: [getListInvoicesQueryKey, getListCustomersQueryKey],
+  deleteInvoice: [getListInvoicesQueryKey, getListCustomersQueryKey],
+  payInvoice: [getListInvoicesQueryKey, getListCustomersQueryKey],
+  createPurchaseOrder: [getListPurchaseOrdersQueryKey],
+  updatePurchaseOrder: [getListPurchaseOrdersQueryKey],
+  deletePurchaseOrder: [getListPurchaseOrdersQueryKey],
+  convertPurchaseOrderToBill: [getListPurchaseOrdersQueryKey, getListBillsQueryKey],
+  createBill: [getListBillsQueryKey],
+  updateBill: [getListBillsQueryKey],
+  deleteBill: [getListBillsQueryKey],
+  payBill: [getListBillsQueryKey],
+  createShipment: [getListShipmentsQueryKey],
+  updateShipment: [getListShipmentsQueryKey],
+  createTaxRate: [getListTaxRatesQueryKey],
+  updateTaxRate: [getListTaxRatesQueryKey],
+  deleteTaxRate: [getListTaxRatesQueryKey],
+  createSalesLead: [getListSalesLeadsQueryKey],
+  updateSalesLead: [getListSalesLeadsQueryKey],
+  deleteSalesLead: [getListSalesLeadsQueryKey],
+};
+
+function mutationKeyName(mutation: { options: { mutationKey?: unknown } }): string | undefined {
+  const key = mutation.options.mutationKey;
+  return Array.isArray(key) ? (key[0] as string) : undefined;
+}
+
+function mutationErrorMessage(error: unknown): string {
+  if (error && typeof error === "object" && "message" in error && typeof (error as { message: unknown }).message === "string") {
+    return (error as { message: string }).message;
+  }
+  return "Could not save changes to the database. Check that the API is running.";
+}
+
 function extractEntityRef(data: any, variables: any): { id: string; ref: string } {
   const src = data ?? {};
   const vars = variables?.data ?? variables ?? {};
@@ -103,11 +173,20 @@ function extractEntityRef(data: any, variables: any): { id: string; ref: string 
   return { id, ref: String(ref) };
 }
 
+let queryClient: QueryClient;
+
 const mutationCache = new MutationCache({
   onSuccess(data: unknown, variables: unknown, _context: unknown, mutation) {
-    const key = Array.isArray(mutation.options.mutationKey)
-      ? (mutation.options.mutationKey[0] as string)
-      : undefined;
+    const key = mutationKeyName(mutation);
+    if (key) {
+      const invalidators = MUTATION_INVALIDATE[key];
+      if (invalidators) {
+        for (const getKey of invalidators) {
+          void queryClient.invalidateQueries({ queryKey: getKey() });
+        }
+      }
+    }
+
     if (!key) return;
     const def = MUTATION_LOG_MAP[key];
     if (!def) return;
@@ -124,15 +203,20 @@ const mutationCache = new MutationCache({
       description: `${def.label}${ref && ref !== `#${id}` ? ` — ${ref}` : ""}`,
     });
   },
+  onError(error: unknown, _variables: unknown, _context: unknown, mutation) {
+    const key = mutationKeyName(mutation);
+    const label = (key && MUTATION_LOG_MAP[key]?.label) || "Save failed";
+    toast.error(label, { description: mutationErrorMessage(error) });
+  },
 });
 
-const queryClient = new QueryClient({
+queryClient = new QueryClient({
   mutationCache,
   defaultOptions: {
     queries: {
-      staleTime: 10 * 60 * 1000,
+      staleTime: 30 * 1000,
       gcTime: 30 * 60 * 1000,
-      refetchOnWindowFocus: false,
+      refetchOnWindowFocus: true,
       retry: 1,
     },
   },
@@ -199,6 +283,7 @@ function Router() {
 function AppInner() {
   return (
     <>
+      <Toaster richColors closeButton position="top-right" />
       <AuditUserSync />
       <FactoryBg />
       <UserSelectModal />

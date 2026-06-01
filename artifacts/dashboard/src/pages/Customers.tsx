@@ -517,11 +517,12 @@ export default function Customers() {
 
   return (
     <Layout>
-      <Header title="Customers" subtitle={`${customers?.length ?? 0} total`} />
-      <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 flex flex-col gap-4 bg-gradient-to-br from-[#eef6ff] via-[#f8fbff] to-[#edf4ff]">
+      <Header title="Customers" subtitle={`${filtered?.length ?? 0} shown · ${customers?.length ?? 0} total`} />
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden bg-gradient-to-br from-[#eef6ff] via-[#f8fbff] to-[#edf4ff]">
+        <div className="flex-shrink-0 px-5 pt-4 pb-3 flex flex-col gap-4">
 
         {/* Toolbar */}
-        <div className="flex justify-between items-center gap-3">
+        <div className="flex justify-between items-center gap-3 flex-wrap">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
             <input type="text" placeholder="Search by name, company, email..." value={search}
@@ -568,7 +569,7 @@ export default function Customers() {
 
         {/* Analytics panel */}
         {showCharts && (
-          <div className="glass-card analytics-panel p-5 flex flex-col gap-4">
+          <div className="glass-card analytics-panel p-5 flex flex-col gap-4 max-h-[min(42vh,520px)] overflow-y-auto">
             <div className="flex items-center gap-3 flex-wrap">
               <div className="flex rounded-xl overflow-hidden border border-slate-200 shadow-sm">
                 {([
@@ -652,17 +653,25 @@ export default function Customers() {
             )}
           </div>
         )}
+        </div>
 
         {/* Table */}
-        <div className="glass-card overflow-hidden border border-blue-100/70">
+        <div className="flex-1 min-h-0 px-5 pb-4 flex flex-col">
+        <div className="glass-card flex-1 min-h-0 flex flex-col overflow-hidden border border-blue-100/70">
           {isLoading ? (
             <div className="p-10 flex justify-center"><div className="animate-spin w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full" /></div>
           ) : filtered?.length === 0 ? (
             <div className="p-10 text-center text-slate-500 text-sm">No customers found.</div>
           ) : (
+            <>
+            <div className="flex-shrink-0 px-4 py-2 border-b border-blue-100 bg-blue-50/90 text-xs text-slate-600 flex items-center justify-between">
+              <span>Showing <strong className="text-slate-800">{filtered.length}</strong> customer{filtered.length !== 1 ? "s" : ""}</span>
+              <span className="text-slate-400">Scroll the list below to see all</span>
+            </div>
+            <div className="flex-1 min-h-0 overflow-auto">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-blue-100 bg-blue-50/70">
+              <thead className="sticky top-0 z-10">
+                <tr className="border-b border-blue-100 bg-blue-50/95">
                   <th className="px-4 py-3 w-10">
                     <button onClick={toggleSelectAll} className="flex items-center justify-center text-blue-600 hover:text-blue-800 transition-colors">
                       {allSelected ? <CheckSquare size={15} /> : someSelected ? <CheckSquare size={15} className="text-blue-400" /> : <Square size={15} className="text-slate-300 hover:text-blue-400" />}
@@ -755,7 +764,10 @@ export default function Customers() {
                 })}
               </tbody>
             </table>
+            </div>
+            </>
           )}
+        </div>
         </div>
       </div>
 

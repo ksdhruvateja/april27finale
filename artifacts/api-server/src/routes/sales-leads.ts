@@ -3,14 +3,24 @@ import { eq } from "drizzle-orm";
 import { db, salesLeadsTable } from "@workspace/db";
 import { z } from "zod";
 
+const optionalEmail = z.preprocess(
+  (val) => (val === "" || val === undefined ? null : val),
+  z.string().email().nullable(),
+);
+
 const CreateBody = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1),
-  email: z.string().email().nullish(),
-  mobile: z.string().nullish(),
+  email: optionalEmail.optional(),
+  mobile: z.preprocess((val) => (val === "" ? null : val), z.string().nullable()).optional(),
 });
 
-const UpdateBody = CreateBody.partial();
+const UpdateBody = z.object({
+  firstName: z.string().min(1).optional(),
+  lastName: z.string().min(1).optional(),
+  email: optionalEmail.optional(),
+  mobile: z.preprocess((val) => (val === "" ? null : val), z.string().nullable()).optional(),
+});
 
 const router = Router();
 

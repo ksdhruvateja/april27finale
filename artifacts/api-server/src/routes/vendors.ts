@@ -7,23 +7,22 @@ import {
   DeleteVendorParams,
 } from "@workspace/api-zod";
 import { z } from "zod";
+import {
+  ContactEntry,
+  contactEmailsField,
+  contactPhonesField,
+  normalizeContactList,
+} from "../lib/normalize-contacts.js";
 
 const router = Router();
-
-const ContactEntry = z.object({
-  label: z.string().optional(),
-  value: z.string().optional(),
-  email: z.string().optional(),
-  number: z.string().optional(),
-});
 
 const CreateVendorPayload = z.object({
   name: z.string().min(1),
   company: z.string().nullish(),
   email: z.string().nullish(),
-  emails: z.array(z.union([z.string(), ContactEntry])).nullish(),
+  emails: contactEmailsField,
   phone: z.string().nullish(),
-  phones: z.array(z.union([z.string(), ContactEntry])).nullish(),
+  phones: contactPhonesField,
   address: z.string().nullish(),
   city: z.string().nullish(),
   state: z.string().nullish(),
@@ -43,29 +42,6 @@ const CreateVendorPayload = z.object({
 });
 
 const UpdateVendorPayload = CreateVendorPayload.partial();
-
-function normalizeContactList(values: unknown[] | undefined, kind: "email" | "phone") {
-  if (!Array.isArray(values)) return null;
-  const normalized = values
-    .map((entry) => {
-      if (typeof entry === "string") {
-        return kind === "email"
-          ? { label: "Work", email: entry }
-          : { label: "Mobile", number: entry };
-      }
-      if (!entry || typeof entry !== "object") return null;
-      const e = entry as Record<string, unknown>;
-      const label = typeof e.label === "string" ? e.label : kind === "email" ? "Work" : "Mobile";
-      if (kind === "email") {
-        const email = typeof e.email === "string" ? e.email : typeof e.value === "string" ? e.value : "";
-        return email ? { label, email } : null;
-      }
-      const number = typeof e.number === "string" ? e.number : typeof e.value === "string" ? e.value : "";
-      return number ? { label, number } : null;
-    })
-    .filter(Boolean);
-  return normalized.length > 0 ? normalized : null;
-}
 
 router.get("/vendors", async (_req, res): Promise<void> => {
   const vendors = await db.select().from(vendorsTable).orderBy(vendorsTable.createdAt);

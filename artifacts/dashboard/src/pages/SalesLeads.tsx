@@ -51,7 +51,7 @@ function SalesLeadModal({ initial, onClose }: { initial?: SalesLead; onClose: ()
     if (isEditing) {
       update.mutate({ id: initial.id, data }, { onSuccess, onError });
     } else {
-      create.mutate(data, { onSuccess, onError });
+      create.mutate({ data }, { onSuccess, onError });
     }
   };
 
@@ -130,7 +130,7 @@ export default function SalesLeads() {
 
   const handleDelete = (id: number) => {
     if (confirm("Delete this sales lead?")) {
-      deleteLead.mutate(id, {
+      deleteLead.mutate({ id }, {
         onSuccess: () => queryClient.invalidateQueries({ queryKey: getListSalesLeadsQueryKey() }),
       });
     }
@@ -138,9 +138,10 @@ export default function SalesLeads() {
 
   return (
     <Layout>
-      <Header title="Sales Leads" subtitle={`${leads?.length ?? 0} total`} />
-      <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 flex flex-col gap-4 bg-gradient-to-br from-[#eef6ff] via-[#f8fbff] to-[#edf4ff]">
-        <div className="flex justify-between items-center gap-3">
+      <Header title="Sales Leads" subtitle={`${filtered?.length ?? 0} shown · ${leads?.length ?? 0} total`} />
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden bg-gradient-to-br from-[#eef6ff] via-[#f8fbff] to-[#edf4ff]">
+        <div className="flex-shrink-0 px-5 pt-4 pb-3">
+        <div className="flex justify-between items-center gap-3 flex-wrap">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
             <input
@@ -156,8 +157,10 @@ export default function SalesLeads() {
             <Plus size={14} /> Add Sales Lead
           </button>
         </div>
+        </div>
 
-        <div className="glass-card overflow-hidden border border-blue-100/70">
+        <div className="flex-1 min-h-0 px-5 pb-4 flex flex-col">
+        <div className="glass-card flex-1 min-h-0 flex flex-col overflow-hidden border border-blue-100/70">
           {isLoading ? (
             <div className="p-8 text-center text-slate-500 text-sm">Loading…</div>
           ) : !filtered?.length ? (
@@ -168,9 +171,15 @@ export default function SalesLeads() {
               </p>
             </div>
           ) : (
+            <>
+            <div className="flex-shrink-0 px-4 py-2 border-b border-blue-100 bg-blue-50/90 text-xs text-slate-600 flex items-center justify-between">
+              <span>Showing <strong className="text-slate-800">{filtered.length}</strong> lead{filtered.length !== 1 ? "s" : ""}</span>
+              <span className="text-slate-400">Scroll the list below to see all</span>
+            </div>
+            <div className="flex-1 min-h-0 overflow-auto">
             <table className="w-full">
-              <thead>
-                <tr className="border-b border-blue-100 bg-blue-50/70">
+              <thead className="sticky top-0 z-10">
+                <tr className="border-b border-blue-100 bg-blue-50/95">
                   <th className="px-5 py-3 text-left text-blue-700 font-medium text-[11px] uppercase tracking-wider">Name</th>
                   <th className="px-5 py-3 text-left text-blue-700 font-medium text-[11px] uppercase tracking-wider">Email</th>
                   <th className="px-5 py-3 text-left text-blue-700 font-medium text-[11px] uppercase tracking-wider">Mobile</th>
@@ -229,7 +238,10 @@ export default function SalesLeads() {
                 ))}
               </tbody>
             </table>
+            </div>
+            </>
           )}
+        </div>
         </div>
       </div>
 
