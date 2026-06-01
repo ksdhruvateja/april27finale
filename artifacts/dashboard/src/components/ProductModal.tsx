@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import Modal, { LightFormField as FormField, LightFormInput as FormInput, LightFormSelect as FormSelect, LightFormTextarea as FormTextarea, LightSubmitBar as SubmitBar } from "./Modal";
 import { Package, Archive, RefreshCw, Percent, DollarSign, Clock, TrendingUp, Info, Calculator, ChevronDown, ChevronUp, ArrowRight } from "lucide-react";
 import { UNIT_OPTIONS, UNIT_VALUES } from "@/lib/units";
+import { QuickBooksFieldsSection, parseQbExtras, qbExtrasFromForm } from "./QuickBooksFields";
 
 interface ProductData {
   id: number;
@@ -23,6 +24,7 @@ interface ProductData {
   optimalStockMin?: number | null;
   unit?: string | null;
   notes?: string | null;
+  quickbooksExtras?: Record<string, unknown> | null;
 }
 
 interface Props {
@@ -73,6 +75,8 @@ export default function ProductModal({ onClose, product }: Props) {
     optimalStockMin: product?.optimalStockMin != null ? String(product.optimalStockMin) : "",
     notes: product?.notes ?? "",
   });
+
+  const [qbForm, setQbForm] = useState(() => parseQbExtras(product?.quickbooksExtras));
 
   const [generatingSku, setGeneratingSku] = useState(false);
 
@@ -125,6 +129,7 @@ export default function ProductModal({ onClose, product }: Props) {
       estimatedLeadDays: !form.isInventoryItem && form.estimatedLeadDays ? Number(form.estimatedLeadDays) : null,
       optimalStockMin: form.isInventoryItem && form.optimalStockMin ? Number(form.optimalStockMin) : null,
       notes: form.notes || null,
+      quickbooksExtras: qbExtrasFromForm(qbForm),
     };
 
     if (isEdit) {
@@ -490,6 +495,17 @@ export default function ProductModal({ onClose, product }: Props) {
           <FormField label="Internal Notes">
             <FormTextarea placeholder="Internal notes about this product (not shown to customers)..." value={form.notes} onChange={set("notes")} rows={2} />
           </FormField>
+
+          <QuickBooksFieldsSection
+            fields={[
+              { key: "itemType", label: "Item Type", placeholder: "Inventory / Non-Inventory" },
+              { key: "quantityOnHand", label: "Quantity on Hand", type: "number", placeholder: "0" },
+              { key: "incomeAccount", label: "Income Account", placeholder: "QuickBooks income account" },
+              { key: "expenseAccount", label: "Expense Account", placeholder: "QuickBooks expense account" },
+            ]}
+            values={qbForm}
+            onChange={(key, value) => setQbForm((f) => ({ ...f, [key]: value }))}
+          />
         </div>
       </form>
     </Modal>

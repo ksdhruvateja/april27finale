@@ -45,6 +45,9 @@ router.post("/products", async (req, res): Promise<void> => {
     optimalStockMin: parsed.data.optimalStockMin ?? null,
     unit: parsed.data.unit ?? null,
     notes: parsed.data.notes ?? null,
+    ...(req.body?.quickbooksExtras && typeof req.body.quickbooksExtras === "object"
+      ? { quickbooksExtras: req.body.quickbooksExtras }
+      : {}),
   }).returning();
 
   await db.insert(inventoryTable).values({ productId: product.id, quantity: "0", reorderPoint: "10" });
@@ -94,6 +97,9 @@ router.patch("/products/:id", async (req, res): Promise<void> => {
   if (parsed.data.costPrice !== undefined) updateData.costPrice = String(parsed.data.costPrice);
   if (parsed.data.taxPercent !== undefined) updateData.taxPercent = String(parsed.data.taxPercent);
   if (parsed.data.discountPercent !== undefined) updateData.discountPercent = String(parsed.data.discountPercent);
+  if (req.body?.quickbooksExtras && typeof req.body.quickbooksExtras === "object") {
+    updateData.quickbooksExtras = req.body.quickbooksExtras;
+  }
 
   const [product] = await db.update(productsTable).set(updateData).where(eq(productsTable.id, params.data.id)).returning();
   if (!product) {

@@ -40,9 +40,14 @@ router.post("/customers", async (req, res): Promise<void> => {
     return;
   }
   const { creditLimit, ...rest } = parsed.data;
+  const quickbooksExtras =
+    req.body?.quickbooksExtras && typeof req.body.quickbooksExtras === "object"
+      ? req.body.quickbooksExtras
+      : undefined;
   const insertPayload = {
     ...rest,
     ...(creditLimit !== undefined ? { creditLimit: creditLimit === null ? null : String(creditLimit) } : {}),
+    ...(quickbooksExtras !== undefined ? { quickbooksExtras } : {}),
   };
   const [customer] = await db.insert(customersTable).values(insertPayload).returning();
   res.status(201).json(customer);
@@ -74,9 +79,14 @@ router.patch("/customers/:id", async (req, res): Promise<void> => {
     return;
   }
   const { creditLimit, ...rest } = parsed.data;
+  const quickbooksExtras =
+    req.body?.quickbooksExtras && typeof req.body.quickbooksExtras === "object"
+      ? req.body.quickbooksExtras
+      : undefined;
   const updatePayload = {
     ...rest,
     ...(creditLimit !== undefined ? { creditLimit: creditLimit === null ? null : String(creditLimit) } : {}),
+    ...(quickbooksExtras !== undefined ? { quickbooksExtras } : {}),
   };
   const [customer] = await db.update(customersTable).set(updatePayload).where(eq(customersTable.id, params.data.id)).returning();
   if (!customer) {

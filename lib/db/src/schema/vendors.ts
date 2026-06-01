@@ -25,6 +25,7 @@ export const vendorsTable = pgTable("vendors", {
   shippingAccountNumber: text("shipping_account_number"),
   taxNumber: text("tax_number"),
   notes: text("notes"),
+  quickbooksExtras: jsonb("quickbooks_extras").default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import Modal, { LightFormField as FormField, LightFormInput as FormInput, LightFormSelect as FormSelect, LightFormTextarea as FormTextarea, LightSubmitBar as SubmitBar } from "./Modal";
 import { Plus, X, ShieldCheck, ShieldOff, Phone } from "lucide-react";
 import { US_STATES } from "@/lib/usStates";
+import { QuickBooksFieldsSection, parseQbExtras, qbExtrasFromForm } from "./QuickBooksFields";
 
 interface AddressObj { address?: string; city?: string; state?: string; zipCode?: string; country?: string; }
 interface PhoneEntry { label: string; number: string; }
@@ -34,6 +35,7 @@ interface VendorData {
   shippingAccountNumber?: string | null;
   taxNumber?: string | null;
   notes?: string | null;
+  quickbooksExtras?: Record<string, unknown> | null;
 }
 
 interface Props {
@@ -129,6 +131,8 @@ export default function VendorModal({ onClose, vendor, onCreated }: Props) {
     taxExempt: vendor?.taxExempt ?? false,
   });
 
+  const [qbForm, setQbForm] = useState(() => parseQbExtras(vendor?.quickbooksExtras));
+
   const [emails, setEmails] = useState<EmailEntry[]>(parseEmails(vendor));
   const [phones, setPhones] = useState<PhoneEntry[]>(parsePhones(vendor));
   const [billingAddress, setBillingAddress] = useState<AddressObj>(
@@ -180,6 +184,7 @@ export default function VendorModal({ onClose, vendor, onCreated }: Props) {
       state: billingAddress.state || null,
       zipCode: billingAddress.zipCode || null,
       country: billingAddress.country || "US",
+      quickbooksExtras: qbExtrasFromForm(qbForm),
     };
 
     if (isEdit) {
@@ -377,6 +382,16 @@ export default function VendorModal({ onClose, vendor, onCreated }: Props) {
           <FormField label="Notes">
             <FormTextarea placeholder="Any additional notes..." value={form.notes} onChange={set("notes")} rows={2} />
           </FormField>
+
+          <QuickBooksFieldsSection
+            fields={[
+              { key: "vendorQuoteNumber", label: "Vendor Quote #", placeholder: "QuickBooks quote #" },
+              { key: "tracking1099", label: "1099 Tracking", placeholder: "1099 status" },
+              { key: "openBalance", label: "Open Balance ($)", type: "number", placeholder: "0.00" },
+            ]}
+            values={qbForm}
+            onChange={(key, value) => setQbForm((f) => ({ ...f, [key]: value }))}
+          />
         </div>
       </form>
     </Modal>

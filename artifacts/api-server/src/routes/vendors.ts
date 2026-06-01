@@ -39,6 +39,7 @@ const CreateVendorPayload = z.object({
   shippingAccountNumber: z.string().nullish(),
   taxNumber: z.string().nullish(),
   notes: z.string().nullish(),
+  quickbooksExtras: z.record(z.string(), z.unknown()).nullish(),
 });
 
 const UpdateVendorPayload = CreateVendorPayload.partial();

@@ -16,6 +16,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { formatCurrency } from "@/lib/utils";
 import ProductModal from "@/components/ProductModal";
+import * as XLSX from "xlsx";
 import InventoryAdjustModal from "@/components/InventoryAdjustModal";
 import BulkStockInModal from "@/components/BulkStockInModal";
 import {
@@ -992,12 +993,48 @@ export default function Products() {
     URL.revokeObjectURL(url);
   }
 
+  function mapQuickBooksProductRow(r: Record<string, string>): Record<string, string> {
+    const qbName = r["Product/Service Name"] ?? r["product/servicename"];
+    if (!qbName) return r;
+    const itemType = r["Item type"] ?? "";
+    const noteParts = [
+      itemType ? `Item Type: ${itemType}` : "",
+      r["Variant Name"] ? `Variant: ${r["Variant Name"]}` : "",
+      r["Income Account"] ? `Income Account: ${r["Income Account"]}` : "",
+      r["Expense Account"] ? `Expense Account: ${r["Expense Account"]}` : "",
+      r.Taxable ? `Taxable: ${r.Taxable}` : "",
+    ].filter(Boolean);
+    return {
+      name: qbName,
+      sku: r.SKU ?? "",
+      category: r.Category ?? "",
+      description: r["Sales Description"] || r["Purchase Description"] || "",
+      salePrice: r.Price || "0",
+      costPrice: r.Cost || "0",
+      taxPercent: (r.Taxable ?? "").toLowerCase() === "yes" ? "8.875" : "0",
+      minOrderQty: "1",
+      isInventoryItem: itemType.toLowerCase() !== "non-inventory" && itemType.toLowerCase() !== "service" ? "true" : "false",
+      optimalStockMin: r["Reorder Point"] ?? "",
+      notes: noteParts.join("\n"),
+      quickbooksExtras: JSON.stringify({
+        itemType: itemType || null,
+        quantityOnHand: r["Quantity on hand"] ?? null,
+        incomeAccount: r["Income Account"] ?? null,
+        expenseAccount: r["Expense Account"] ?? null,
+        variantName: r["Variant Name"] ?? null,
+      }),
+    };
+  }
+
   function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]; if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const text = ev.target?.result as string;
-      const rows = parseCSV(text);
+      const data = ev.target?.result;
+      const wb = XLSX.read(data, { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const raw = XLSX.utils.sheet_to_json<Record<string, string>>(ws, { defval: "" });
+      const rows = raw.map(mapQuickBooksProductRow);
       const errs: string[] = [];
       rows.forEach((r, i) => { if (!r.name?.trim()) errs.push(`Row ${i + 2}: "name" is required`); });
       setImportRows(rows);
@@ -1005,7 +1042,7 @@ export default function Products() {
       setImportProgress(null);
       setImportDone(false);
     };
-    reader.readAsText(file);
+    reader.readAsArrayBuffer(file);
     e.target.value = "";
   }
 
@@ -1030,6 +1067,9 @@ export default function Products() {
         optimalStockMin: r.optimalStockMin ? parseInt(r.optimalStockMin) : null,
         unit: r.unit || null,
         notes: r.notes || null,
+        quickbooksExtras: r.quickbooksExtras
+          ? (typeof r.quickbooksExtras === "string" ? JSON.parse(r.quickbooksExtras) : r.quickbooksExtras)
+          : null,
       };
       await new Promise<void>((resolve) => {
         createProduct.mutate({ data }, { onSettled: () => resolve() });

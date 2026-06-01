@@ -109,7 +109,7 @@ export default function Sidebar({ embedded }: SidebarProps) {
         <img src={brandLogo} alt="Logo" className="w-9 h-9 object-contain flex-shrink-0" />
         <div className="min-w-0">
           <div className="text-[14px] font-black leading-none tracking-tight text-slate-900">
-            Forz Corp
+            Forez Corp
           </div>
           <div className="text-[10px] mt-0.5 font-semibold tracking-wide uppercase text-slate-500">
             Buisness Dasboard
