@@ -15,6 +15,11 @@ import {
   Activity, ChevronRight, X, FileText, ShoppingCart, Truck,
   Link2, CheckCircle2, Clock, Circle, ArrowLeftRight,
 } from "lucide-react";
+import {
+  forezDocFallbackNumber,
+  formatInvoiceNumber,
+  formatQuoteNumber,
+} from "@/lib/forez-document-numbers";
 
 function matchAny(term: string, ...fields: (string | number | null | undefined)[]): boolean {
   const t = term.toLowerCase().trim();
@@ -25,8 +30,8 @@ function matchAny(term: string, ...fields: (string | number | null | undefined)[
   });
 }
 
-function invFallbackNum(id: number) { return `frzi - ${Math.max(5100, 5099 + Number(id ?? 0))}`; }
-function quoteFallbackNum(id: number) { return `frzq - ${Math.max(5100, 5099 + Number(id ?? 0))}`; }
+function invFallbackNum(id: number) { return forezDocFallbackNumber("invoice", id); }
+function quoteFallbackNum(id: number) { return forezDocFallbackNumber("quote", id); }
 
 const DATE_FILTER_OPTIONS = [
   { label: "Next 2 days",  days: 2 },
@@ -287,7 +292,7 @@ export default function Dashboard() {
                   {j.quote && (
                     <JourneyStep
                       icon={<FileText size={13} />}
-                      label={`Quote — ${(j.quote as any).quoteNumber ?? quoteFallbackNum(j.quote.id)}`}
+                      label={`Quote — ${formatQuoteNumber(j.quote.id, (j.quote as any).quoteNumber)}`}
                       sub={`Created ${formatDate(j.quote.createdAt)} · ${formatCurrency(Number(j.quote.total))}`}
                       status={j.quote.status}
                       isFirst
@@ -296,7 +301,7 @@ export default function Dashboard() {
                   )}
                   <JourneyStep
                     icon={<Receipt size={13} />}
-                    label={`Invoice — ${j.invoice.invoiceNumber ?? invFallbackNum(j.invoice.id)}`}
+                    label={`Invoice — ${formatInvoiceNumber(j.invoice.id, j.invoice.invoiceNumber)}`}
                     sub={`${j.invoice.dueDate ? `Due ${formatDate(j.invoice.dueDate)} · ` : ""}${formatCurrency(Number(j.invoice.total))}`}
                     status={j.invoice.status}
                     isFirst={!j.quote}
@@ -379,7 +384,7 @@ export default function Dashboard() {
             )}
             <SearchGroup label="Quotes" icon={<FileText size={13}/>} results={searchResults.quotes} href="/quotes"
               renderRow={(r: any) => <SearchRow key={r.id}
-                label={r.quoteNumber ?? quoteFallbackNum(r.id)}
+                label={formatQuoteNumber(r.id, r.quoteNumber)}
                 sub={r.customerName}
                 detail={r.trackingNumber ? `Ref: ${r.trackingNumber}` : undefined}
                 total={r.total} status={r.status}
@@ -387,7 +392,7 @@ export default function Dashboard() {
                 href="/quotes" onNavigate={() => setLocation("/quotes")} />} />
             <SearchGroup label="Invoices" icon={<Receipt size={13}/>} results={searchResults.invoices} href="/invoices"
               renderRow={(r: any) => <SearchRow key={r.id}
-                label={r.invoiceNumber ?? invFallbackNum(r.id)}
+                label={formatInvoiceNumber(r.id, r.invoiceNumber)}
                 sub={r.customerName}
                 detail={r.trackingNumber ? `Ref: ${r.trackingNumber}` : undefined}
                 total={r.total} status={r.status}
@@ -678,7 +683,7 @@ export default function Dashboard() {
                     <tbody>
                       {filtered.map((inv: { id: number; customerName?: string; createdAt: string; status: string; total: number; dueDate?: string | null }) => (
                         <tr key={inv.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                          <td className="px-5 py-3 text-slate-400 font-mono text-xs">{(inv as any).invoiceNumber ?? `FRZI - ${Math.max(5100, 5099 + Number(inv.id ?? 0))}`}</td>
+                          <td className="px-5 py-3 text-slate-400 font-mono text-xs">{formatInvoiceNumber(inv.id, (inv as any).invoiceNumber)}</td>
                           <td className="px-5 py-3 text-slate-800 font-medium text-sm">{inv.customerName ?? "—"}</td>
                           <td className="px-5 py-3 text-slate-400 text-xs">{formatDate(inv.dueDate)}</td>
                           <td className="px-5 py-3"><StatusBadge status={inv.status} dueDate={inv.dueDate} /></td>

@@ -1,3 +1,7 @@
+import { loadEnvFromRepoRoot } from "./lib/load-env";
+
+loadEnvFromRepoRoot();
+
 import app from "./app";
 import { logger } from "./lib/logger";
 import { ensureSerialSequencesAligned } from "./lib/db-health";

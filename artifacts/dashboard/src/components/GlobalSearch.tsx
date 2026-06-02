@@ -15,6 +15,11 @@ import {
 import { useListAuctions } from "@/lib/auctions-api";
 import { useDebounce } from "@/hooks/useDebounce";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import {
+  forezDocFallbackNumber,
+  formatInvoiceNumber,
+  formatQuoteNumber,
+} from "@/lib/forez-document-numbers";
 
 function match(term: string, ...fields: (string | number | undefined | null)[]): boolean {
   const t = term.toLowerCase().trim();
@@ -25,8 +30,8 @@ function match(term: string, ...fields: (string | number | undefined | null)[]):
   });
 }
 
-function invFallback(id: number) { return `frzi - ${Math.max(5100, 5099 + Number(id))}`.toLowerCase(); }
-function quoteFallback(id: number) { return `frzq - ${Math.max(5100, 5099 + Number(id))}`.toLowerCase(); }
+function invFallback(id: number) { return forezDocFallbackNumber("invoice", id).toLowerCase(); }
+function quoteFallback(id: number) { return forezDocFallbackNumber("quote", id).toLowerCase(); }
 
 interface JourneyDoc {
   id: number;
@@ -201,7 +206,7 @@ export default function GlobalSearch() {
 
       if (quote) docs.push({
         id: quote.id,
-        label: quote.quoteNumber ?? `FRZQ-${Math.max(5100, 5099 + quote.id)}`,
+        label: formatQuoteNumber(quote.id, quote.quoteNumber),
         sub: `Created ${formatDate(quote.createdAt)}`,
         status: quote.status,
         amount: Number(quote.total),
@@ -212,7 +217,7 @@ export default function GlobalSearch() {
 
       docs.push({
         id: inv.id,
-        label: inv.invoiceNumber ?? `FRZI-${Math.max(5100, 5099 + inv.id)}`,
+        label: formatInvoiceNumber(inv.id, inv.invoiceNumber),
         sub: inv.dueDate ? `Due ${formatDate(inv.dueDate)}` : `Created ${formatDate(inv.createdAt)}`,
         status: inv.status,
         amount: Number(inv.total),

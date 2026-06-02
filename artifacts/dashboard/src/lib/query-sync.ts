@@ -34,17 +34,15 @@ const PRIMARY_LIST_KEYS = [
 /** Load all business records from the API (after sign-in or page reload with session). */
 export async function refetchBusinessData(qc: QueryClient): Promise<void> {
   await Promise.all([
-    ...PRIMARY_LIST_KEYS.map((getKey) =>
-      qc.refetchQueries({ queryKey: getKey(), type: "active" }),
-    ),
-    qc.refetchQueries({ queryKey: ["auctions"], type: "active" }),
-    qc.refetchQueries({ queryKey: ["tickets"], type: "active" }),
-    qc.refetchQueries({ queryKey: ["returns-refunds"], type: "active" }),
-    qc.refetchQueries({ queryKey: ["documents"], type: "active" }),
-    qc.refetchQueries({ queryKey: ["bank-accounts"], type: "active" }),
-    qc.refetchQueries({ queryKey: ["accounting-pnl"], type: "active" }),
-    qc.refetchQueries({ queryKey: ["accounting-ar"], type: "active" }),
-    qc.refetchQueries({ queryKey: ["accounting-ap"], type: "active" }),
+    ...PRIMARY_LIST_KEYS.map((getKey) => qc.refetchQueries({ queryKey: getKey() })),
+    qc.refetchQueries({ queryKey: ["auctions"] }),
+    qc.refetchQueries({ queryKey: ["tickets"] }),
+    qc.refetchQueries({ queryKey: ["returns-refunds"] }),
+    qc.refetchQueries({ queryKey: ["documents"] }),
+    qc.refetchQueries({ queryKey: ["bank-accounts"] }),
+    qc.refetchQueries({ queryKey: ["accounting-pnl"] }),
+    qc.refetchQueries({ queryKey: ["accounting-ar"] }),
+    qc.refetchQueries({ queryKey: ["accounting-ap"] }),
   ]);
 }
 
@@ -54,8 +52,39 @@ export async function refetchMutationLists(
   getKeys: Array<() => readonly unknown[]>,
 ): Promise<void> {
   await Promise.all(
-    getKeys.map((getKey) => qc.refetchQueries({ queryKey: getKey(), type: "active" })),
+    getKeys.map((getKey) => qc.refetchQueries({ queryKey: getKey() })),
   );
+}
+
+type ListRecord = { id: number };
+
+/** Instantly show a new/updated row in list views before refetch completes. */
+export function patchListCache<T extends ListRecord>(
+  qc: QueryClient,
+  queryKey: readonly unknown[],
+  action: "create" | "update" | "delete",
+  record?: T | null,
+  deleteId?: number,
+): void {
+  qc.setQueryData<T[]>(queryKey, (old) => {
+    const list = old ?? [];
+    if (action === "create" && record) {
+      const idx = list.findIndex((r) => r.id === record.id);
+      if (idx >= 0) {
+        const next = [...list];
+        next[idx] = { ...next[idx], ...record };
+        return next;
+      }
+      return [record, ...list];
+    }
+    if (action === "update" && record) {
+      return list.map((r) => (r.id === record.id ? { ...r, ...record } : r));
+    }
+    if (action === "delete" && deleteId != null) {
+      return list.filter((r) => r.id !== deleteId);
+    }
+    return list;
+  });
 }
 
 const ACCOUNTING_KEYS = [

@@ -19,7 +19,12 @@ import {
 import { Toaster } from "@/components/ui/sonner";
 import { RoleProvider, useRole } from "@/context/RoleContext";
 import { logAudit, setAuditUser, getCurrentAuditUser, AuditEntityType } from "@/lib/auditLog";
-import { invalidateAfterMutation, refetchBusinessData, refetchMutationLists } from "@/lib/query-sync";
+import {
+  invalidateAfterMutation,
+  patchListCache,
+  refetchBusinessData,
+  refetchMutationLists,
+} from "@/lib/query-sync";
 import UserSelectModal from "@/components/UserSelectModal";
 import FactoryBg from "@/components/FactoryBg";
 import Dashboard from "@/pages/Dashboard";
@@ -240,10 +245,42 @@ function extractEntityRef(data: any, variables: any): { id: string; ref: string 
 
 let queryClient: QueryClient;
 
+function applyListCachePatch(key: string | undefined, data: unknown, variables: unknown) {
+  if (!data || typeof data !== "object" || !("id" in data)) return;
+  const record = data as { id: number };
+  const id = (variables as { id?: number })?.id;
+
+  if (key === "createInvoice" || key === "convertQuoteToInvoice" || key === "convertEstimateToInvoice") {
+    patchListCache(queryClient, getListInvoicesQueryKey(), "create", record);
+  }
+  if (key === "updateInvoice") patchListCache(queryClient, getListInvoicesQueryKey(), "update", record);
+  if (key === "deleteInvoice" && id != null) patchListCache(queryClient, getListInvoicesQueryKey(), "delete", null, id);
+  if (key === "payInvoice") patchListCache(queryClient, getListInvoicesQueryKey(), "update", record);
+
+  if (key === "createQuote") patchListCache(queryClient, getListQuotesQueryKey(), "create", record);
+  if (key === "updateQuote") patchListCache(queryClient, getListQuotesQueryKey(), "update", record);
+  if (key === "deleteQuote" && id != null) patchListCache(queryClient, getListQuotesQueryKey(), "delete", null, id);
+
+  if (key === "createEstimate") patchListCache(queryClient, getListEstimatesQueryKey(), "create", record);
+  if (key === "updateEstimate") patchListCache(queryClient, getListEstimatesQueryKey(), "update", record);
+  if (key === "deleteEstimate" && id != null) patchListCache(queryClient, getListEstimatesQueryKey(), "delete", null, id);
+
+  if (key === "createBill") patchListCache(queryClient, getListBillsQueryKey(), "create", record);
+  if (key === "updateBill") patchListCache(queryClient, getListBillsQueryKey(), "update", record);
+  if (key === "deleteBill" && id != null) patchListCache(queryClient, getListBillsQueryKey(), "delete", null, id);
+
+  if (key === "createPurchaseOrder") patchListCache(queryClient, getListPurchaseOrdersQueryKey(), "create", record);
+  if (key === "updatePurchaseOrder") patchListCache(queryClient, getListPurchaseOrdersQueryKey(), "update", record);
+  if (key === "deletePurchaseOrder" && id != null) {
+    patchListCache(queryClient, getListPurchaseOrdersQueryKey(), "delete", null, id);
+  }
+}
+
 const mutationCache = new MutationCache({
   onSuccess(data: unknown, variables: unknown, _context: unknown, mutation) {
     const key = mutationKeyName(mutation);
     if (key) {
+      applyListCachePatch(key, data, variables);
       const invalidators = MUTATION_INVALIDATE[key];
       if (invalidators) {
         const getKeys = invalidators.map((getKey) =>
@@ -334,13 +371,18 @@ function AuditUserSync() {
 function DataSyncOnAuth() {
   const { currentUser } = useRole();
   const syncedRef = useRef<string | null>(null);
+  const hadUserRef = useRef(false);
 
   useEffect(() => {
     if (!currentUser) {
       syncedRef.current = null;
-      queryClient.clear();
+      if (hadUserRef.current) {
+        queryClient.clear();
+      }
+      hadUserRef.current = false;
       return;
     }
+    hadUserRef.current = true;
     const sessionKey = `${currentUser.email}:${currentUser.role}`;
     if (syncedRef.current === sessionKey) return;
     syncedRef.current = sessionKey;

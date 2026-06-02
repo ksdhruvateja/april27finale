@@ -11,6 +11,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { formatCurrency, formatDate } from "@/lib/utils";
 import QuoteModal from "@/components/QuoteModal";
 import QuoteView from "@/components/QuoteView";
+import { formatQuoteNumber, forezDocFallbackNumber } from "@/lib/forez-document-numbers";
 
 const QUOTE_EXPIRY_DAYS = 30;
 
@@ -146,7 +147,9 @@ export default function Quotes() {
     return { total: all.length, accepted: accepted.length, totalVal, acceptedVal, convRate: all.length ? Math.round(accepted.length/all.length*100) : 0 };
   }, [quotesBase]);
 
-  const fallbackFcNumber = (id: number) => `FRZQ-${Math.max(5100, 5099 + Number(id ?? 0))}`;
+  const fallbackFcNumber = (id: number) => forezDocFallbackNumber("quote", id);
+  const displayQuoteNumber = (q: { id: number; quoteNumber?: string | null }) =>
+    formatQuoteNumber(q.id, q.quoteNumber);
 
   const debouncedSearch = useDebounce(search, 250);
   const filtered = useMemo(() => {
@@ -207,7 +210,7 @@ export default function Quotes() {
 
   const openConvertDialog = (q: any, e: React.MouseEvent) => {
     e.stopPropagation();
-    const qn: string = (q as any).quoteNumber ?? fallbackFcNumber(q.id);
+    const qn: string = displayQuoteNumber(q as any);
     const existingFromQuote = (invoices ?? []).filter((inv: any) => Number(inv.quoteId) === Number(q.id));
     if (existingFromQuote.length > 0) {
       setDuplicateConvertGuard({ quote: q, quoteNumber: qn, existingInvoices: existingFromQuote });
@@ -258,7 +261,7 @@ export default function Quotes() {
 
   const startEditNum = (q: any, e: React.MouseEvent) => {
     e.stopPropagation();
-    setEditingNum({ id: q.id, value: (q as any).quoteNumber ?? fallbackFcNumber(q.id) });
+    setEditingNum({ id: q.id, value: displayQuoteNumber(q as any) });
     setTimeout(() => numInputRef.current?.select(), 0);
   };
 
@@ -579,7 +582,7 @@ export default function Quotes() {
                         <div className="flex items-center gap-1.5 group/num">
                           <Eye size={12} className="text-slate-300 group-hover:text-slate-500 transition-colors" onClick={() => setViewQuote(q)} />
                           <span className="text-slate-400 font-mono text-xs" onClick={() => setViewQuote(q)}>
-                            {(q as any).quoteNumber ?? fallbackFcNumber(q.id)}
+                            {displayQuoteNumber(q as any)}
                           </span>
                           <button
                             title="Edit quote number"

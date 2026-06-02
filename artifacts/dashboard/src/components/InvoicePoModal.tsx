@@ -5,6 +5,7 @@ import { Plus, Trash2, ShoppingCart, Store, CheckSquare2, Square } from "lucide-
 import Modal, { LightFormField as FormField, LightFormSelect as FormSelect, LightFormInput as FormInput, LightFormTextarea as FormTextarea, LightSubmitBar as SubmitBar } from "./Modal";
 import VendorModal from "./VendorModal";
 import { formatCurrency } from "@/lib/utils";
+import { formatInvoiceNumber } from "@/lib/forez-document-numbers";
 
 interface LineItem {
   description: string;
@@ -64,7 +65,7 @@ export default function InvoicePoModal({ invoice, onClose, noteTag }: Props) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
 
-  const invoiceLabel = invoice.invoiceNumber ?? `FRZI - ${Math.max(5100, 5099 + Number(invoice.id ?? 0))}`;
+  const invoiceLabel = formatInvoiceNumber(Number(invoice.id ?? 0), invoice.invoiceNumber);
 
   function poLabel(draftIndex: number) {
     // Extract everything after the FRZI- prefix so sub-invoice numbers (e.g. FRZI-5100-1) are preserved

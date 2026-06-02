@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { useCreateInvoice, useUpdateInvoice, useListCustomers, useListTaxRates, useListSalesLeads, useListInvoices, useListQuotes } from "@workspace/api-client-react";
 import Modal, { LightFormField as FormField, LightFormInput as FormInput, LightFormTextarea as FormTextarea, LightSubmitBar as SubmitBar } from "./Modal";
 import LineItemsEditor, { LineItem, OrderDiscount, calcTotals } from "./LineItemsEditor";
@@ -6,7 +7,7 @@ import CustomerModal from "./CustomerModal";
 import CustomerCombobox from "./CustomerCombobox";
 import SalesLeadQuickModal from "./SalesLeadQuickModal";
 
-interface Props { onClose: () => void; initial?: any; }
+interface Props { onClose: () => void; initial?: any; onCreated?: (invoice: any) => void; }
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const dateStr = (v: string | null | undefined) => v ? new Date(v).toISOString().slice(0, 10) : "";
@@ -14,7 +15,7 @@ const initItems = (raw: any[]): LineItem[] =>
   raw?.length ? raw.map(i => ({ ...i, taxPercent: i.taxPercent ?? 0, discountPercent: i.discountPercent ?? 0 }))
     : [{ description: "", quantity: 1, unitPrice: 0 }];
 
-export default function InvoiceModal({ onClose, initial }: Props) {
+export default function InvoiceModal({ onClose, initial, onCreated }: Props) {
   const create = useCreateInvoice();
   const update = useUpdateInvoice();
   const { data: customers } = useListCustomers();
@@ -47,8 +48,6 @@ export default function InvoiceModal({ onClose, initial }: Props) {
   const [showAddCustomer, setShowAddCustomer] = useState(false);
   const [showAddSalesLead, setShowAddSalesLead] = useState(false);
   const [salesLeadOpen, setSalesLeadOpen] = useState(false);
-  const [showSendPrompt, setShowSendPrompt] = useState(false);
-  const [sendStatus, setSendStatus] = useState<"idle" | "sending-email" | "sending-text" | "sent-email" | "sent-text">("idle");
   const salesLeadRef = useRef<HTMLDivElement>(null);
 
   const taxRateMap = useMemo(() => {
@@ -146,11 +145,19 @@ export default function InvoiceModal({ onClose, initial }: Props) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customerId || items.length === 0) return;
+    const lineItems = items.filter((i) => String(i.description ?? "").trim().length > 0);
+    if (!customerId) {
+      toast.error("Select a customer", { description: "Choose a customer before saving the invoice." });
+      return;
+    }
+    if (lineItems.length === 0) {
+      toast.error("Add a line item", { description: "Enter at least one product or service with a description." });
+      return;
+    }
     const effectiveTax = taxExempt ? 0 : orderTaxPercent;
-    const { orderDiscountAmount } = calcTotals(items, orderDiscount, effectiveTax, freightCost);
-    let finalItems = [...items];
-    if (orderDiscountAmount > 0) finalItems = [...items, { description: "Discount", quantity: 1, unitPrice: -orderDiscountAmount }];
+    const { orderDiscountAmount } = calcTotals(lineItems, orderDiscount, effectiveTax, freightCost);
+    let finalItems = [...lineItems];
+    if (orderDiscountAmount > 0) finalItems = [...finalItems, { description: "Discount", quantity: 1, unitPrice: -orderDiscountAmount }];
     if (freightCost > 0) finalItems = [...finalItems, { description: "Freight", quantity: 1, unitPrice: freightCost }];
     const sanitizedItems = finalItems.map(item => ({ ...item, taxPercent: item.taxPercent ?? 0, discountPercent: item.discountPercent ?? 0 }));
 
@@ -166,25 +173,18 @@ export default function InvoiceModal({ onClose, initial }: Props) {
 
     void (async () => {
       try {
-        if (isEditing) await update.mutateAsync({ id: initial.id, data: payload });
-        else await create.mutateAsync({ data: payload });
-        setShowSendPrompt(true);
+        if (isEditing) {
+          await update.mutateAsync({ id: initial.id, data: payload });
+          onClose();
+        } else {
+          const created = await create.mutateAsync({ data: payload });
+          onCreated?.(created);
+          onClose();
+        }
       } catch {
         /* global mutation cache shows error toast */
       }
     })();
-  };
-
-  const selectedCustomer = useMemo(() => (customers ?? []).find((c: any) => String(c.id) === String(customerId)), [customers, customerId]);
-  const custEmail = selectedCustomer?.email ?? "";
-  const custPhone = selectedCustomer?.phone ?? "";
-
-  const handleSend = (type: "email" | "text") => {
-    setSendStatus(`sending-${type}` as any);
-    setTimeout(() => {
-      setSendStatus(`sent-${type}` as any);
-      setTimeout(() => onClose(), 2500);
-    }, 1200);
   };
 
   const isPending = isEditing ? update.isPending : create.isPending;
@@ -197,34 +197,7 @@ export default function InvoiceModal({ onClose, initial }: Props) {
         onClose={onClose}
         lightMode
         maxWidth="max-w-none"
-        footer={showSendPrompt ? (
-          <div className="flex flex-col gap-2 w-full">
-            <div className="flex items-center gap-2 text-sm font-semibold text-emerald-700 pb-1">
-              <span className="text-lg">✓</span> Invoice saved! Send a copy to the customer?
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {custEmail ? (
-                <button type="button" onClick={() => handleSend("email")}
-                  disabled={sendStatus !== "idle"}
-                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${sendStatus === "sent-email" ? "bg-emerald-50 border-emerald-300 text-emerald-700" : sendStatus === "sending-email" ? "bg-blue-50 border-blue-200 text-blue-500" : "bg-white border-indigo-200 text-indigo-600 hover:bg-indigo-50"}`}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-                  {sendStatus === "sending-email" ? "Sending…" : sendStatus === "sent-email" ? "✓ Email Sent" : `Send via Email · ${custEmail}`}
-                </button>
-              ) : <span className="text-xs text-slate-400 italic self-center">No email on file</span>}
-              {custPhone ? (
-                <button type="button" onClick={() => handleSend("text")}
-                  disabled={sendStatus !== "idle"}
-                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${sendStatus === "sent-text" ? "bg-emerald-50 border-emerald-300 text-emerald-700" : sendStatus === "sending-text" ? "bg-blue-50 border-blue-200 text-blue-500" : "bg-white border-green-200 text-green-700 hover:bg-green-50"}`}>
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-                  {sendStatus === "sending-text" ? "Sending…" : sendStatus === "sent-text" ? "✓ Text Sent" : `Send via Text · ${custPhone}`}
-                </button>
-              ) : <span className="text-xs text-slate-400 italic self-center">No phone on file</span>}
-              <button type="button" onClick={onClose} className="ml-auto px-4 py-2 rounded-xl border border-slate-200 text-slate-500 text-sm font-medium hover:bg-slate-50 transition-colors">
-                Close
-              </button>
-            </div>
-          </div>
-        ) : <SubmitBar onClose={onClose} isLoading={isPending} label={isEditing ? "Save Changes" : "Create Invoice"} formId="invoice-form" />}
+        footer={<SubmitBar onClose={onClose} isLoading={isPending} label={isEditing ? "Save Changes" : "Create Invoice"} formId="invoice-form" />}
       >
         <form id="invoice-form" onSubmit={handleSubmit}>
           <div className="px-6 py-4 flex flex-col gap-4">

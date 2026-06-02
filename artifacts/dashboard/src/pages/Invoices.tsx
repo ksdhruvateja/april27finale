@@ -10,10 +10,13 @@ import { Search, Plus, MoreHorizontal, Edit, Trash2, CheckCircle, Eye, X, Truck,
 import { printShippingSlip } from "@/lib/print-slip";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, Legend, PieChart, Pie, ComposedChart, Line, Area } from "recharts";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { patchListCache } from "@/lib/query-sync";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import ShipmentModal from "@/components/ShipmentModal";
 import InvoicePoModal from "@/components/InvoicePoModal";
+import { formatInvoiceNumber, forezDocFallbackNumber } from "@/lib/forez-document-numbers";
 
 type PaymentMethod = "stripe" | "bank_transfer" | "check" | "cash";
 
@@ -87,11 +90,11 @@ function StatusBadge({ status, dueDate }: { status: string; dueDate?: string | n
   );
 }
 
-type StatusFilter = "all" | "sent" | "paid" | "overdue" | "payment_hold" | "cancelled";
+type StatusFilter = "all" | "draft" | "sent" | "paid" | "overdue" | "payment_hold" | "cancelled";
 type DateFilter = "none" | "created" | "due";
 
 export default function Invoices() {
-  const { data: invoices, isLoading } = useListInvoices();
+  const { data: invoices, isLoading, isError, error, refetch } = useListInvoices();
   const { data: auctionList } = useListAuctions();
   const { data: customers } = useListCustomers();
   const { data: purchaseOrders } = useListPurchaseOrders();
@@ -210,7 +213,9 @@ export default function Invoices() {
     };
   }, [invBaseFiltered]);
 
-  const fallbackFcNumber = (id: number) => `FRZI - ${Math.max(5100, 5099 + Number(id ?? 0))}`;
+  const fallbackFcNumber = (id: number) => forezDocFallbackNumber("invoice", id);
+  const displayInvoiceNumber = (inv: { id: number; invoiceNumber?: string | null }) =>
+    formatInvoiceNumber(inv.id, inv.invoiceNumber);
   const [editingNum, setEditingNum] = useState<{ id: number; value: string } | null>(null);
   const [editingRef, setEditingRef] = useState<{ id: number; value: string } | null>(null);
   const numInputRef = useRef<HTMLInputElement>(null);
@@ -269,6 +274,33 @@ export default function Invoices() {
   }, [auctionList]);
 
   const debouncedSearch = useDebounce(search, 250);
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      all: 0,
+      draft: 0,
+      sent: 0,
+      paid: 0,
+      overdue: 0,
+      payment_hold: 0,
+      cancelled: 0,
+    };
+    for (const inv of (invoices as InvoiceData[] | undefined) ?? []) {
+      counts.all += 1;
+      const effective = getEffectiveStatus(inv.status, inv.dueDate);
+      if (effective in counts) counts[effective] += 1;
+    }
+    return counts;
+  }, [invoices]);
+
+  const clearListFilters = () => {
+    setSearch("");
+    setStatusFilter("all");
+    setDateFilterType("none");
+    setDateFrom("");
+    setDateTo("");
+  };
+
   const filtered = useMemo(() => {
     const s = debouncedSearch.trim().toLowerCase();
     const from = dateFrom ? new Date(dateFrom).getTime() : null;
@@ -304,6 +336,20 @@ export default function Invoices() {
     });
   }, [invoices, debouncedSearch, statusFilter, dateFilterType, dateFrom, dateTo, customerMap]);
 
+  const hasActiveFilters =
+    debouncedSearch.trim().length > 0 ||
+    statusFilter !== "all" ||
+    dateFilterType !== "none" ||
+    Boolean(dateFrom) ||
+    Boolean(dateTo);
+
+  const tableRows: InvoiceData[] =
+    filtered.length > 0
+      ? filtered
+      : hasActiveFilters && (invoices?.length ?? 0) > 0
+        ? ((invoices as InvoiceData[] | undefined) ?? [])
+        : filtered;
+
   const handleDelete = (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
     if (confirm("Delete this invoice?")) {
@@ -332,7 +378,7 @@ export default function Invoices() {
   };
 
   const toggleSelectAll = () => {
-    const displayedIds = filtered?.map(inv => inv.id) ?? [];
+    const displayedIds = tableRows.map(inv => inv.id);
     setSelectedIds(prev => {
       if (displayedIds.every(id => prev.has(id))) return new Set();
       return new Set(displayedIds);
@@ -374,7 +420,7 @@ export default function Invoices() {
 
   const startEditNum = (inv: InvoiceData, e: React.MouseEvent) => {
     e.stopPropagation();
-    setEditingNum({ id: inv.id, value: inv.invoiceNumber ?? fallbackFcNumber(inv.id) });
+    setEditingNum({ id: inv.id, value: displayInvoiceNumber(inv) });
     setTimeout(() => numInputRef.current?.select(), 0);
   };
 
@@ -507,6 +553,7 @@ export default function Invoices() {
 
   const STATUS_TABS: { value: StatusFilter; label: string }[] = [
     { value: "all",          label: "All" },
+    { value: "draft",        label: "Draft" },
     { value: "sent",         label: "Sent" },
     { value: "paid",         label: "Paid" },
     { value: "overdue",      label: "Overdue" },
@@ -522,9 +569,9 @@ export default function Invoices() {
 
   return (
     <Layout>
-      <Header title="Invoices" subtitle={`${invoices?.length ?? 0} total`} />
-      <div className="page-shell flex flex-col px-5 pb-4 gap-3 bg-[hsl(220_25%_97%)]">
-        <div className="flex-shrink-0 pt-4 flex flex-col gap-3 min-w-0">
+      <Header title="Invoices" subtitle={`${invoices?.length ?? 0} total · ${tableRows.length} shown`} />
+      <div className="flex-1 min-h-0 h-0 flex flex-col overflow-hidden bg-[hsl(220_25%_97%)]">
+        <div className="flex-shrink-0 px-5 pt-4 pb-2 flex flex-col gap-3 min-w-0">
 
         {/* Search + Create */}
         <div className="flex items-center gap-3">
@@ -556,13 +603,16 @@ export default function Invoices() {
         <div className="flex flex-wrap items-center gap-2">
           {/* Status tabs */}
           <div className="flex bg-white border border-slate-200 rounded-lg p-0.5 gap-0.5">
-            {STATUS_TABS.map(tab => (
+            {STATUS_TABS.map(tab => {
+              const count = statusCounts[tab.value] ?? 0;
+              return (
               <button
                 key={tab.value}
                 onClick={() => setStatusFilter(tab.value)}
-                className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                className={`px-3 py-1 rounded-md text-xs font-semibold transition-all inline-flex items-center gap-1.5 ${
                   statusFilter === tab.value
                     ? tab.value === "all"          ? "bg-[hsl(224_50%_15%)] text-white shadow-sm"
+                    : tab.value === "draft"        ? "bg-slate-600 text-white shadow-sm"
                     : tab.value === "paid"         ? "bg-emerald-600 text-white shadow-sm"
                     : tab.value === "overdue"      ? "bg-red-500 text-white shadow-sm"
                     : tab.value === "payment_hold" ? "bg-amber-500 text-white shadow-sm"
@@ -571,8 +621,16 @@ export default function Invoices() {
                 }`}
               >
                 {tab.label}
+                {count > 0 && (
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                    statusFilter === tab.value ? "bg-white/20" : "bg-slate-100 text-slate-600"
+                  }`}>
+                    {count}
+                  </span>
+                )}
               </button>
-            ))}
+            );
+            })}
           </div>
 
           {/* Date filter */}
@@ -741,21 +799,56 @@ export default function Invoices() {
         )}
         </div>
 
-        <div className="page-table-wrap">
+        <div className="flex-1 min-h-0 h-0 px-5 pb-4 pt-1 flex flex-col">
         <div className="glass-card flex-1 min-h-0 h-0 flex flex-col overflow-hidden border border-blue-100/70 bg-white/95">
           {isLoading ? (
             <div className="p-10 flex justify-center"><div className="animate-spin w-6 h-6 border-2 border-slate-800 border-t-transparent rounded-full" /></div>
-          ) : filtered?.length === 0 ? (
-            <div className="p-10 text-center text-slate-400 text-sm">No invoices found.</div>
+          ) : isError ? (
+            <div className="p-10 text-center flex flex-col items-center gap-3">
+              <p className="text-sm text-red-600 font-medium">Could not load invoices from the server.</p>
+              <p className="text-xs text-slate-500 max-w-md">{(error as Error)?.message ?? "Check that the API is running and the database is connected."}</p>
+              <button type="button" onClick={() => refetch()} className="px-4 py-2 rounded-lg bg-slate-800 text-white text-sm font-semibold hover:bg-slate-700">
+                Retry
+              </button>
+            </div>
+          ) : tableRows.length === 0 ? (
+            <div className="p-10 text-center text-slate-400 text-sm flex flex-col items-center gap-3">
+              {(invoices?.length ?? 0) === 0
+                ? <p>No invoices yet. Click Create Invoice to add one.</p>
+                : (
+                  <>
+                    <p>No invoices match your filters ({invoices?.length ?? 0} saved in database).</p>
+                    <p className="text-xs text-slate-500 max-w-md">
+                      New invoices are saved as <strong className="text-slate-600">Draft</strong>. Check the Draft or All tab, or clear filters below.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={clearListFilters}
+                      className="px-4 py-2 rounded-lg bg-slate-800 text-white text-sm font-semibold hover:bg-slate-700"
+                    >
+                      Show all invoices
+                    </button>
+                  </>
+                )}
+            </div>
           ) : (
             <>
+            <div className="flex-shrink-0 px-4 py-2 border-b border-slate-100 bg-slate-50/90 text-xs text-slate-600 flex items-center justify-between gap-2">
+              <span>
+                Showing <strong className="text-slate-800">{tableRows.length}</strong> invoice{tableRows.length !== 1 ? "s" : ""}
+                {hasActiveFilters && filtered.length === 0 && (invoices?.length ?? 0) > 0 && (
+                  <span className="text-amber-700 ml-1">(filters hid all — showing saved list)</span>
+                )}
+              </span>
+              <span className="text-slate-400 hidden sm:inline">Scroll below to see the full list</span>
+            </div>
             {selectedIds.size > 0 && (
             <div className="flex items-center gap-3 px-5 py-2.5 bg-indigo-50 border-b border-indigo-100">
               <span className="text-sm font-semibold text-indigo-700">{selectedIds.size} selected</span>
               <button
                 onClick={() => {
                   const firstId = [...selectedIds][0];
-                  const inv = filtered?.find(i => i.id === firstId);
+                  const inv = tableRows.find(i => i.id === firstId);
                   if (inv) openPoModal(inv);
                 }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-50 border border-violet-200 text-violet-700 text-xs font-semibold hover:bg-violet-100 transition-colors"
@@ -765,7 +858,7 @@ export default function Invoices() {
               <button
                 onClick={() => {
                   const firstId = [...selectedIds][0];
-                  const inv = filtered?.find(i => i.id === firstId);
+                  const inv = tableRows.find(i => i.id === firstId);
                   if (inv) openShipmentPreflight(inv);
                 }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-50 border border-sky-200 text-sky-700 text-xs font-semibold hover:bg-sky-100 transition-colors"
@@ -784,7 +877,7 @@ export default function Invoices() {
                 <tr className="border-b border-slate-100 bg-slate-50">
                   <th className="px-3 py-3 w-9" onClick={e => e.stopPropagation()}>
                     <input type="checkbox" className="rounded border-slate-300 accent-indigo-600 cursor-pointer"
-                      checked={(filtered?.length ?? 0) > 0 && (filtered?.every(inv => selectedIds.has(inv.id)) ?? false)}
+                      checked={(tableRows.length ?? 0) > 0 && (tableRows.every(inv => selectedIds.has(inv.id)) ?? false)}
                       onChange={toggleSelectAll} />
                   </th>
                   <th className="px-2 py-3 w-8" />
@@ -799,7 +892,7 @@ export default function Invoices() {
                 </tr>
               </thead>
               <tbody>
-                {filtered?.map(inv => (
+                {tableRows.map(inv => (
                   <Fragment key={inv.id}>
                   <tr
                     className={`border-b border-slate-100 hover:bg-slate-50 transition-colors group cursor-pointer ${(noteOpenId === inv.id || noteEditId === inv.id || expandedInvId === inv.id) ? "border-b-0" : ""} ${selectedIds.has(inv.id) ? "bg-indigo-50/50" : ""} ${expandedInvId === inv.id ? "bg-indigo-50/30" : ""}`}
@@ -833,7 +926,7 @@ export default function Invoices() {
                           <div className="flex items-center gap-1.5 group/num whitespace-nowrap">
                             <Eye size={12} className="text-slate-300 group-hover:text-slate-500 transition-colors flex-shrink-0" onClick={() => setViewInvoice(inv)} />
                             <span className="text-slate-400 font-mono text-xs whitespace-nowrap" onClick={() => setViewInvoice(inv)}>
-                              {inv.invoiceNumber ?? fallbackFcNumber(inv.id)}
+                              {displayInvoiceNumber(inv)}
                             </span>
                             <button title="Edit invoice number" onClick={e => startEditNum(inv, e)}
                               className="opacity-0 group-hover/num:opacity-100 p-0.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-all">
@@ -1090,7 +1183,18 @@ export default function Invoices() {
         )}
       </div>
 
-      {showModal && <InvoiceModal onClose={() => setShowModal(false)} />}
+      {showModal && (
+        <InvoiceModal
+          onClose={() => setShowModal(false)}
+          onCreated={(created) => {
+            if (created?.id != null) {
+              patchListCache(queryClient, getListInvoicesQueryKey(), "create", created as InvoiceData);
+            }
+            clearListFilters();
+            void queryClient.refetchQueries({ queryKey: getListInvoicesQueryKey() });
+          }}
+        />
+      )}
       {editInvoice && <InvoiceModal onClose={() => setEditInvoice(null)} initial={editInvoice} />}
       {viewInvoice && (
         <InvoiceView

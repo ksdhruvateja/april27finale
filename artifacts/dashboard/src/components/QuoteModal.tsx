@@ -137,11 +137,12 @@ export default function QuoteModal({ onClose, initial }: Props) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customerId || items.length === 0) return;
+    const lineItems = items.filter((i) => String(i.description ?? "").trim().length > 0);
+    if (!customerId || lineItems.length === 0) return;
     const effectiveTax = taxExempt ? 0 : orderTaxPercent;
-    const { orderDiscountAmount } = calcTotals(items, orderDiscount, effectiveTax, freightCost);
-    let finalItems = [...items];
-    if (orderDiscountAmount > 0) finalItems = [...items, { description: "Discount", quantity: 1, unitPrice: -orderDiscountAmount }];
+    const { orderDiscountAmount } = calcTotals(lineItems, orderDiscount, effectiveTax, freightCost);
+    let finalItems = [...lineItems];
+    if (orderDiscountAmount > 0) finalItems = [...finalItems, { description: "Discount", quantity: 1, unitPrice: -orderDiscountAmount }];
     if (freightCost > 0) finalItems = [...finalItems, { description: "Freight", quantity: 1, unitPrice: freightCost }];
     const sanitizedItems = finalItems.map(item => ({
       ...item,
@@ -159,7 +160,7 @@ export default function QuoteModal({ onClose, initial }: Props) {
       createdAt: quoteDate ? new Date(quoteDate).toISOString() : undefined,
     } as any;
 
-    const save = async () => {
+    void (async () => {
       try {
         if (isEditing) await update.mutateAsync({ id: initial.id, data: payload });
         else await create.mutateAsync({ data: payload });
@@ -167,8 +168,7 @@ export default function QuoteModal({ onClose, initial }: Props) {
       } catch {
         /* global mutation cache shows error toast */
       }
-    };
-    void save();
+    })();
   };
 
   const isPending = isEditing ? update.isPending : create.isPending;

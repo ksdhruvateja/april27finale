@@ -9,6 +9,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { formatCurrency, formatDate } from "@/lib/utils";
 import EstimateModal from "@/components/EstimateModal";
 import { downloadCsv, downloadPdfFromHtml } from "@/lib/export-utils";
+import { formatEstimateNumber } from "@/lib/forez-document-numbers";
 
 const STATUS_MAP: Record<string, string> = {
   approved:  "text-emerald-700 bg-emerald-50 border-emerald-200",
@@ -26,8 +27,6 @@ export default function Estimates() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
-
-  const fallbackFcNumber = (id: number) => `FRZI - ${Math.max(5100, 5099 + Number(id ?? 0))}`;
 
   const q = search.trim().toLowerCase();
   const filtered = (estimates ?? [])
@@ -75,7 +74,7 @@ export default function Estimates() {
 
   const downloadAllExcel = () => {
     const rows = filtered.map((e) => [
-      (e as any).estimateNumber ?? fallbackFcNumber(e.id),
+      formatEstimateNumber(e.id, (e as any).estimateNumber),
       e.customerName,
       formatDate(e.createdAt),
       e.status,
@@ -86,7 +85,7 @@ export default function Estimates() {
 
   const downloadAllPdf = () => {
     const tableHtml = `<table><thead><tr><th>Estimate Number</th><th>Customer</th><th>Created</th><th>Status</th><th>Total</th></tr></thead><tbody>${
-      filtered.map((e) => `<tr><td>${(e as any).estimateNumber ?? fallbackFcNumber(e.id)}</td><td>${e.customerName}</td><td>${formatDate(e.createdAt)}</td><td>${e.status}</td><td>${formatCurrency(e.total)}</td></tr>`).join("")
+      filtered.map((e) => `<tr><td>${formatEstimateNumber(e.id, (e as any).estimateNumber)}</td><td>${e.customerName}</td><td>${formatDate(e.createdAt)}</td><td>${e.status}</td><td>${formatCurrency(e.total)}</td></tr>`).join("")
     }</tbody></table>`;
     downloadPdfFromHtml("Estimates", tableHtml);
   };
@@ -135,7 +134,7 @@ export default function Estimates() {
               <tbody>
                 {filtered?.map(e => (
                   <tr key={e.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors group">
-                    <td className="px-5 py-3.5 text-slate-400 font-mono text-xs">{(e as any).estimateNumber ?? fallbackFcNumber(e.id)}</td>
+                    <td className="px-5 py-3.5 text-slate-400 font-mono text-xs">{formatEstimateNumber(e.id, (e as any).estimateNumber)}</td>
                     <td className="px-5 py-3.5 text-slate-800 font-medium">{e.customerName}</td>
                     <td className="px-5 py-3.5 text-slate-500 text-xs">{formatDate(e.createdAt)}</td>
                     <td className="px-5 py-3.5">

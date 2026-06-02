@@ -1,16 +1,19 @@
-import { useState, useMemo, ReactNode } from "react";
+import { useState, useMemo, ReactNode, Fragment } from "react";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useListAuctions } from "@/lib/auctions-api";
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
-import { useListPurchaseOrders, useDeletePurchaseOrder, useConvertPurchaseOrderToBill, useUpdatePurchaseOrder, getListPurchaseOrdersQueryKey, useListVendors, useListBills, useDeleteBill, getListBillsQueryKey, useListShipments } from "@workspace/api-client-react";
-import { Search, Plus, MoreHorizontal, Edit, Trash2, CreditCard, Truck, RefreshCw, BarChart2, ChevronDown, ChevronUp, CheckCircle2, Pencil, Tag, ChevronRight, Save, Calculator, X as XIcon, Percent, DollarSign } from "lucide-react";
+import { useListPurchaseOrders, useDeletePurchaseOrder, useConvertPurchaseOrderToBill, useUpdatePurchaseOrder, getListPurchaseOrdersQueryKey, useListVendors, useListBills, useDeleteBill, getListBillsQueryKey, useListShipments, useListInvoices } from "@workspace/api-client-react";
+import { Search, Plus, MoreHorizontal, Edit, Trash2, CreditCard, Truck, RefreshCw, BarChart2, ChevronDown, ChevronUp, CheckCircle2, Pencil, Tag, ChevronRight, Save, Calculator, X as XIcon, Percent, DollarSign, Eye } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from "recharts";
 import { useQueryClient } from "@tanstack/react-query";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import PurchaseOrderModal from "@/components/PurchaseOrderModal";
+import PurchaseOrderView from "@/components/PurchaseOrderView";
 import ShipmentModal from "@/components/ShipmentModal";
+import { formatInvoiceNumber } from "@/lib/forez-document-numbers";
+import { formatPurchaseOrderNumber } from "@/lib/forez-po-print";
 import { downloadCsv, downloadPdfFromHtml } from "@/lib/export-utils";
 import { useRole } from "@/context/RoleContext";
 import { logAudit } from "@/lib/auditLog";
@@ -63,7 +66,8 @@ interface ShipmentContext {
 }
 
 export default function PurchaseOrders() {
-  const { data: pos, isLoading } = useListPurchaseOrders();
+  const { data: pos, isLoading, isError, error, refetch } = useListPurchaseOrders();
+  const { data: invoices } = useListInvoices();
   const { data: auctionList } = useListAuctions();
   const { data: bills } = useListBills();
   const { data: shipments } = useListShipments();
@@ -76,6 +80,7 @@ export default function PurchaseOrders() {
   const [statusFilter, setStatusFilter] = useState<PoStatusFilter>("all");
   const [showModal, setShowModal] = useState(false);
   const [editPO, setEditPO] = useState<any | null>(null);
+  const [viewPO, setViewPO] = useState<any | null>(null);
   const [shipmentContext, setShipmentContext] = useState<ShipmentContext | null>(null);
   const [loadingShipment, setLoadingShipment] = useState<number | null>(null);
   const [changingStatusPO, setChangingStatusPO] = useState<any | null>(null);
@@ -101,6 +106,23 @@ export default function PurchaseOrders() {
   const { currentUser } = useRole();
 
   const { data: vendors } = useListVendors();
+
+  const invoiceLabelById = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const inv of invoices ?? []) {
+      const label = formatInvoiceNumber(
+        Number((inv as any).id ?? 0),
+        (inv as any).invoiceNumber,
+      );
+      map.set(Number((inv as any).id), label);
+    }
+    return map;
+  }, [invoices]);
+
+  function sourceInvoiceLabelForPo(po: any): string | null {
+    if (!po.sourceInvoiceId) return null;
+    return invoiceLabelById.get(Number(po.sourceInvoiceId)) ?? `Invoice #${po.sourceInvoiceId}`;
+  }
 
   const STATUS_DOT_COLORS: Record<string,string> = {
     received:"#10b981", sent:"#3b82f6", draft:"#94a3b8",
@@ -307,6 +329,19 @@ export default function PurchaseOrders() {
       return (b.id ?? 0) - (a.id ?? 0);
     }), [pos, debouncedSearch, statusFilter]);
 
+  const hasActiveFilters = debouncedSearch.trim().length > 0 || statusFilter !== "all";
+
+  const clearListFilters = () => {
+    setSearch("");
+    setStatusFilter("all");
+  };
+
+  const tableRows = useMemo(() => {
+    if (filtered.length > 0) return filtered;
+    if (hasActiveFilters && (pos?.length ?? 0) > 0) return pos ?? [];
+    return filtered;
+  }, [filtered, hasActiveFilters, pos]);
+
   const handleDelete = (id: number) => {
     if (confirm("Delete this purchase order?")) {
       deletePO.mutate({ id }, {
@@ -320,7 +355,7 @@ export default function PurchaseOrders() {
     setSelectedIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   };
   const toggleSelectAll = () => {
-    const ids = filtered?.map(po => po.id) ?? [];
+    const ids = tableRows?.map(po => po.id) ?? [];
     setSelectedIds(prev => ids.every(id => prev.has(id)) ? new Set() : new Set(ids));
   };
   const bulkDelete = () => {
@@ -417,7 +452,7 @@ export default function PurchaseOrders() {
   };
 
   const downloadAllExcel = () => {
-    const rows = filtered.map((po) => [
+    const rows = tableRows.map((po) => [
       `FRZPO-${String(po.id).padStart(4, "0")}`,
       po.vendorName,
       formatDate(po.createdAt),
@@ -430,7 +465,7 @@ export default function PurchaseOrders() {
 
   const downloadAllPdf = () => {
     const tableHtml = `<table><thead><tr><th>PO Number</th><th>Vendor</th><th>Created</th><th>Expected</th><th>Status</th><th>Total</th></tr></thead><tbody>${
-      filtered.map((po) => `<tr><td>FRZPO-${String(po.id).padStart(4, "0")}</td><td>${po.vendorName}</td><td>${formatDate(po.createdAt)}</td><td>${formatDate(po.expectedDate)}</td><td>${getEffectivePoStatus(po)}</td><td>${formatCurrency(po.total)}</td></tr>`).join("")
+      tableRows.map((po) => `<tr><td>${formatPurchaseOrderNumber(po)}</td><td>${po.vendorName}</td><td>${formatDate(po.createdAt)}</td><td>${formatDate(po.expectedDate)}</td><td>${getEffectivePoStatus(po)}</td><td>${formatCurrency(po.total)}</td></tr>`).join("")
     }</tbody></table>`;
     downloadPdfFromHtml("Purchase Orders", tableHtml);
   };
@@ -446,9 +481,9 @@ export default function PurchaseOrders() {
 
   return (
     <Layout>
-      <Header title="Purchase Orders" subtitle={`${pos?.length ?? 0} total`} />
-      <div className="page-shell flex flex-col px-5 pb-4 gap-4 bg-gradient-to-br from-[#eef6ff] via-[#f8fbff] to-[#edf4ff]">
-        <div className="flex-shrink-0 pt-4 flex flex-col gap-4 min-w-0">
+      <Header title="Purchase Orders" subtitle={`${pos?.length ?? 0} total · ${tableRows.length} shown`} />
+      <div className="page-shell flex flex-col flex-1 min-h-0 h-0 overflow-hidden bg-gradient-to-br from-[#eef6ff] via-[#f8fbff] to-[#edf4ff]">
+        <div className="flex-shrink-0 px-5 pt-4 pb-2 flex flex-col gap-4 min-w-0">
         <div className="flex justify-between items-center gap-3">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
@@ -648,14 +683,46 @@ export default function PurchaseOrders() {
         </div>
         </div>
 
-        <div className="page-table-wrap">
+        <div className="page-table-wrap flex-1 min-h-0 h-0 px-5 pb-4 pt-1 flex flex-col">
         <div className="glass-card flex-1 min-h-0 h-0 flex flex-col overflow-hidden border border-blue-100/70 bg-white/95">
           {isLoading ? (
             <div className="p-10 flex justify-center"><div className="animate-spin w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full" /></div>
-          ) : filtered?.length === 0 ? (
-            <div className="p-10 text-center text-slate-500 text-sm">No purchase orders found.</div>
+          ) : isError ? (
+            <div className="p-10 text-center flex flex-col items-center gap-3">
+              <p className="text-sm text-red-600 font-medium">Could not load purchase orders.</p>
+              <p className="text-xs text-slate-500 max-w-md">{(error as Error)?.message ?? "Check that the API is running (port 3000) and the database is connected."}</p>
+              <button type="button" onClick={() => refetch()} className="px-4 py-2 rounded-lg bg-slate-800 text-white text-sm font-semibold hover:bg-slate-700">
+                Retry
+              </button>
+            </div>
+          ) : tableRows.length === 0 ? (
+            <div className="p-10 text-center text-slate-500 text-sm flex flex-col items-center gap-3">
+              {(pos?.length ?? 0) === 0 ? (
+                <p>No purchase orders yet. Click Create PO to add one.</p>
+              ) : (
+                <>
+                  <p>No purchase orders match your filters ({pos?.length ?? 0} saved in database).</p>
+                  <button
+                    type="button"
+                    onClick={clearListFilters}
+                    className="px-4 py-2 rounded-lg bg-slate-800 text-white text-sm font-semibold hover:bg-slate-700"
+                  >
+                    Show all purchase orders
+                  </button>
+                </>
+              )}
+            </div>
           ) : (
             <>
+            <div className="flex-shrink-0 px-4 py-2 border-b border-blue-100 bg-blue-50/90 text-xs text-slate-600 flex items-center justify-between gap-2">
+              <span>
+                Showing <strong className="text-slate-800">{tableRows.length}</strong> PO{tableRows.length !== 1 ? "s" : ""}
+                {hasActiveFilters && filtered.length === 0 && (pos?.length ?? 0) > 0 && (
+                  <span className="text-amber-700 ml-1">(filters hid all — showing saved list)</span>
+                )}
+              </span>
+              <span className="text-slate-400 hidden sm:inline">Scroll below to see the full list</span>
+            </div>
             {selectedIds.size > 0 && (
               <div className="flex items-center gap-2 px-5 py-2.5 bg-indigo-50 border-b border-indigo-100 flex-wrap">
                 <span className="text-sm font-semibold text-indigo-700 mr-1">
@@ -715,7 +782,7 @@ export default function PurchaseOrders() {
                 <tr className="border-b border-blue-100 bg-blue-50/80">
                   <th className="px-3 py-3 w-9">
                     <input type="checkbox" className="rounded border-blue-300 accent-indigo-600 cursor-pointer"
-                      checked={(filtered?.length ?? 0) > 0 && (filtered?.every(po => selectedIds.has(po.id)) ?? false)}
+                      checked={(tableRows.length ?? 0) > 0 && (tableRows.every(po => selectedIds.has(po.id)) ?? false)}
                       onChange={toggleSelectAll} />
                   </th>
                   <th className="px-2 py-3 w-8" />
@@ -729,14 +796,14 @@ export default function PurchaseOrders() {
                 </tr>
               </thead>
               <tbody>
-                {filtered?.map(po => {
+                {tableRows.map(po => {
                   const effectiveStatus = getEffectivePoStatus(po);
                   const isOverdue = effectiveStatus === "overdue";
                   const isExpanded = expandedPoId === po.id;
                   const editItems = expandedItems[po.id] ?? (po.lineItems ?? []);
                   return (
-                    <>
-                    <tr key={po.id} className={`border-b border-slate-100 transition-colors group ${isExpanded ? (isOverdue ? "bg-red-50/40" : "bg-blue-50/60") : isOverdue ? "bg-red-50/30 hover:bg-red-50/60" : "hover:bg-blue-50/50"} ${selectedIds.has(po.id) ? "!bg-indigo-50/50" : ""}`}>
+                    <Fragment key={po.id}>
+                    <tr className={`border-b border-slate-100 transition-colors group ${isExpanded ? (isOverdue ? "bg-red-50/40" : "bg-blue-50/60") : isOverdue ? "bg-red-50/30 hover:bg-red-50/60" : "hover:bg-blue-50/50"} ${selectedIds.has(po.id) ? "!bg-indigo-50/50" : ""}`}>
                       <td className="px-3 py-3.5 w-9" onClick={e => toggleSelect(po.id, e)}>
                         <input type="checkbox" className="rounded border-slate-300 accent-indigo-600 cursor-pointer"
                           checked={selectedIds.has(po.id)} onChange={() => {}} />
@@ -752,10 +819,14 @@ export default function PurchaseOrders() {
                       </td>
                       <td className="px-5 py-3.5">
                         <div className="flex flex-col gap-0.5">
-                          {po.sourceInvoiceId && po.poSequence
-                            ? <span className="text-amber-700 font-mono text-xs">FRZPO-{po.sourceInvoiceId.toString().padStart(4, "0")}-{po.poSequence}</span>
-                            : <span className="text-slate-400 font-mono text-xs">FRZPO-{po.id.toString().padStart(4, "0")}</span>
-                          }
+                          <button
+                            type="button"
+                            onClick={() => setViewPO(po)}
+                            className="text-left font-mono text-xs text-indigo-700 hover:text-indigo-900 hover:underline w-fit"
+                            title="View purchase order"
+                          >
+                            {formatPurchaseOrderNumber(po)}
+                          </button>
                           {auctionByPoId.has(Number(po.id)) && (
                             <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 w-fit">
                               🏷 {auctionByPoId.get(Number(po.id))}
@@ -847,6 +918,11 @@ export default function PurchaseOrders() {
                             }
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="bg-white border-slate-200 shadow-lg text-slate-800 min-w-[170px]">
+                            <DropdownMenuItem
+                              onClick={() => setViewPO(po)}
+                              className="gap-2 cursor-pointer text-sm hover:bg-slate-50 focus:bg-slate-50">
+                              <Eye size={13} /> View / Print
+                            </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => { setChangingStatusPO(po); setNewStatus(po.status ?? "draft"); }}
                               className="gap-2 cursor-pointer text-sm hover:bg-violet-50 focus:bg-violet-50 text-violet-700 focus:text-violet-700">
@@ -972,7 +1048,7 @@ export default function PurchaseOrders() {
                         </td>
                       </tr>
                     )}
-                    </>
+                    </Fragment>
                   );
                 })}
               </tbody>
@@ -985,6 +1061,13 @@ export default function PurchaseOrders() {
       </div>
       {showModal && <PurchaseOrderModal onClose={() => setShowModal(false)} />}
       {editPO && <PurchaseOrderModal onClose={() => setEditPO(null)} initial={editPO} />}
+      {viewPO && (
+        <PurchaseOrderView
+          po={viewPO}
+          onClose={() => setViewPO(null)}
+          sourceInvoiceLabel={sourceInvoiceLabelForPo(viewPO)}
+        />
+      )}
 
       {/* Change Status Modal */}
       {changingStatusPO && (

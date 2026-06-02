@@ -1,29 +1,19 @@
-import { useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   X, Printer, Clock, CheckCircle2, XCircle, FileText,
-  Mail, MessageSquare, Download, Copy, Check
+  Mail, MessageSquare, Copy, Check
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import forézLogo from "@assets/image_1775678558898.png";
+import { formatQuoteNumber } from "@/lib/forez-document-numbers";
+import {
+  buildQuotePrintHtml,
+  FOREZ_QUOTE,
+  openForezDocumentPrint,
+} from "@/lib/forez-document-print";
+import { useListCustomers } from "@workspace/api-client-react";
+import ForezDocumentPreview from "./ForezDocumentPreview";
 
-const BUSINESS = {
-  name:    "Forez Corp",
-  line1:   "2402 Ocean Ave",
-  line2:   "Ronkonkoma, NY 11779",
-  phone:   "+1 (516) 860-2513",
-  email:   "info@forezcorp.com",
-  website: "www.forezcorp.com",
-};
-
-const escapeHtml = (value: string) =>
-  value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-
-const nl2br = (value: string) => escapeHtml(value).replace(/\r?\n/g, "<br/>");
+const BUSINESS = { ...FOREZ_QUOTE, phone: "+1 (516) 860-2513" };
 
 interface LineItem {
   description: string;
@@ -36,6 +26,7 @@ interface LineItem {
 
 interface Quote {
   id: number;
+  customerId?: number;
   customerName: string;
   customerEmail?: string | null;
   customerPhone?: string | null;
@@ -71,14 +62,16 @@ const STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; bg: 
 type SendMode = "email" | "sms" | null;
 
 export default function QuoteView({ quote, onClose }: Props) {
-  const printRef = useRef<HTMLDivElement>(null);
+  const { data: customers } = useListCustomers();
+  const customer = customers?.find((c: any) => c.id === quote.customerId) as any;
+
   const [sendMode, setSendMode] = useState<SendMode>(null);
   const [emailTo, setEmailTo] = useState(quote.customerEmail ?? "");
   const [smsTo, setSmsTo] = useState(quote.customerPhone ?? "");
   const [copied, setCopied] = useState(false);
 
   const status = STATUS_CONFIG[quote.status] ?? STATUS_CONFIG.draft;
-  const quoteNum = (quote as any).quoteNumber ?? `FRZQ - ${Math.max(5100, 5099 + Number(quote.id ?? 0))}`;
+  const quoteNum = formatQuoteNumber(Number(quote.id ?? 0), (quote as any).quoteNumber);
   const isExpired =
     quote.status === "sent" &&
     !!quote.expiresAt &&
@@ -125,166 +118,59 @@ export default function QuoteView({ quote, onClose }: Props) {
     });
   }
 
-  function handlePrint(_download = false) {
-    const w = window.open("", "_blank", "width=900,height=700");
-    if (!w) return;
-    w.document.write(`
-      <html><head><title>${quoteNum} — Forez Corp</title>
-      <style>
-        *{box-sizing:border-box;margin:0;padding:0}
-        body{font-family:'Segoe UI',sans-serif;background:#fff;color:#111;padding:48px}
-        .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:36px}
-        .logo-block{display:flex;align-items:center;gap:12px}
-        .logo-img{width:42px;height:42px;border-radius:8px;object-fit:contain}
-        .company-name{font-size:20px;font-weight:800;letter-spacing:-0.5px;color:#111}
-        .company-sub{font-size:10px;color:#888;letter-spacing:2px;text-transform:uppercase;margin-top:2px}
-        .company-addr{font-size:11px;color:#666;line-height:1.6;margin-top:6px}
-        h1{font-size:30px;font-weight:900;letter-spacing:-1px;color:#000}
-        .badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:99px;font-size:12px;font-weight:700;margin-top:6px}
-        .badge-accepted{background:#d4f400;color:#000}
-        .badge-sent{background:#dbeafe;color:#1e40af}
-        .badge-declined{background:#fee2e2;color:#dc2626}
-        .badge-draft{background:#f5f5f5;color:#555}
-        .meta{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;margin:28px 0}
-        .meta-block h4{font-size:10px;text-transform:uppercase;letter-spacing:2px;color:#888;margin-bottom:6px}
-        .meta-block p{font-size:13px;color:#111;line-height:1.6}
-        .meta-block p strong{font-weight:700}
-        hr{border:none;border-top:1px solid #e0e0e0;margin:24px 0}
-        table{width:100%;border-collapse:collapse;margin-bottom:24px}
-        thead tr{background:#f5f5f5}
-        th{text-align:left;padding:10px 12px;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#555;border-bottom:2px solid #e0e0e0}
-        td{padding:12px;font-size:14px;border-bottom:1px solid #f0f0f0;vertical-align:top}
-        td.right{text-align:right}
-        .item-name{font-size:14px;font-weight:600;color:#111;white-space:pre-wrap}
-        .item-desc{font-size:12px;color:#888;margin-top:2px;line-height:1.4}
-        .totals{display:flex;justify-content:flex-end}
-        .totals-table{width:280px}
-        .totals-row{display:flex;justify-content:space-between;padding:6px 0;font-size:13px;border-bottom:1px solid #f0f0f0}
-        .totals-total{display:flex;justify-content:space-between;padding:10px 0 0;font-size:18px;font-weight:800;color:#000;border-top:2px solid #000;margin-top:4px}
-        .notes{font-size:12px;color:#666;line-height:1.6;margin-top:20px;padding:16px;background:#f9f9f9;border-radius:6px}
-        .footer{margin-top:48px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid #e0e0e0;padding-top:16px}
-        .footer-logo{display:flex;align-items:center;gap:8px}
-        .footer-logo-img{width:22px;height:22px;border-radius:4px;object-fit:contain}
-        .footer-co{font-size:12px;font-weight:700;color:#333}
-        .footer-right{font-size:10px;color:#aaa;text-align:right}
-        @media print{body{padding:0} @page{margin:40px}}
-      </style></head><body>
-      <div class="header">
-        <div>
-          <div class="logo-block">
-            <img src="${forézLogo}" alt="Forez Corp" class="logo-img" />
-            <div>
-              <div class="company-name">Forez Corp</div>
-              <div class="company-sub">Industrial &amp; Commercial Supplies</div>
-            </div>
-          </div>
-          <div class="company-addr">
-            ${BUSINESS.line1}, ${BUSINESS.line2}<br/>
-            ${BUSINESS.phone} &nbsp;·&nbsp; ${BUSINESS.email}
-          </div>
-        </div>
-        <div style="text-align:right">
-          <h1>${quoteNum}</h1>
-          <span class="badge badge-${quote.status}">${status.label}</span>
-          <div style="margin-top:12px;font-size:11px;color:#888">
-            <div><strong>Issued:</strong> ${formatDate(quote.createdAt)}</div>
-            ${quote.expiresAt ? `<div style="margin-top:4px"><strong>Expires:</strong> ${formatDate(quote.expiresAt)}</div>` : ""}
-          </div>
-        </div>
-      </div>
-      <hr/>
-      <div class="meta">
-        <div class="meta-block">
-          <h4>Prepared By</h4>
-          <p><strong>${BUSINESS.name}</strong><br/>${BUSINESS.line1}<br/>${BUSINESS.line2}<br/>${BUSINESS.email}</p>
-        </div>
-        <div class="meta-block">
-          <h4>Prepared For</h4>
-          <p><strong>${quote.customerName}</strong>${customerAddrLine ? `<br/>${customerAddrLine.replace(/\n/g, "<br/>")}` : ""}${quote.customerEmail ? `<br/>${quote.customerEmail}` : ""}${quote.customerPhone ? `<br/>${quote.customerPhone}` : ""}</p>
-        </div>
-        <div class="meta-block" style="text-align:right"></div>
-      </div>
-      <hr/>
-      <table>
-        <thead><tr><th>Description</th><th style="text-align:right">Qty</th><th style="text-align:right">Unit Price</th><th style="text-align:right">Discount</th><th style="text-align:right">Tax</th><th style="text-align:right">Amount</th></tr></thead>
-        <tbody>${(quote.lineItems as LineItem[]).map(item => {
-          const gross = item.quantity * item.unitPrice;
-          const disc = gross * (item.discountPercent / 100);
-          const taxable = gross - disc;
-          const net = taxable + taxable * (item.taxPercent / 100);
-          return `<tr>
-            <td>
-              <div class="item-name">${item.description ? nl2br(item.description) : "—"}</div>
-              ${item.lineDescription ? `<div class="item-desc">${nl2br(item.lineDescription)}</div>` : ""}
-            </td>
-            <td class="right">${item.quantity}</td>
-            <td class="right">${formatCurrency(item.unitPrice)}</td>
-            <td class="right">${item.discountPercent > 0 ? item.discountPercent + "%" : "—"}</td>
-            <td class="right">${item.taxPercent > 0 ? item.taxPercent + "%" : "—"}</td>
-            <td class="right" style="font-weight:600">${formatCurrency(net)}</td>
-          </tr>`;
-        }).join("")}</tbody>
-      </table>
-      <div class="totals">
-        <div class="totals-table">
-          <div class="totals-row"><span>Subtotal</span><span>${formatCurrency(quote.subtotal)}</span></div>
-          ${quote.discountTotal > 0 ? `<div class="totals-row"><span>Discount</span><span style="color:#dc2626">-${formatCurrency(quote.discountTotal)}</span></div>` : ""}
-          <div class="totals-row"><span>Tax</span><span>${formatCurrency(quote.taxTotal)}</span></div>
-          <div class="totals-total"><span>Total</span><span>${formatCurrency(quote.total)}</span></div>
-        </div>
-      </div>
-      ${quote.notes ? `<div class="notes"><strong>Notes:</strong> ${quote.notes}</div>` : ""}
-      <div class="footer">
-        <div class="footer-logo">
-          <img src="${forézLogo}" alt="Forez Corp" class="footer-logo-img" />
-          <div class="footer-co">Forez Corp</div>
-        </div>
-        <div class="footer-right">
-          ${quote.expiresAt ? `Quote valid until ${formatDate(quote.expiresAt)}` : "Thank you for your business"}<br/>
-          ${BUSINESS.website}
-        </div>
-      </div>
-      </body></html>
-    `);
-    w.document.close();
-    w.focus();
-    setTimeout(() => { w.print(); }, 400);
+  const previewHtml = useMemo(
+    () =>
+      buildQuotePrintHtml({
+        quoteNumber: quoteNum,
+        issueDate: quote.createdAt,
+        dueDate: quote.expiresAt,
+        customer,
+        customerName: quote.customerName,
+        customerEmail: quote.customerEmail,
+        customerPhone: quote.customerPhone,
+        customerAddress: quote.customerAddress,
+        customerCity: quote.customerCity,
+        customerState: quote.customerState,
+        customerZip: quote.customerZip,
+        customerCountry: quote.customerCountry,
+        lineItems: quote.lineItems,
+        subtotal: quote.subtotal,
+        taxTotal: quote.taxTotal,
+        discountTotal: quote.discountTotal,
+        total: quote.total,
+        notes: quote.notes,
+        trackingNumber: (quote as any).trackingNumber,
+        acceptedBy: quote.status === "accepted" ? quote.customerName : undefined,
+        acceptedDate:
+          quote.status === "accepted" ? formatDate(quote.createdAt) : undefined,
+      }),
+    [quote, quoteNum, customer],
+  );
+
+  function handlePrint() {
+    openForezDocumentPrint(previewHtml);
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="absolute inset-0 bg-slate-950" />
+      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
       <div
-        className="relative z-10 w-full max-w-3xl max-h-[92vh] overflow-y-auto scrollbar-hide rounded-2xl border border-white/12"
-        style={{ background: "#0c0c10" }}
-        onClick={e => e.stopPropagation()}
+        className="relative z-10 w-full max-w-[920px] max-h-[94vh] flex flex-col rounded-xl border border-slate-200 bg-slate-100 shadow-2xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="sticky top-0 z-20 flex items-center justify-between px-6 py-4 border-b border-white/8"
-          style={{ background: "#0c0c10" }}>
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg overflow-hidden bg-white/10 flex items-center justify-center">
-              <img src={forézLogo} alt="Forez Corp" className="w-full h-full object-contain" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-white font-bold text-base">{quoteNum}</span>
-                <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full border ${status.bg} ${status.text} ${status.border}`}>
-                  {status.icon}
-                  {isExpired ? "Expired" : status.label}
-                </span>
-              </div>
-              <p className="text-white/40 text-xs">Forez Corp · Industrial &amp; Commercial Supplies</p>
-            </div>
+        <div className="flex-shrink-0 flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-200 bg-white">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-slate-800 font-bold text-sm truncate">{quoteNum}</span>
+            <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full border ${status.bg} ${status.text} ${status.border}`}>
+              {status.icon}
+              {isExpired ? "Expired" : status.label}
+            </span>
           </div>
-
-          {/* Action Buttons */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-shrink-0">
             <ActionBtn icon={<Mail size={13} />} label="Email" onClick={() => setSendMode(sendMode === "email" ? null : "email")} active={sendMode === "email"} color="blue" />
             <ActionBtn icon={<MessageSquare size={13} />} label="SMS" onClick={() => setSendMode(sendMode === "sms" ? null : "sms")} active={sendMode === "sms"} color="green" />
-            <ActionBtn icon={<Download size={13} />} label="Download" onClick={() => handlePrint(true)} color="violet" />
-            <ActionBtn icon={<Printer size={13} />} label="Print" onClick={() => handlePrint(false)} color="default" />
-            <button onClick={onClose} className="ml-1 p-1.5 rounded-lg hover:bg-white/8 text-white/50 hover:text-white transition-colors">
+            <ActionBtn icon={<Printer size={13} />} label="Print / PDF" onClick={handlePrint} color="default" />
+            <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500">
               <X size={18} />
             </button>
           </div>
@@ -328,132 +214,18 @@ export default function QuoteView({ quote, onClose }: Props) {
           />
         )}
 
-        {/* Quote Body */}
-        <div ref={printRef} className="px-8 py-6 flex flex-col gap-6">
-          {/* From / To */}
-          <div className="grid grid-cols-2 gap-6">
-            <div>
-              <p className="text-white/35 text-[10px] uppercase tracking-widest mb-2">From</p>
-              <div className="flex items-center gap-2.5 mb-2">
-                <div className="w-6 h-6 rounded-md overflow-hidden bg-white/10 flex items-center justify-center flex-shrink-0">
-                  <img src={forézLogo} alt="Forez Corp" className="w-full h-full object-contain" />
-                </div>
-                <span className="text-white font-bold text-sm">Forez Corp</span>
-              </div>
-              <p className="text-white/45 text-xs leading-relaxed">
-                {BUSINESS.line1}<br />
-                {BUSINESS.line2}<br />
-                {BUSINESS.phone}<br />
-                {BUSINESS.email}
-              </p>
-            </div>
-            <div>
-              <p className="text-white/35 text-[10px] uppercase tracking-widest mb-2">Prepared For</p>
-              <p className="text-white font-bold text-sm mb-1">{quote.customerName}</p>
-              <p className="text-white/45 text-xs leading-relaxed">
-                {quote.customerAddress && <>{quote.customerAddress}<br /></>}
-                {(quote.customerCity || quote.customerState) && (
-                  <>{[quote.customerCity, quote.customerState].filter(Boolean).join(", ")}{quote.customerZip ? ` ${quote.customerZip}` : ""}<br /></>
-                )}
-                {quote.customerCountry && quote.customerCountry !== "US" && <>{quote.customerCountry}<br /></>}
-                {quote.customerPhone && <>{quote.customerPhone}<br /></>}
-                {quote.customerEmail && <>{quote.customerEmail}</>}
-              </p>
-            </div>
-          </div>
-
-          {/* Dates */}
-          <div className="grid grid-cols-2 gap-3">
-            <MetaChip label="Quote Date" value={formatDate(quote.createdAt)} />
-            <MetaChip label="Expires" value={formatDate(quote.expiresAt)} alert={isExpired ?? false} />
-          </div>
-
-          <div className="h-px bg-white/8" />
-
-          {/* Line Items */}
-          <div>
-            <table className="w-full text-base">
-              <thead>
-                <tr className="border-b border-white/10">
-                  <th className="text-left pb-3 text-white/35 text-xs uppercase tracking-widest font-medium">Description</th>
-                  <th className="text-right pb-3 text-white/35 text-[10px] uppercase tracking-widest font-medium w-16">Qty</th>
-                  <th className="text-right pb-3 text-white/35 text-[10px] uppercase tracking-widest font-medium w-28">Unit Price</th>
-                  <th className="text-right pb-3 text-white/35 text-[10px] uppercase tracking-widest font-medium w-20">Discount</th>
-                  <th className="text-right pb-3 text-white/35 text-[10px] uppercase tracking-widest font-medium w-16">Tax</th>
-                  <th className="text-right pb-3 text-white/35 text-[10px] uppercase tracking-widest font-medium w-28">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(quote.lineItems as LineItem[]).map((item, i) => {
-                  const gross = item.quantity * item.unitPrice;
-                  const disc = gross * (item.discountPercent / 100);
-                  const taxable = gross - disc;
-                  const net = taxable + taxable * (item.taxPercent / 100);
-                  return (
-                    <tr key={i} className="border-b border-white/5">
-                      <td className="py-3.5 pr-4">
-                        <div className="text-white text-base font-semibold whitespace-pre-wrap">{item.description}</div>
-                        {item.lineDescription && (
-                          <div className="text-white/45 text-[15px] mt-1 whitespace-pre-wrap">{item.lineDescription}</div>
-                        )}
-                      </td>
-                      <td className="py-3.5 text-right text-white/60">{item.quantity}</td>
-                      <td className="py-3.5 text-right text-white/70">{formatCurrency(item.unitPrice)}</td>
-                      <td className="py-3.5 text-right text-white/50">
-                        {item.discountPercent > 0 ? <span className="text-red-400">-{item.discountPercent}%</span> : <span className="text-white/25">—</span>}
-                      </td>
-                      <td className="py-3.5 text-right text-white/50">{item.taxPercent > 0 ? `${item.taxPercent}%` : <span className="text-white/25">—</span>}</td>
-                      <td className="py-3.5 text-right text-white font-semibold">{formatCurrency(net)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Totals */}
-          <div className="flex justify-end">
-            <div className="w-72 flex flex-col gap-0 bg-white/4 border border-white/8 rounded-xl overflow-hidden">
-              <TotalRow label="Subtotal" value={formatCurrency(quote.subtotal)} />
-              {quote.discountTotal > 0 && (
-                <TotalRow label="Discount" value={`-${formatCurrency(quote.discountTotal)}`} accent="text-red-400" />
-              )}
-              <TotalRow label="Tax" value={formatCurrency(quote.taxTotal)} />
-              <div className="flex justify-between items-center px-4 py-3.5 bg-lime/10 border-t border-lime/20">
-                <span className="text-white font-bold text-sm">Quote Total</span>
-                <span className="text-lime font-black text-lg">{formatCurrency(quote.total)}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Notes */}
-          {quote.notes && (
-            <div className="bg-white/4 border border-white/8 rounded-xl p-4">
-              <p className="text-white/35 text-[10px] uppercase tracking-widest mb-1.5">Notes</p>
-              <p className="text-white/65 text-sm leading-relaxed">{quote.notes}</p>
-            </div>
-          )}
-
-          {quote.internalNote && (
-            <div className="bg-amber-500/10 border border-amber-400/30 rounded-xl p-4">
-              <p className="text-amber-300 text-[10px] uppercase tracking-widest mb-1.5">Internal Notes (Software Only)</p>
-              <p className="text-amber-100/80 text-sm leading-relaxed whitespace-pre-wrap">{quote.internalNote}</p>
-            </div>
-          )}
-
-          {/* Footer */}
-          <div className="flex items-center justify-between pt-2 border-t border-white/8">
-            <div className="flex items-center gap-2">
-              <div className="w-5 h-5 rounded-md overflow-hidden bg-white/10 flex items-center justify-center">
-                <img src={forézLogo} alt="Forez Corp" className="w-full h-full object-contain" />
-              </div>
-              <span className="text-white/30 text-xs">Forez Corp · {BUSINESS.website}</span>
-            </div>
-            <span className="text-white/25 text-xs">
-              {quote.expiresAt ? `Valid until ${formatDate(quote.expiresAt)}` : "Thank you for your business"}
-            </span>
-          </div>
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto p-4 bg-slate-200/80">
+          <ForezDocumentPreview html={previewHtml} />
         </div>
+
+        {quote.internalNote?.trim() && (
+          <div className="flex-shrink-0 border-t border-amber-200 bg-amber-50 px-4 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-amber-800 mb-1">
+              Internal note (not on printed quote)
+            </p>
+            <p className="text-sm text-amber-900 whitespace-pre-wrap">{quote.internalNote}</p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -542,20 +314,3 @@ function SendPanel({ title, icon, fields, previewLabel, previewText, primaryLabe
   );
 }
 
-function MetaChip({ label, value, alert }: { label: string; value: string; alert?: boolean }) {
-  return (
-    <div className={`rounded-xl px-4 py-3 border ${alert ? "bg-red-500/8 border-red-400/20" : "bg-white/4 border-white/8"}`}>
-      <p className="text-white/35 text-[10px] uppercase tracking-widest mb-1">{label}</p>
-      <p className={`text-sm font-semibold ${alert ? "text-red-400" : "text-white"}`}>{value}</p>
-    </div>
-  );
-}
-
-function TotalRow({ label, value, accent }: { label: string; value: string; accent?: string }) {
-  return (
-    <div className="flex justify-between items-center px-4 py-2.5 border-b border-white/6">
-      <span className="text-white/50 text-sm">{label}</span>
-      <span className={`text-sm font-semibold ${accent ?? "text-white/80"}`}>{value}</span>
-    </div>
-  );
-}
