@@ -131,8 +131,8 @@ export default function Vendors() {
   return (
     <Layout>
       <Header title="Vendors" subtitle={`${filtered?.length ?? 0} shown · ${vendors?.length ?? 0} total`} />
-      <div className="flex-1 min-h-0 flex flex-col overflow-hidden bg-gradient-to-br from-[#eef6ff] via-[#f8fbff] to-[#edf4ff]">
-        <div className="flex-shrink-0 px-5 pt-4 pb-3 flex flex-col gap-4">
+      <div className="flex-1 min-h-0 h-0 flex flex-col overflow-hidden bg-gradient-to-br from-[#eef6ff] via-[#f8fbff] to-[#edf4ff]">
+        <div className="flex-shrink-0 px-5 pt-4 pb-2 flex flex-col gap-4">
 
         {/* Toolbar */}
         <div className="flex flex-wrap justify-between items-center gap-3">
@@ -297,8 +297,8 @@ export default function Vendors() {
         </div>
 
         {/* Vendor Table */}
-        <div className="flex-1 min-h-0 px-5 pb-4 flex flex-col">
-        <div className="glass-card flex-1 min-h-0 flex flex-col overflow-hidden border border-blue-100/70">
+        <div className="flex-1 min-h-0 h-0 px-5 pb-4 pt-1 flex flex-col">
+        <div className="glass-card flex-1 min-h-0 h-0 flex flex-col overflow-hidden border border-blue-100/70 bg-white/95">
           {isLoading ? (
             <div className="p-10 flex justify-center"><div className="animate-spin w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full" /></div>
           ) : filtered?.length === 0 ? (
@@ -309,7 +309,7 @@ export default function Vendors() {
               <span>Showing <strong className="text-slate-800">{filtered.length}</strong> vendor{filtered.length !== 1 ? "s" : ""}</span>
               <span className="text-slate-400">Scroll the list below to see all</span>
             </div>
-            <div className="flex-1 min-h-0 overflow-auto">
+            <div className="data-table-scroll">
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10">
                 <tr className="border-b border-blue-100 bg-blue-50/95">

@@ -134,7 +134,7 @@ export default function Settings() {
   return (
     <Layout>
       <Header title="Settings" />
-      <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-6 bg-[hsl(220_25%_97%)] flex flex-col gap-6">
+      <div className="page-scroll-body px-5 py-6 bg-[hsl(220_25%_97%)] flex flex-col gap-6">
 
         {/* Company Settings */}
         <div className="glass-card p-6 max-w-2xl">

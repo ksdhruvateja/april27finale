@@ -281,41 +281,43 @@ export default function WalkIn() {
 
         <div className="flex flex-1 min-h-0 gap-4 p-4 overflow-hidden">
 
-          {/* ── LEFT: Product browser ───────────────────────── */}
-          <div className="flex flex-col flex-1 min-w-0 min-h-0 gap-3">
+          {/* ── LEFT: Product browser (search + grid in one white panel) ── */}
+          <div className="flex flex-col flex-1 min-w-0 min-h-0 rounded-2xl border-2 border-slate-200 bg-white shadow-md overflow-hidden">
 
-            {/* Search + category filter */}
-            <div className="glass-card p-3 flex items-center gap-2 flex-shrink-0">
-              <div className="relative flex-1">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  placeholder="Search products by name, SKU…"
-                  className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 bg-white text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-300 focus:ring-1 focus:ring-indigo-200"
-                />
-              </div>
-              <div className="flex items-center gap-1 flex-shrink-0 overflow-x-auto">
-                {categories.map(cat => (
-                  <button
-                    key={cat}
-                    onClick={() => setCategoryFilter(cat)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
-                      categoryFilter === cat
-                        ? "bg-indigo-600 text-white shadow-sm"
-                        : "bg-white border border-slate-200 text-slate-600 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-700"
-                    }`}
-                  >
-                    {cat === "all" ? "All" : cat}
-                  </button>
-                ))}
+            {/* Search + category filter — pinned inside white box */}
+            <div className="flex-shrink-0 p-3 border-b border-slate-200 bg-slate-50/80 overflow-hidden">
+              <div className="flex flex-col gap-2 min-w-0">
+                <div className="relative w-full min-w-0">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  <input
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    placeholder="Search products by name, SKU…"
+                    className="w-full min-w-0 pl-9 pr-3 py-2 rounded-lg border border-slate-200 bg-white text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-300 focus:ring-1 focus:ring-indigo-200"
+                  />
+                </div>
+                <div className="flex items-center gap-1 min-w-0 overflow-x-auto pb-0.5 scrollbar-thin">
+                  {categories.map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => setCategoryFilter(cat)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap flex-shrink-0 transition-all ${
+                        categoryFilter === cat
+                          ? "bg-indigo-600 text-white shadow-sm"
+                          : "bg-white border border-slate-200 text-slate-600 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-700"
+                      }`}
+                    >
+                      {cat === "all" ? "All" : cat}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
             {/* Product grid */}
-            <div className="flex-1 min-h-0 overflow-y-auto">
+            <div className="flex-1 min-h-0 overflow-y-auto data-table-scroll p-3">
               {filteredProducts.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-slate-400">
                   <Package size={32} className="mb-2 opacity-30" />
                   <p className="text-sm">No products found</p>
                 </div>
@@ -370,35 +372,42 @@ export default function WalkIn() {
           {/* ── RIGHT: Order panel ──────────────────────────── */}
           <div className="w-[500px] flex-shrink-0 flex flex-col min-h-0 gap-3 overflow-y-auto">
 
-            {/* ── Cart ── */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col overflow-hidden" style={{ minHeight: 320 }}>
-              <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 flex-shrink-0">
+            {/* ── Cart (scrollable items list) ── */}
+            <div
+              className="flex flex-col flex-shrink-0 rounded-2xl border-2 border-indigo-300 bg-white shadow-lg shadow-indigo-100/60 ring-1 ring-indigo-100 overflow-hidden"
+              style={{ minHeight: 280, maxHeight: "min(58vh, 580px)" }}
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b-2 border-indigo-200 bg-gradient-to-r from-indigo-50 to-blue-50 flex-shrink-0">
                 <div className="flex items-center gap-2">
-                  <ShoppingCart size={14} className="text-indigo-500" />
-                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center shadow-sm">
+                    <ShoppingCart size={15} className="text-white" />
+                  </div>
+                  <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
                     Cart {cart.length > 0 && <span className="text-indigo-600">({cart.length} item{cart.length !== 1 ? "s" : ""})</span>}
                   </span>
                 </div>
                 {cart.length > 0 && (
-                  <button onClick={clearSale} className="text-xs text-red-400 hover:text-red-600 font-semibold transition-colors">
+                  <button onClick={clearSale} className="text-xs text-red-500 hover:text-red-700 font-semibold transition-colors px-2 py-1 rounded-md hover:bg-red-50">
                     Clear All
                   </button>
                 )}
               </div>
 
+              <div className="flex-1 min-h-0 overflow-y-auto data-table-scroll bg-white border-b border-slate-200">
               {cart.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-slate-400 gap-2">
-                  <ShoppingCart size={32} className="opacity-20" />
-                  <p className="text-sm">Click products on the left to add them</p>
+                <div className="flex flex-col items-center justify-center py-14 px-4 text-slate-500 gap-2 min-h-[140px]">
+                  <ShoppingCart size={36} className="text-indigo-200" />
+                  <p className="text-sm font-medium text-slate-600">Your cart is empty</p>
+                  <p className="text-xs text-slate-400 text-center">Click products on the left to add them here</p>
                 </div>
               ) : (
-                <div className="divide-y divide-slate-50">
+                <div className="divide-y divide-slate-100">
                   {cart.map((item, idx) => {
                     const gross     = item.quantity * item.unitPrice;
                     const after     = gross * (1 - item.discountPercent / 100);
                     const lineTotal = after * (1 + item.taxPercent / 100);
                     return (
-                      <div key={idx} className="px-4 py-3 flex flex-col gap-2 hover:bg-slate-50/50 transition-colors">
+                      <div key={idx} className="px-4 py-3 flex flex-col gap-2 bg-white hover:bg-indigo-50/40 transition-colors">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-semibold text-slate-800 leading-snug truncate">{item.description}</p>
@@ -453,10 +462,11 @@ export default function WalkIn() {
                   })}
                 </div>
               )}
+              </div>
 
               {/* Totals + controls */}
               {cart.length > 0 && (
-                <div className="border-t border-slate-200 px-4 py-4 bg-slate-50/60 flex flex-col gap-2">
+                <div className="border-t-2 border-indigo-100 px-4 py-4 bg-gradient-to-b from-slate-50 to-white flex flex-col gap-2 flex-shrink-0">
 
                   {/* Subtotal row */}
                   <div className="flex justify-between text-sm text-slate-600">

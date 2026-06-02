@@ -101,7 +101,7 @@ export default function History() {
   return (
     <Layout>
       <Header title="History" subtitle={`${filtered.length} of ${entries.length} events`} />
-      <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 flex flex-col gap-4 bg-[hsl(220_25%_97%)]">
+      <div className="page-scroll-body px-5 py-4 flex flex-col gap-4 bg-[hsl(220_25%_97%)]">
 
         {/* Controls */}
         <div className="flex flex-wrap items-center gap-3">

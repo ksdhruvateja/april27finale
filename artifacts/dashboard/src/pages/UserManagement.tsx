@@ -364,7 +364,7 @@ export default function UserManagement() {
   return (
     <Layout>
       <Header title="User Management" subtitle="Manage team members and their access levels" />
-      <div className="flex-1 overflow-y-auto scrollbar-hide px-7 py-6" style={{ background: "transparent" }}>
+      <div className="page-scroll-body px-7 py-6" style={{ background: "transparent" }}>
 
         {/* Permission banner */}
         <div

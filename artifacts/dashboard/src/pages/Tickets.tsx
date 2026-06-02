@@ -350,7 +350,7 @@ export default function Tickets() {
   return (
     <Layout>
       <Header title="Tickets" subtitle={`${tickets.length} total`} />
-      <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 flex flex-col gap-4 bg-[hsl(220_25%_97%)]">
+      <div className="page-scroll-body px-5 py-4 flex flex-col gap-4 bg-[hsl(220_25%_97%)]">
 
         {/* Top bar */}
         <div className="flex items-center gap-3">

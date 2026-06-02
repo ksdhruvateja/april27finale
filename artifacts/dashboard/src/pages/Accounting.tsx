@@ -1851,7 +1851,7 @@ export default function Accounting() {
   return (
     <Layout>
       <Header title="Accounting" subtitle="Financial management & reporting" />
-      <div className="flex-1 overflow-y-auto scrollbar-hide bg-[hsl(220_25%_97%)]">
+      <div className="page-scroll-body bg-[hsl(220_25%_97%)]">
         {/* Tab bar */}
         <div className="px-5 pt-4 border-b border-slate-200 bg-white sticky top-0 z-10">
           <div className="flex gap-1 overflow-x-auto scrollbar-hide">

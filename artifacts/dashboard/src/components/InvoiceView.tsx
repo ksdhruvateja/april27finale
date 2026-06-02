@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { X, Printer, CheckCircle2, Clock, AlertTriangle, Ban, ShoppingCart, Link2 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useListCustomers } from "@workspace/api-client-react";
-const forézLogo = "/favicon.svg";
+const forézLogo = "/favicon.png";
 
 interface LineItem {
   description: string;

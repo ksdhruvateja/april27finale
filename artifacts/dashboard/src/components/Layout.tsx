@@ -12,7 +12,9 @@ export default function Layout({ children }: LayoutProps) {
         <Sidebar embedded />
       </div>
       <div className="flex-1 min-w-0 min-h-0 h-full rounded-2xl overflow-hidden bg-[#eaf5ff]/95 border border-[#c4dff7] shadow-[0_18px_45px_rgba(54,122,194,0.18)] flex flex-col">
-        {children}
+        <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
+          {children}
+        </div>
       </div>
     </div>
   );

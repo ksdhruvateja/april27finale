@@ -523,7 +523,8 @@ export default function Invoices() {
   return (
     <Layout>
       <Header title="Invoices" subtitle={`${invoices?.length ?? 0} total`} />
-      <div className="flex-1 flex flex-col overflow-hidden px-5 py-4 gap-3 bg-[hsl(220_25%_97%)]">
+      <div className="page-shell flex flex-col px-5 pb-4 gap-3 bg-[hsl(220_25%_97%)]">
+        <div className="flex-shrink-0 pt-4 flex flex-col gap-3 min-w-0">
 
         {/* Search + Create */}
         <div className="flex items-center gap-3">
@@ -738,8 +739,10 @@ export default function Invoices() {
             )}
           </div>
         )}
+        </div>
 
-        <div className="glass-card flex-1 flex flex-col min-h-0">
+        <div className="page-table-wrap">
+        <div className="glass-card flex-1 min-h-0 h-0 flex flex-col overflow-hidden border border-blue-100/70 bg-white/95">
           {isLoading ? (
             <div className="p-10 flex justify-center"><div className="animate-spin w-6 h-6 border-2 border-slate-800 border-t-transparent rounded-full" /></div>
           ) : filtered?.length === 0 ? (
@@ -775,7 +778,7 @@ export default function Invoices() {
               <button onClick={() => setSelectedIds(new Set())} className="ml-auto text-xs text-indigo-500 hover:text-indigo-700 font-medium">Clear selection</button>
             </div>
             )}
-          <div className="flex-1 overflow-y-auto min-h-0">
+          <div className="data-table-scroll">
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10">
                 <tr className="border-b border-slate-100 bg-slate-50">
@@ -1064,6 +1067,7 @@ export default function Invoices() {
             </div>
             </>
           )}
+        </div>
         </div>
 
         {/* Inline ref edit */}

@@ -188,10 +188,10 @@ export default function Documents() {
 
   return (
     <Layout>
-      <div className="flex flex-col h-full min-h-0">
+      <div className="page-shell flex flex-col">
         <Header title="Documents" subtitle="Upload, store, and manage your files and documents" />
 
-        <div className="flex flex-1 min-h-0 gap-0 overflow-hidden">
+        <div className="flex flex-1 min-h-0 h-0 gap-0 overflow-hidden">
 
           {/* ── LEFT sidebar ──────────────────────────────────── */}
           <div className="w-48 flex-shrink-0 border-r border-slate-200/60 bg-white/40 flex flex-col py-4 px-3 gap-1">
@@ -213,7 +213,7 @@ export default function Documents() {
           </div>
 
           {/* ── MAIN content ──────────────────────────────────── */}
-          <div className="flex-1 flex flex-col min-h-0 p-4 gap-4 overflow-hidden">
+          <div className="flex-1 flex flex-col min-h-0 h-0 p-4 gap-4 overflow-hidden">
 
             {/* Toolbar */}
             <div className="flex items-center gap-3 flex-shrink-0">
@@ -286,7 +286,7 @@ export default function Documents() {
             </div>
 
             {/* Files list */}
-            <div className="flex-1 min-h-0 overflow-y-auto">
+            <div className="data-table-scroll">
               {isLoading ? (
                 <div className="flex justify-center py-16">
                   <Loader2 size={24} className="animate-spin text-slate-300" />

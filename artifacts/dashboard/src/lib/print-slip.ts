@@ -1,4 +1,4 @@
-const forézLogo = "/favicon.svg";
+const forézLogo = "/favicon.png";
 
 const BUSINESS = {
   name:    "Forez Corp",

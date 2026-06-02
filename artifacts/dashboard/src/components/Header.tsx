@@ -25,7 +25,7 @@ export default function Header({
   onSearchChange,
 }: HeaderProps) {
   return (
-    <div className="flex-shrink-0 px-6 md:px-7 bg-[#e9f4ff]/88 border-b border-[#c8e1f7] backdrop-blur-xl">
+    <div className="flex-shrink-0 z-20 px-6 md:px-7 bg-[#e9f4ff]/88 border-b border-[#c8e1f7] backdrop-blur-xl">
       <div className="flex items-center gap-4 py-4">
         {onBack && (
           <button

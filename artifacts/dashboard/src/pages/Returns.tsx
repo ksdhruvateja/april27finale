@@ -368,7 +368,7 @@ export default function Returns() {
   return (
     <Layout>
       <Header title="Returns & Refunds" subtitle="Track product returns and customer refund requests" />
-      <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 flex flex-col gap-4 bg-[hsl(220_25%_97%)]">
+      <div className="page-scroll-body px-5 py-4 flex flex-col gap-4 bg-[hsl(220_25%_97%)]">
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

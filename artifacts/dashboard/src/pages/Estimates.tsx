@@ -94,7 +94,7 @@ export default function Estimates() {
   return (
     <Layout>
       <Header title="Estimates" subtitle={`${estimates?.length ?? 0} total`} />
-      <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 flex flex-col gap-4 bg-[hsl(220_25%_97%)]">
+      <div className="page-scroll-body px-5 py-4 flex flex-col gap-4 bg-[hsl(220_25%_97%)]">
         <div className="flex justify-between items-center gap-3">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
@@ -120,7 +120,7 @@ export default function Estimates() {
           ) : filtered?.length === 0 ? (
             <div className="p-10 text-center text-slate-400 text-sm">No estimates found.</div>
           ) : (
-            <div className="max-h-[70vh] overflow-y-auto">
+            <div className="panel-scroll">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/70">
