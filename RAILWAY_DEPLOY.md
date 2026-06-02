@@ -79,6 +79,7 @@ How to run it:
 
 ## Common failures
 
+- **Build fails during `vite build`**: ensure `NEON_DATABASE_URL` is not required at build time; dashboard build needs devDependencies (`pnpm install --prod=false`). Do not set `NODE_ENV=production` until runtime if install skips dev packages.
 - **Boot loop with DB error**: `NEON_DATABASE_URL` (or fallback alias) missing or invalid.
 - **Deploy succeeds but endpoints fail**: schema not pushed yet; run `pnpm --filter @workspace/db run push`.
 - **Integration errors**: missing provider keys (Plaid/Dwolla/Checkeeper/EasyShip).

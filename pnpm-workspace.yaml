@@ -29,12 +29,6 @@ catalog:
   vite: ^7.3.0
   zod: 3.25.76
 
-minimumReleaseAge: 1440
-
-minimumReleaseAgeExclude:
-  - '@replit/*'
-  - stripe-replit-sync
-
 onlyBuiltDependencies:
   - '@swc/core'
   - esbuild

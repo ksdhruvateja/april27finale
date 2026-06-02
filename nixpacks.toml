@@ -2,10 +2,15 @@
 nixPkgs = ["nodejs_20", "pnpm", "openssl"]
 
 [phases.install]
-cmds = ["pnpm i --frozen-lockfile --prod=false"]
+cmds = [
+  "corepack enable",
+  "corepack prepare pnpm@9.15.9 --activate",
+  "pnpm install --frozen-lockfile --prod=false",
+]
 
 [phases.build]
 cmds = ["pnpm run build:railway"]
 
 [start]
 cmd = "node artifacts/api-server/dist/index.mjs"
+
