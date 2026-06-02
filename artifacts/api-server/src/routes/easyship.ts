@@ -77,7 +77,11 @@ router.post("/easyship/rates", async (req, res): Promise<void> => {
     if (!response.ok) {
       const errText = await response.text();
       console.error("EasyShip rates error:", response.status, errText);
-      res.json({ source: "demo", rates: demoRates(from, to) });
+      res.status(502).json({
+        error: "EasyShip could not return rates",
+        details: errText,
+        source: "error",
+      });
       return;
     }
 
@@ -98,7 +102,11 @@ router.post("/easyship/rates", async (req, res): Promise<void> => {
     res.json({ source: "live", rates });
   } catch (err) {
     console.error("EasyShip rates fetch error:", err);
-    res.json({ source: "demo", rates: demoRates(from, to) });
+    res.status(500).json({
+      error: "EasyShip rates request failed",
+      details: err instanceof Error ? err.message : String(err),
+      source: "error",
+    });
   }
 });
 

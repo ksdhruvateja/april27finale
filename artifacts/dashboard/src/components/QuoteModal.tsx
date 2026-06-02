@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useCreateQuote, useUpdateQuote, useListCustomers, useListTaxRates, getListQuotesQueryKey, useListSalesLeads, useListInvoices, useListQuotes } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useCreateQuote, useUpdateQuote, useListCustomers, useListTaxRates, useListSalesLeads, useListInvoices, useListQuotes } from "@workspace/api-client-react";
 import Modal, { LightFormField as FormField, LightFormInput as FormInput, LightFormTextarea as FormTextarea, LightSubmitBar as SubmitBar } from "./Modal";
 import LineItemsEditor, { LineItem, OrderDiscount, calcTotals } from "./LineItemsEditor";
 import CustomerModal from "./CustomerModal";
@@ -23,7 +22,6 @@ export default function QuoteModal({ onClose, initial }: Props) {
   const { data: salesLeads } = useListSalesLeads();
   const { data: allInvoices = [] } = useListInvoices();
   const { data: allQuotes = [] } = useListQuotes();
-  const queryClient = useQueryClient();
   const isEditing = !!initial;
 
   const [docSearch, setDocSearch] = useState("");
@@ -161,10 +159,16 @@ export default function QuoteModal({ onClose, initial }: Props) {
       createdAt: quoteDate ? new Date(quoteDate).toISOString() : undefined,
     } as any;
 
-    const onSuccess = () => { queryClient.invalidateQueries({ queryKey: getListQuotesQueryKey() }); onClose(); };
-
-    if (isEditing) update.mutate({ id: initial.id, data: payload }, { onSuccess });
-    else create.mutate({ data: payload }, { onSuccess });
+    const save = async () => {
+      try {
+        if (isEditing) await update.mutateAsync({ id: initial.id, data: payload });
+        else await create.mutateAsync({ data: payload });
+        onClose();
+      } catch {
+        /* global mutation cache shows error toast */
+      }
+    };
+    void save();
   };
 
   const isPending = isEditing ? update.isPending : create.isPending;
@@ -235,6 +239,7 @@ export default function QuoteModal({ onClose, initial }: Props) {
                 onAddNew={() => setShowAddCustomer(true)}
                 required
                 lightMode
+                placeholder="Type customer name or company to search…"
               />
               {taxHint && !taxExempt && (
                 <div className="mt-1.5">

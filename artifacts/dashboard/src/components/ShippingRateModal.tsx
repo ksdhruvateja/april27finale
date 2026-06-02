@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useCreateShipment, getListShipmentsQueryKey } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useCreateShipment, useUpdateShipment } from "@workspace/api-client-react";
 import {
   Package, Truck, Shield, CheckCircle2, ChevronRight,
   Plus, Trash2, Loader2, AlertCircle, Info, RefreshCw,
@@ -135,7 +134,7 @@ function StepIndicator({ current, isCarrier }: { current: Step; isCarrier: boole
 
 export default function ShippingRateModal({ customerId, invoiceId, customerName, lineItems = [], defaultInternalNote, vendorCarrierName, vendorCarrierAccount, onClose }: Props) {
   const create = useCreateShipment();
-  const queryClient = useQueryClient();
+  const updateShipment = useUpdateShipment();
 
   const [step, setStep] = useState<Step>("type");
   const [shippingType, setShippingType] = useState<ShippingType | null>(null);
@@ -188,9 +187,18 @@ export default function ShippingRateModal({ customerId, invoiceId, customerName,
           declaredValue: parseFloat(declaredValue) || 10,
         }),
       });
-      if (!res.ok) throw new Error("Rate fetch failed");
-      const data: RatesData = await res.json();
-      setRatesData(data);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = (data as { error?: string; details?: string }).error
+          ?? "Rate fetch failed";
+        const details = (data as { details?: string }).details;
+        throw new Error(details ? `${msg}: ${details}` : msg);
+      }
+      const ratesPayload = data as RatesData;
+      if (!ratesPayload.rates?.length) {
+        throw new Error("No carrier rates returned for this address and package.");
+      }
+      setRatesData(ratesPayload);
       if (data.rates.length > 0) setSelectedCourierId(data.rates[0].courierId);
       setStep("rates");
     } catch {
@@ -275,17 +283,20 @@ export default function ShippingRateModal({ customerId, invoiceId, customerName,
           internalNote: internalNote || null,
         },
       }, {
-        onSuccess: (newShip: any) => {
+        onSuccess: async (newShip: any) => {
           if (newShip?.id) {
-            fetch(`/api/shipments/${newShip.id}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                shippingCost: booking.totalCharge,
-                easyshipShipmentId: booking.easyshipShipmentId,
-                labelUrl: booking.labelUrl ?? null,
-              }),
-            });
+            try {
+              await updateShipment.mutateAsync({
+                id: newShip.id,
+                data: {
+                  shippingCost: booking.totalCharge,
+                  easyshipShipmentId: booking.easyshipShipmentId,
+                  labelUrl: booking.labelUrl ?? null,
+                } as any,
+              });
+            } catch {
+              setRatesError("Shipment was created but carrier details could not be saved. Update it from Shipments.");
+            }
             const fullShip = {
               ...newShip,
               carrier: booking.carrier ?? selectedRate.courierName,
@@ -299,7 +310,6 @@ export default function ShippingRateModal({ customerId, invoiceId, customerName,
             // Auto-print packing slip
             setTimeout(() => handlePrintSlip(fullShip), 300);
           }
-          queryClient.invalidateQueries({ queryKey: getListShipmentsQueryKey() });
           setStep("success");
         },
         onError: () => {
@@ -345,7 +355,6 @@ export default function ShippingRateModal({ customerId, invoiceId, customerName,
         const fullShip = { ...newShip, carrier: carrierLabel, status: "pending", customerId, invoiceId: invoiceId ?? null };
         setCreatedShipment(fullShip);
         setTimeout(() => handlePrintSlip(fullShip), 300);
-        queryClient.invalidateQueries({ queryKey: getListShipmentsQueryKey() });
         setStep("success");
         setIsCreating(false);
       },

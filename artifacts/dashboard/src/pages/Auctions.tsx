@@ -6,12 +6,14 @@ import {
   useListPurchaseOrders,
   useListBills,
   useListShipments,
-  getListInvoicesQueryKey,
+  useDeleteInvoice,
+  useDeletePurchaseOrder,
+  useConvertPurchaseOrderToBill,
+  useUpdateInvoice,
   getListPurchaseOrdersQueryKey,
-  getListBillsQueryKey,
   getListShipmentsQueryKey,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Eye, X, Trash2, TrendingUp, TrendingDown, Minus, ShoppingCart, Truck } from "lucide-react";
 import {
   useListAuctions,
@@ -31,6 +33,20 @@ import InvoiceView from "@/components/InvoiceView";
 
 export default function Auctions() {
   const queryClient = useQueryClient();
+  const deleteInvoice = useDeleteInvoice();
+  const deletePurchaseOrder = useDeletePurchaseOrder();
+  const convertPurchaseOrderToBill = useConvertPurchaseOrderToBill();
+  const updateInvoice = useUpdateInvoice();
+  const deleteShipment = useMutation({
+    mutationKey: ["deleteShipment"],
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/shipments/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error((data as { error?: string }).error ?? "Failed to delete shipment");
+      }
+    },
+  });
   const { data: auctionData, isLoading: auctionsLoading } = useListAuctions();
   const { data: invoices } = useListInvoices();
   const { data: purchaseOrders } = useListPurchaseOrders();
@@ -123,11 +139,10 @@ export default function Auctions() {
     setInvoiceIdsBeforeCreate([]);
 
     const tagToApply = invoiceCreateTag ?? auctionTag;
-    fetch(`/api/invoices/${newlyCreated.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ internalNote: tagToApply }),
-    }).catch(() => {});
+    updateInvoice.mutate({
+      id: newlyCreated.id,
+      data: { internalNote: tagToApply } as any,
+    });
     if (invoiceCreateAuctionId != null) {
       updateAuction.mutate({
         id: invoiceCreateAuctionId,
@@ -214,10 +229,6 @@ export default function Auctions() {
         billIds: createdBillIds,
         notes: [auctionTag, notes.trim()].filter(Boolean).join(" | "),
       });
-      queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
-      queryClient.invalidateQueries({ queryKey: getListPurchaseOrdersQueryKey() });
-      queryClient.invalidateQueries({ queryKey: getListBillsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: getListShipmentsQueryKey() });
       resetForm();
       setShowCreate(false);
     } catch (err) {
@@ -232,10 +243,8 @@ export default function Auctions() {
     setBillingBusy(true);
     try {
       for (const po of linkedPos) {
-        await fetch(`/api/purchase-orders/${po.id}/convert`, { method: "POST" });
+        await convertPurchaseOrderToBill.mutateAsync({ id: Number(po.id) });
       }
-      queryClient.invalidateQueries({ queryKey: getListBillsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: getListPurchaseOrdersQueryKey() });
     } finally { setBillingBusy(false); }
   };
 
@@ -244,20 +253,17 @@ export default function Auctions() {
     deleteAuction.mutate(a.id);
   };
 
-  const handleDeleteInvoice = async (invId: number) => {
+  const handleDeleteInvoice = (invId: number) => {
     if (!window.confirm("Permanently delete this invoice?")) return;
-    await fetch(`/api/invoices/${invId}`, { method: "DELETE" });
-    queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
+    deleteInvoice.mutate({ id: invId });
   };
-  const handleDeletePo = async (poId: number) => {
+  const handleDeletePo = (poId: number) => {
     if (!window.confirm("Permanently delete this purchase order?")) return;
-    await fetch(`/api/purchase-orders/${poId}`, { method: "DELETE" });
-    queryClient.invalidateQueries({ queryKey: getListPurchaseOrdersQueryKey() });
+    deletePurchaseOrder.mutate({ id: poId });
   };
-  const handleDeleteShipment = async (shipId: number) => {
+  const handleDeleteShipment = (shipId: number) => {
     if (!window.confirm("Permanently delete this shipment?")) return;
-    await fetch(`/api/shipments/${shipId}`, { method: "DELETE" });
-    queryClient.invalidateQueries({ queryKey: getListShipmentsQueryKey() });
+    deleteShipment.mutate(shipId);
   };
 
   const openPoModal = (inv: any, noteTag: string, auctionId: number | null = null) => {

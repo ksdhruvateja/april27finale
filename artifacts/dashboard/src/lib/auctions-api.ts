@@ -36,26 +36,23 @@ export function useListAuctions() {
 }
 
 export function useCreateAuction() {
-  const qc = useQueryClient();
   return useMutation<AuctionOrder, Error, CreateAuctionInput>({
+    mutationKey: ["createAuction"],
     mutationFn: (data) => apiFetch("/api/auctions", { method: "POST", body: JSON.stringify(data) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
   });
 }
 
 export function useUpdateAuction() {
-  const qc = useQueryClient();
   return useMutation<AuctionOrder, Error, { id: number; data: UpdateAuctionInput }>({
+    mutationKey: ["updateAuction"],
     mutationFn: ({ id, data }) => apiFetch(`/api/auctions/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
   });
 }
 
 export function useDeleteAuction() {
-  const qc = useQueryClient();
   return useMutation<null, Error, number>({
+    mutationKey: ["deleteAuction"],
     mutationFn: (id) => apiFetch(`/api/auctions/${id}`, { method: "DELETE" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
   });
 }
 
@@ -115,13 +112,9 @@ export function useListStockMovements(productId?: number) {
 }
 
 export function useCreateStockMovement() {
-  const qc = useQueryClient();
   return useMutation<StockMovement, Error, Omit<StockMovement, "id" | "createdAt" | "productName" | "productSku">>({
+    mutationKey: ["updateInventoryItem"],
     mutationFn: (data) => apiFetch("/api/stock-movements", { method: "POST", body: JSON.stringify(data) }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["stock-movements"] });
-      qc.invalidateQueries({ queryKey: ["inventory"] });
-    },
   });
 }
 

@@ -80,6 +80,14 @@ router.post("/quotes", async (req, res): Promise<void> => {
   const totals = calcTotals(parsed.data.lineItems as Array<{ quantity: number; unitPrice: number; taxPercent: number; discountPercent: number }>);
   const providedQNumber = (parsed.data as any).quoteNumber as string | null | undefined;
   const quoteNumber = providedQNumber ?? `FRZQ-${await getNextDocNumber()}`;
+  const createdAt =
+    req.body.createdAt != null && req.body.createdAt !== ""
+      ? (() => {
+          const d = new Date(req.body.createdAt);
+          return Number.isNaN(d.getTime()) ? undefined : d;
+        })()
+      : undefined;
+
   const [quote] = await db.insert(quotesTable).values({
     customerId: parsed.data.customerId,
     status: parsed.data.status ?? "draft",
@@ -94,6 +102,7 @@ router.post("/quotes", async (req, res): Promise<void> => {
     notes: parsed.data.notes ?? null,
     internalNote: req.body.internalNote ?? null,
     expiresAt: parsed.data.expiresAt ? new Date(parsed.data.expiresAt) : null,
+    ...(createdAt ? { createdAt } : {}),
   }).returning();
   res.status(201).json(await withCustomerName(quote));
 });
@@ -120,6 +129,10 @@ router.patch("/quotes/:id", async (req, res): Promise<void> => {
   if ((parsed.data as any).quoteNumber !== undefined) updateData.quoteNumber = (parsed.data as any).quoteNumber;
   if ((parsed.data as any).trackingNumber !== undefined) updateData.trackingNumber = (parsed.data as any).trackingNumber;
   if (parsed.data.expiresAt !== undefined) updateData.expiresAt = parsed.data.expiresAt ? new Date(parsed.data.expiresAt) : null;
+  if (req.body.createdAt != null && req.body.createdAt !== "") {
+    const d = new Date(req.body.createdAt);
+    if (!Number.isNaN(d.getTime())) updateData.createdAt = d;
+  }
   if (parsed.data.lineItems !== undefined) {
     const rawLineItems = Array.isArray(req.body.lineItems) ? req.body.lineItems : parsed.data.lineItems;
     const totals = calcTotals(parsed.data.lineItems as Array<{ quantity: number; unitPrice: number; taxPercent: number; discountPercent: number }>);

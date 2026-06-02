@@ -1,6 +1,5 @@
 import { useState, useMemo } from "react";
-import { useCreateBill, useListVendors, getListBillsQueryKey, useListPurchaseOrders } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useCreateBill, useListVendors, useListPurchaseOrders } from "@workspace/api-client-react";
 import Modal, { LightFormField as FormField, LightFormSelect as FormSelect, LightFormInput as FormInput, LightFormTextarea as FormTextarea, LightSubmitBar as SubmitBar } from "./Modal";
 import LineItemsEditor, { LineItem, OrderDiscount, calcTotals } from "./LineItemsEditor";
 import VendorModal from "./VendorModal";
@@ -12,8 +11,6 @@ export default function BillModal({ onClose }: Props) {
   const create = useCreateBill();
   const { data: vendors } = useListVendors();
   const { data: allPOs = [] } = useListPurchaseOrders();
-  const queryClient = useQueryClient();
-
   const [docSearch, setDocSearch] = useState("");
   const [docSearchOpen, setDocSearchOpen] = useState(false);
   const [docLinked, setDocLinked] = useState<string | null>(null);
@@ -90,17 +87,22 @@ export default function BillModal({ onClose }: Props) {
         },
       ];
     }
-    create.mutate({
-      data: {
-        vendorId: Number(vendorId),
-        lineItems: finalItems,
-        dueDate: dueDate ? new Date(dueDate).toISOString() : null,
-        notes: notes || null,
-        internalNote: internalNote || null,
+    void (async () => {
+      try {
+        await create.mutateAsync({
+          data: {
+            vendorId: Number(vendorId),
+            lineItems: finalItems,
+            dueDate: dueDate ? new Date(dueDate).toISOString() : null,
+            notes: notes || null,
+            internalNote: internalNote || null,
+          },
+        });
+        onClose();
+      } catch {
+        /* global mutation cache shows error toast */
       }
-    }, {
-      onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListBillsQueryKey() }); onClose(); }
-    });
+    })();
   };
 
   return (

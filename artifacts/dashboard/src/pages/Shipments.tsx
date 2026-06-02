@@ -3,9 +3,10 @@ import { useListAuctions } from "@/lib/auctions-api";
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
 import { useListShipments, useUpdateShipment, getListShipmentsQueryKey, useListCustomers, useListVendors } from "@workspace/api-client-react";
-import { Search, Plus, MoreHorizontal, Edit, Truck, FileText, BarChart2, ChevronDown, ChevronUp, ChevronRight, Package, StickyNote, MapPin, Phone, Mail, User } from "lucide-react";
+import { Search, Plus, MoreHorizontal, Edit, Trash2, Truck, FileText, BarChart2, ChevronDown, ChevronUp, ChevronRight, Package, StickyNote, MapPin, Phone, Mail, User } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend, LineChart, Line, CartesianGrid } from "recharts";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRole } from "@/context/RoleContext";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { formatDate } from "@/lib/utils";
 import { downloadCsv, downloadPdfFromHtml } from "@/lib/export-utils";
@@ -19,12 +20,23 @@ const STATUS_MAP: Record<string, string> = {
 };
 
 export default function Shipments() {
+  const { canEdit } = useRole();
   const { data: shipments, isLoading } = useListShipments();
   const { data: auctionList } = useListAuctions();
   const { data: customers = [] } = useListCustomers();
   const { data: vendors = [] } = useListVendors();
   const updateShipment = useUpdateShipment();
   const queryClient = useQueryClient();
+  const deleteShipment = useMutation({
+    mutationKey: ["deleteShipment"],
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/shipments/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error((data as { error?: string }).error ?? "Failed to delete shipment");
+      }
+    },
+  });
   const [search, setSearch] = useState("");
   const [printingId, setPrintingId] = useState<number | null>(null);
   const [showCharts, setShowCharts] = useState(false);
@@ -115,6 +127,17 @@ export default function Shipments() {
         onSuccess: () => queryClient.invalidateQueries({ queryKey: getListShipmentsQueryKey() })
       });
     }
+  };
+
+  const handleDelete = (s: { id: number; trackingNumber?: string | null }) => {
+    const label = s.trackingNumber ? `shipment ${s.trackingNumber}` : `SHP-${String(s.id).padStart(4, "0")}`;
+    if (!confirm(`Delete ${label}? This cannot be undone.`)) return;
+    deleteShipment.mutate(s.id, {
+      onSuccess: () => {
+        if (expandedShipId === s.id) setExpandedShipId(null);
+        void queryClient.invalidateQueries({ queryKey: getListShipmentsQueryKey() });
+      },
+    });
   };
 
   const handlePrintSlip = async (s: any) => {
@@ -370,6 +393,15 @@ export default function Shipments() {
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleUpdateStatus(s.id)} className="gap-2 cursor-pointer text-sm hover:bg-slate-50 focus:bg-slate-50"><Truck size={13} /> Update Status</DropdownMenuItem>
                               <DropdownMenuItem className="gap-2 cursor-pointer text-sm hover:bg-slate-50 focus:bg-slate-50"><Edit size={13} /> Edit</DropdownMenuItem>
+                              {canEdit && (
+                                <DropdownMenuItem
+                                  onClick={() => handleDelete(s)}
+                                  disabled={deleteShipment.isPending}
+                                  className="gap-2 text-red-500 cursor-pointer text-sm hover:bg-red-50 focus:bg-red-50 focus:text-red-500"
+                                >
+                                  <Trash2 size={13} /> Delete
+                                </DropdownMenuItem>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>

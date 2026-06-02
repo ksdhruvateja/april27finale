@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Router as WouterRouter, Switch, Route, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider, MutationCache } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -19,6 +19,7 @@ import {
 import { Toaster } from "@/components/ui/sonner";
 import { RoleProvider, useRole } from "@/context/RoleContext";
 import { logAudit, setAuditUser, getCurrentAuditUser, AuditEntityType } from "@/lib/auditLog";
+import { invalidateAfterMutation, refetchBusinessData, refetchMutationLists } from "@/lib/query-sync";
 import UserSelectModal from "@/components/UserSelectModal";
 import FactoryBg from "@/components/FactoryBg";
 import Dashboard from "@/pages/Dashboard";
@@ -73,6 +74,7 @@ const MUTATION_LOG_MAP: Record<string, MutationLogDef> = {
   payBill:                    { entityType: "bill",     action: "paid",      label: "Bill marked paid" },
   createShipment:             { entityType: "shipment", action: "created",   label: "Shipment created" },
   updateShipment:             { entityType: "shipment", action: "updated",   label: "Shipment updated" },
+  deleteShipment:             { entityType: "shipment", action: "deleted",   label: "Shipment deleted" },
   createCustomer:             { entityType: "customer", action: "created",   label: "Customer created" },
   updateCustomer:             { entityType: "customer", action: "updated",   label: "Customer updated" },
   deleteCustomer:             { entityType: "customer", action: "deleted",   label: "Customer deleted" },
@@ -89,9 +91,63 @@ const MUTATION_LOG_MAP: Record<string, MutationLogDef> = {
   createSalesLead:            { entityType: "other",    action: "created",   label: "Sales lead created" },
   updateSalesLead:            { entityType: "other",    action: "updated",   label: "Sales lead updated" },
   deleteSalesLead:            { entityType: "other",    action: "deleted",   label: "Sales lead deleted" },
+  createAuction:              { entityType: "other",    action: "created",   label: "Auction saved" },
+  updateAuction:              { entityType: "other",    action: "updated",   label: "Auction updated" },
+  deleteAuction:              { entityType: "other",    action: "deleted",   label: "Auction deleted" },
+  createTicket:               { entityType: "other",    action: "created",   label: "Ticket saved" },
+  updateTicket:               { entityType: "other",    action: "updated",   label: "Ticket updated" },
+  deleteTicket:               { entityType: "other",    action: "deleted",   label: "Ticket deleted" },
 };
 
 /** After any API mutation, refetch list queries so the UI matches the database. */
+const MUTATION_SAVED_TOAST: Record<string, string> = {
+  createCustomer: "Customer saved",
+  updateCustomer: "Customer updated",
+  deleteCustomer: "Customer deleted",
+  createVendor: "Vendor saved",
+  updateVendor: "Vendor updated",
+  deleteVendor: "Vendor deleted",
+  createProduct: "Product saved",
+  updateProduct: "Product updated",
+  deleteProduct: "Product deleted",
+  updateInventoryItem: "Inventory updated",
+  createInvoice: "Invoice saved",
+  updateInvoice: "Invoice updated",
+  deleteInvoice: "Invoice deleted",
+  payInvoice: "Invoice payment saved",
+  createQuote: "Quote saved",
+  updateQuote: "Quote updated",
+  deleteQuote: "Quote deleted",
+  convertQuoteToInvoice: "Quote converted to invoice",
+  createEstimate: "Estimate saved",
+  updateEstimate: "Estimate updated",
+  deleteEstimate: "Estimate deleted",
+  convertEstimateToInvoice: "Estimate converted to invoice",
+  createBill: "Bill saved",
+  updateBill: "Bill updated",
+  deleteBill: "Bill deleted",
+  payBill: "Bill payment saved",
+  createPurchaseOrder: "Purchase order saved",
+  updatePurchaseOrder: "Purchase order updated",
+  deletePurchaseOrder: "Purchase order deleted",
+  convertPurchaseOrderToBill: "Bill created from PO",
+  createShipment: "Shipment saved",
+  updateShipment: "Shipment updated",
+  deleteShipment: "Shipment deleted",
+  createTaxRate: "Tax rate saved",
+  updateTaxRate: "Tax rate updated",
+  deleteTaxRate: "Tax rate deleted",
+  createSalesLead: "Sales lead saved",
+  updateSalesLead: "Sales lead updated",
+  deleteSalesLead: "Sales lead deleted",
+  createAuction: "Auction saved",
+  updateAuction: "Auction updated",
+  deleteAuction: "Auction deleted",
+  createTicket: "Ticket saved",
+  updateTicket: "Ticket updated",
+  deleteTicket: "Ticket deleted",
+};
+
 const MUTATION_INVALIDATE: Record<string, Array<() => readonly unknown[]>> = {
   createCustomer: [getListCustomersQueryKey],
   updateCustomer: [getListCustomersQueryKey],
@@ -112,10 +168,10 @@ const MUTATION_INVALIDATE: Record<string, Array<() => readonly unknown[]>> = {
   deleteEstimate: [getListEstimatesQueryKey],
   convertEstimateToInvoice: [getListEstimatesQueryKey, getListInvoicesQueryKey],
   createInvoice: [getListInvoicesQueryKey, getListCustomersQueryKey],
-  updateInvoice: [getListInvoicesQueryKey, getListCustomersQueryKey],
-  deleteInvoice: [getListInvoicesQueryKey, getListCustomersQueryKey],
+  updateInvoice: [getListInvoicesQueryKey, getListCustomersQueryKey, getListShipmentsQueryKey],
+  deleteInvoice: [getListInvoicesQueryKey, getListCustomersQueryKey, getListPurchaseOrdersQueryKey, getListShipmentsQueryKey],
   payInvoice: [getListInvoicesQueryKey, getListCustomersQueryKey],
-  createPurchaseOrder: [getListPurchaseOrdersQueryKey],
+  createPurchaseOrder: [getListPurchaseOrdersQueryKey, getListInvoicesQueryKey],
   updatePurchaseOrder: [getListPurchaseOrdersQueryKey],
   deletePurchaseOrder: [getListPurchaseOrdersQueryKey],
   convertPurchaseOrderToBill: [getListPurchaseOrdersQueryKey, getListBillsQueryKey],
@@ -123,14 +179,21 @@ const MUTATION_INVALIDATE: Record<string, Array<() => readonly unknown[]>> = {
   updateBill: [getListBillsQueryKey],
   deleteBill: [getListBillsQueryKey],
   payBill: [getListBillsQueryKey],
-  createShipment: [getListShipmentsQueryKey],
-  updateShipment: [getListShipmentsQueryKey],
+  createShipment: [getListShipmentsQueryKey, getListInvoicesQueryKey],
+  updateShipment: [getListShipmentsQueryKey, getListInvoicesQueryKey],
+  deleteShipment: [getListShipmentsQueryKey, getListInvoicesQueryKey],
   createTaxRate: [getListTaxRatesQueryKey],
   updateTaxRate: [getListTaxRatesQueryKey],
   deleteTaxRate: [getListTaxRatesQueryKey],
   createSalesLead: [getListSalesLeadsQueryKey],
   updateSalesLead: [getListSalesLeadsQueryKey],
   deleteSalesLead: [getListSalesLeadsQueryKey],
+  createAuction: [() => ["auctions"] as const],
+  updateAuction: [() => ["auctions"] as const],
+  deleteAuction: [() => ["auctions"] as const],
+  createTicket: [() => ["tickets"] as const],
+  updateTicket: [() => ["tickets"] as const],
+  deleteTicket: [() => ["tickets"] as const],
 };
 
 function mutationKeyName(mutation: { options: { mutationKey?: unknown } }): string | undefined {
@@ -169,6 +232,8 @@ function extractEntityRef(data: any, variables: any): { id: string; ref: string 
     vars.name ??
     vars.company ??
     vars.companyName ??
+    src.projectName ??
+    vars.projectName ??
     (id !== "?" ? `#${id}` : "—");
   return { id, ref: String(ref) };
 }
@@ -181,10 +246,23 @@ const mutationCache = new MutationCache({
     if (key) {
       const invalidators = MUTATION_INVALIDATE[key];
       if (invalidators) {
-        for (const getKey of invalidators) {
-          void queryClient.invalidateQueries({ queryKey: getKey() });
-        }
+        const getKeys = invalidators.map((getKey) =>
+          typeof getKey === "function" ? getKey : () => getKey,
+        );
+        void refetchMutationLists(queryClient, getKeys).then(() =>
+          invalidateAfterMutation(queryClient, key),
+        );
+      } else {
+        void invalidateAfterMutation(queryClient, key);
       }
+    }
+
+    const savedLabel = key ? MUTATION_SAVED_TOAST[key] : undefined;
+    if (savedLabel) {
+      const { ref } = extractEntityRef(data, variables);
+      toast.success(savedLabel, {
+        description: ref && ref !== "—" ? `Stored in database · ${ref}` : "Stored in database until you delete it",
+      });
     }
 
     if (!key) return;
@@ -214,8 +292,9 @@ queryClient = new QueryClient({
   mutationCache,
   defaultOptions: {
     queries: {
-      staleTime: 30 * 1000,
+      staleTime: 15 * 1000,
       gcTime: 30 * 60 * 1000,
+      refetchOnMount: true,
       refetchOnWindowFocus: true,
       retry: 1,
     },
@@ -248,6 +327,26 @@ function AuditUserSync() {
   useEffect(() => {
     setAuditUser(currentUser);
   }, [currentUser]);
+  return null;
+}
+
+/** After sign-in or restored session, pull invoices/quotes/etc. from the database. */
+function DataSyncOnAuth() {
+  const { currentUser } = useRole();
+  const syncedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!currentUser) {
+      syncedRef.current = null;
+      queryClient.clear();
+      return;
+    }
+    const sessionKey = `${currentUser.email}:${currentUser.role}`;
+    if (syncedRef.current === sessionKey) return;
+    syncedRef.current = sessionKey;
+    void refetchBusinessData(queryClient);
+  }, [currentUser]);
+
   return null;
 }
 
@@ -285,6 +384,7 @@ function AppInner() {
     <>
       <Toaster richColors closeButton position="top-right" />
       <AuditUserSync />
+      <DataSyncOnAuth />
       <FactoryBg />
       <UserSelectModal />
       <Router />

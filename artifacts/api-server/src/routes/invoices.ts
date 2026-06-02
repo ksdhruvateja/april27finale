@@ -2,6 +2,7 @@ import { Router } from "express";
 import { eq, inArray } from "drizzle-orm";
 import { db, invoicesTable, customersTable, quotesTable, purchaseOrdersTable, shipmentsTable } from "@workspace/db";
 import { getNextDocNumber } from "../lib/doc-numbers";
+import { getOrCreateWalkInCustomerId } from "../lib/walk-in-customer";
 import {
   CreateInvoiceBody,
   UpdateInvoiceBody,
@@ -41,19 +42,44 @@ router.get("/invoices", async (_req, res): Promise<void> => {
   res.json(invoices.map(inv => ({ ...inv, customerName: cmap.get(inv.customerId) ?? "Unknown", lineItems: inv.lineItems as object[], subtotal: Number(inv.subtotal), taxTotal: Number(inv.taxTotal), discountTotal: Number(inv.discountTotal), total: Number(inv.total), invoiceNumber: inv.invoiceNumber ?? null, trackingNumber: inv.trackingNumber ?? null, quoteId: inv.quoteId ?? null })));
 });
 
+function parseOptionalDate(value: unknown): Date | undefined {
+  if (value == null || value === "") return undefined;
+  const d = new Date(value as string);
+  return Number.isNaN(d.getTime()) ? undefined : d;
+}
+
+function normalizePaymentMethod(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  if (value === "card") return "stripe";
+  if (["stripe", "bank_transfer", "check", "cash"].includes(value)) return value;
+  return undefined;
+}
+
 router.post("/invoices", async (req, res): Promise<void> => {
-  const parsed = CreateInvoiceBody.safeParse(req.body);
+  const body = { ...req.body };
+  if (!body.customerId && body.isQuickInvoice) {
+    body.customerId = await getOrCreateWalkInCustomerId();
+  }
+
+  const parsed = CreateInvoiceBody.safeParse(body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-  const rawLineItems = Array.isArray(req.body.lineItems) ? req.body.lineItems : parsed.data.lineItems;
+  const rawLineItems = Array.isArray(body.lineItems) ? body.lineItems : parsed.data.lineItems;
   const totals = calcTotals(parsed.data.lineItems as Array<{ quantity: number; unitPrice: number; taxPercent: number; discountPercent: number }>);
   const providedNumber = (parsed.data as any).invoiceNumber as string | null | undefined;
   const invoiceNumber = providedNumber ?? `FRZI-${await getNextDocNumber()}`;
+  const status = parsed.data.status ?? "draft";
+  const createdAt = parseOptionalDate(body.createdAt);
+  const paidAt = parseOptionalDate(body.paidAt);
+  const paymentMethod = normalizePaymentMethod(body.paymentMethod);
+
   const [inv] = await db.insert(invoicesTable).values({
     customerId: parsed.data.customerId,
     estimateId: parsed.data.estimateId ?? null,
-    status: parsed.data.status ?? "draft",
+    quoteId: parsed.data.quoteId ?? null,
+    status,
     invoiceNumber,
     trackingNumber: (parsed.data as any).trackingNumber ?? null,
+    salesLead: parsed.data.salesLead ?? null,
     lineItems: rawLineItems,
     subtotal: String(totals.subtotal),
     taxTotal: String(totals.taxTotal),
@@ -62,7 +88,14 @@ router.post("/invoices", async (req, res): Promise<void> => {
     dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : null,
     isQuickInvoice: parsed.data.isQuickInvoice ?? false,
     notes: parsed.data.notes ?? null,
-    internalNote: req.body.internalNote ?? null,
+    internalNote: body.internalNote ?? null,
+    ...(createdAt ? { createdAt } : {}),
+    ...(status === "paid" || paidAt
+      ? {
+          paidAt: paidAt ?? new Date(),
+          ...(paymentMethod ? { paymentMethod } : {}),
+        }
+      : {}),
   }).returning();
   res.status(201).json(await withCustomerName(inv));
 });
@@ -88,6 +121,8 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
   if (parsed.data.trackingNumber !== undefined) updateData.trackingNumber = parsed.data.trackingNumber;
   if (parsed.data.salesLead !== undefined) updateData.salesLead = parsed.data.salesLead;
   if (parsed.data.dueDate !== undefined) updateData.dueDate = parsed.data.dueDate ? new Date(parsed.data.dueDate) : null;
+  const createdAt = parseOptionalDate(req.body.createdAt);
+  if (createdAt) updateData.createdAt = createdAt;
   if (parsed.data.lineItems !== undefined) {
     const rawLineItems = Array.isArray(req.body.lineItems) ? req.body.lineItems : parsed.data.lineItems;
     const totals = calcTotals(parsed.data.lineItems as Array<{ quantity: number; unitPrice: number; taxPercent: number; discountPercent: number }>);

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useCreateEstimate, useListCustomers, useListTaxRates, getListEstimatesQueryKey } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useCreateEstimate, useListCustomers, useListTaxRates } from "@workspace/api-client-react";
 import Modal, { FormField, FormTextarea, SubmitBar } from "./Modal";
 import LineItemsEditor, { LineItem, OrderDiscount, calcTotals } from "./LineItemsEditor";
 import CustomerModal from "./CustomerModal";
@@ -12,7 +11,6 @@ export default function EstimateModal({ onClose }: Props) {
   const create = useCreateEstimate();
   const { data: customers } = useListCustomers();
   const { data: taxRates } = useListTaxRates();
-  const queryClient = useQueryClient();
   const [customerId, setCustomerId] = useState("");
   const [notes, setNotes] = useState("");
   const [internalNote, setInternalNote] = useState("");
@@ -98,16 +96,21 @@ export default function EstimateModal({ onClose }: Props) {
       taxPercent: taxExempt ? 0 : (item.taxPercent ?? 0),
       discountPercent: item.discountPercent ?? 0,
     }));
-    create.mutate({
-      data: {
-        customerId: Number(customerId),
-        lineItems: sanitizedItems,
-        notes: notes || null,
-        internalNote: internalNote || null,
+    void (async () => {
+      try {
+        await create.mutateAsync({
+          data: {
+            customerId: Number(customerId),
+            lineItems: sanitizedItems,
+            notes: notes || null,
+            internalNote: internalNote || null,
+          },
+        });
+        onClose();
+      } catch {
+        /* global mutation cache shows error toast */
       }
-    }, {
-      onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListEstimatesQueryKey() }); onClose(); }
-    });
+    })();
   };
 
   return (
@@ -129,6 +132,8 @@ export default function EstimateModal({ onClose }: Props) {
                 onSelect={handleSelectCustomer}
                 onAddNew={() => setShowAddCustomer(true)}
                 required
+                lightMode
+                placeholder="Type customer name or company to search…"
               />
               <div className="flex items-center justify-between mt-1.5">
                 {taxHint && !taxExempt ? (

@@ -47,20 +47,19 @@ function useListTickets() {
   return useQuery<Ticket[]>({ queryKey: TICKETS_KEY, queryFn: () => apiFetch(BASE), staleTime: 30_000 });
 }
 function useCreateTicket() {
-  const qc = useQueryClient();
   return useMutation<Ticket, Error, Omit<Ticket, "id" | "createdAt">>({
+    mutationKey: ["createTicket"],
     mutationFn: data => apiFetch(BASE, { method: "POST", body: JSON.stringify({
       orderRef: data.orderRef, customerId: data.customerId,
       customerName: data.customer.name, customerEmail: data.customer.email, customerPhone: data.customer.phone,
       subject: data.subject, description: data.description, status: data.status,
       priority: data.priority, contactMethod: data.contactMethod, notes: data.notes,
     }) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: TICKETS_KEY }),
   });
 }
 function useUpdateTicket() {
-  const qc = useQueryClient();
   return useMutation<Ticket, Error, { id: number; data: Partial<Omit<Ticket, "id" | "createdAt">> }>({
+    mutationKey: ["updateTicket"],
     mutationFn: ({ id, data }) => apiFetch(`${BASE}/${id}`, { method: "PATCH", body: JSON.stringify({
       ...(data.orderRef !== undefined && { orderRef: data.orderRef }),
       ...(data.customerId !== undefined && { customerId: data.customerId }),
@@ -72,14 +71,12 @@ function useUpdateTicket() {
       ...(data.contactMethod !== undefined && { contactMethod: data.contactMethod }),
       ...(data.notes !== undefined && { notes: data.notes }),
     }) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: TICKETS_KEY }),
   });
 }
 function useDeleteTicket() {
-  const qc = useQueryClient();
   return useMutation<null, Error, number>({
+    mutationKey: ["deleteTicket"],
     mutationFn: id => apiFetch(`${BASE}/${id}`, { method: "DELETE" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: TICKETS_KEY }),
   });
 }
 

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useCreateInvoice, useUpdateInvoice, useListCustomers, useListTaxRates, getListInvoicesQueryKey, useListSalesLeads, useListInvoices, useListQuotes } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useCreateInvoice, useUpdateInvoice, useListCustomers, useListTaxRates, useListSalesLeads, useListInvoices, useListQuotes } from "@workspace/api-client-react";
 import Modal, { LightFormField as FormField, LightFormInput as FormInput, LightFormTextarea as FormTextarea, LightSubmitBar as SubmitBar } from "./Modal";
 import LineItemsEditor, { LineItem, OrderDiscount, calcTotals } from "./LineItemsEditor";
 import CustomerModal from "./CustomerModal";
@@ -23,7 +22,6 @@ export default function InvoiceModal({ onClose, initial }: Props) {
   const { data: salesLeads } = useListSalesLeads();
   const { data: allInvoices = [] } = useListInvoices();
   const { data: allQuotes = [] } = useListQuotes();
-  const queryClient = useQueryClient();
   const isEditing = !!initial;
 
   const [docSearch, setDocSearch] = useState("");
@@ -166,16 +164,15 @@ export default function InvoiceModal({ onClose, initial }: Props) {
       createdAt: invoiceDate ? new Date(invoiceDate).toISOString() : undefined,
     } as any;
 
-    const onSuccess = () => {
-      queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
-      queryClient.invalidateQueries({ queryKey: ["accounting-pnl"] });
-      queryClient.invalidateQueries({ queryKey: ["accounting-ar"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
-      setShowSendPrompt(true);
-    };
-
-    if (isEditing) update.mutate({ id: initial.id, data: payload }, { onSuccess });
-    else create.mutate({ data: payload }, { onSuccess });
+    void (async () => {
+      try {
+        if (isEditing) await update.mutateAsync({ id: initial.id, data: payload });
+        else await create.mutateAsync({ data: payload });
+        setShowSendPrompt(true);
+      } catch {
+        /* global mutation cache shows error toast */
+      }
+    })();
   };
 
   const selectedCustomer = useMemo(() => (customers ?? []).find((c: any) => String(c.id) === String(customerId)), [customers, customerId]);
@@ -288,6 +285,7 @@ export default function InvoiceModal({ onClose, initial }: Props) {
                 onAddNew={() => setShowAddCustomer(true)}
                 required
                 lightMode
+                placeholder="Type customer name or company to search…"
               />
               {taxHint && !taxExempt && (
                 <div className="mt-1.5">

@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, ReactNode } from "react";
+import { loadAuthSession, saveAuthSession } from "@/lib/auth-session";
 
 export type UserRole = "developer" | "admin" | "sales" | "shipper" | "accountant" | "viewer" | "custom";
 
@@ -50,10 +51,13 @@ export function checkAccess(role: UserRole, path: string, customPermissions?: Cu
 }
 
 export function RoleProvider({ children }: { children: ReactNode }) {
-  const [currentUser, setCurrentUserState] = useState<CurrentUser | null>(null);
+  const [currentUser, setCurrentUserState] = useState<CurrentUser | null>(
+    () => loadAuthSession() as CurrentUser | null,
+  );
 
   const setCurrentUser = (user: CurrentUser | null) => {
     setCurrentUserState(user);
+    saveAuthSession(user);
   };
 
   const hasAccess = (path: string) =>

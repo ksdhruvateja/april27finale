@@ -17,9 +17,14 @@ function firstAccessiblePath(role: UserRole, customPermissions?: CustomPermissio
   return ALL_PATHS.find(p => checkAccess(role, p, customPermissions)) ?? "/";
 }
 
+function loginDestination(role: UserRole, customPermissions: CustomPermissions | undefined, currentPath: string): string {
+  if (currentPath && checkAccess(role, currentPath, customPermissions)) return currentPath;
+  return firstAccessiblePath(role, customPermissions);
+}
+
 export default function UserSelectModal() {
   const { currentUser, setCurrentUser } = useRole();
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
 
   const [email, setEmail]         = useState("");
   const [password, setPassword]   = useState("");
@@ -50,7 +55,7 @@ export default function UserSelectModal() {
             role: "developer",
           };
           setCurrentUser(user);
-          navigate(firstAccessiblePath(user.role));
+          navigate(loginDestination(user.role, undefined, location));
           return;
         }
         setError((data as { error?: string }).error ?? "Login failed.");
@@ -70,7 +75,7 @@ export default function UserSelectModal() {
         customPermissions,
       };
       setCurrentUser(user);
-      navigate(firstAccessiblePath(user.role, customPermissions));
+      navigate(loginDestination(user.role, customPermissions, location));
     } catch {
       if (email.trim().toLowerCase() === FALLBACK_DEV_EMAIL && password === FALLBACK_DEV_PASSWORD) {
         const user: CurrentUser = {
@@ -80,7 +85,7 @@ export default function UserSelectModal() {
           role: "developer",
         };
         setCurrentUser(user);
-        navigate(firstAccessiblePath(user.role));
+        navigate(loginDestination(user.role, undefined, location));
         return;
       }
       setError("Could not connect to server. Please try again.");

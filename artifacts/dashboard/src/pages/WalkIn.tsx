@@ -1,6 +1,6 @@
-import { useState, useMemo, useRef, useEffect } from "react";
-import { createPortal } from "react-dom";
+import { useState, useMemo } from "react";
 import Layout from "@/components/Layout";
+import CustomerCombobox from "@/components/CustomerCombobox";
 import Header from "@/components/Header";
 import {
   useListProducts,
@@ -16,7 +16,7 @@ import {
   Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle2,
   User, CreditCard, Banknote, Building2, FileCheck2, Tag,
   X, Package, Zap, Receipt, AlertCircle, Percent, StickyNote,
-  UserPlus, ChevronDown, Truck,
+  UserPlus, Truck,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 
@@ -85,8 +85,6 @@ export default function WalkIn() {
   const [cart,           setCart]           = useState<CartItem[]>([]);
   const [payMethod,      setPayMethod]      = useState<PaymentMethod>("cash");
   const [selectedCustId, setSelectedCustId] = useState<number | null>(null);
-  const [custSearch,     setCustSearch]     = useState("");
-  const [custOpen,       setCustOpen]       = useState(false);
   const [internalNote,   setInternalNote]   = useState("");
   const [success,        setSuccess]        = useState<{ invoiceId: number; total: number } | null>(null);
   const [saving,         setSaving]         = useState(false);
@@ -104,17 +102,6 @@ export default function WalkIn() {
   const [newCustPhone,   setNewCustPhone]   = useState("");
   const [savingCust,     setSavingCust]     = useState(false);
   const [custError,      setCustError]      = useState<string | null>(null);
-
-  const custRef       = useRef<HTMLDivElement>(null);
-  const [custDropRect, setCustDropRect] = useState<DOMRect | null>(null);
-
-  useEffect(() => {
-    if (custOpen && custRef.current) {
-      setCustDropRect(custRef.current.getBoundingClientRect());
-    } else {
-      setCustDropRect(null);
-    }
-  }, [custOpen]);
 
   const productList  = (products  ?? []) as any[];
   const customerList = (customers ?? []) as any[];
@@ -134,18 +121,6 @@ export default function WalkIn() {
       return matchCat && matchS && p.status !== "discontinued";
     });
   }, [productList, search, categoryFilter]);
-
-  const filteredCustomers = useMemo(() => {
-    const s = custSearch.trim().toLowerCase();
-    return customerList.filter(c =>
-      !s || [c.name, c.company, c.email].some((v: any) => String(v ?? "").toLowerCase().includes(s))
-    ).slice(0, 8);
-  }, [customerList, custSearch]);
-
-  const selectedCustomer = useMemo(
-    () => customerList.find(c => c.id === selectedCustId) ?? null,
-    [customerList, selectedCustId]
-  );
 
   function addToCart(product: any) {
     setCart(prev => {
@@ -187,7 +162,6 @@ export default function WalkIn() {
   function clearSale() {
     setCart([]);
     setSelectedCustId(null);
-    setCustSearch("");
     setInternalNote("");
     setPayMethod("cash");
     setError(null);
@@ -225,11 +199,6 @@ export default function WalkIn() {
 
   const { subtotal, taxTotal, itemDiscTotal, orderDiscAmt, freight: freightCalc, beforeDiscount, total } = calcTotals(cart, orderDiscount, showFreight ? freight : 0, taxExempt);
 
-  const customerName =
-    selectedCustomer
-      ? (selectedCustomer.company || selectedCustomer.name)
-      : "Walk-in Customer";
-
   const customerId = selectedCustId ?? null;
 
   async function completeSale() {
@@ -247,17 +216,12 @@ export default function WalkIn() {
       if (freightCalc > 0)  lineItems = [...lineItems, { description: "Freight / Shipping", quantity: 1, unitPrice: freightCalc,   taxPercent: 0, discountPercent: 0 }];
       if (orderDiscAmt > 0) lineItems = [...lineItems, { description: "Order Discount",      quantity: 1, unitPrice: -orderDiscAmt, taxPercent: 0, discountPercent: 0 }];
       const payload: any = {
-        customerName,
-        customerId:     customerId ?? undefined,
+        ...(customerId ? { customerId } : {}),
         lineItems,
-        subtotal,
-        taxTotal,
-        discountTotal:  itemDiscTotal,
-        total,
-        status:         "paid",
-        paymentMethod:  payMethod,
-        paidAt:         new Date().toISOString(),
-        notes:          internalNote.trim() || undefined,
+        status: "paid",
+        paymentMethod: payMethod === "card" ? "stripe" : payMethod,
+        paidAt: new Date().toISOString(),
+        notes: internalNote.trim() || undefined,
         isQuickInvoice: true,
       };
       const result: any = await createInvoice.mutateAsync({ data: payload });
@@ -655,82 +619,21 @@ export default function WalkIn() {
                 )}
               </div>
 
-              {/* Existing customer search */}
               {!showNewCust && (
-                <div className="relative" ref={custRef}>
-                  <div className="relative">
-                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                    <input
-                      value={selectedCustomer
-                        ? (selectedCustomer.company
-                            ? `${selectedCustomer.company} — ${selectedCustomer.name}`
-                            : (selectedCustomer.name || "Customer"))
-                        : custSearch}
-                      onChange={e => { setCustSearch(e.target.value); setSelectedCustId(null); setCustOpen(true); }}
-                      onFocus={() => { if (selectedCustId) { setSelectedCustId(null); setCustSearch(""); } setCustOpen(true); }}
-                      placeholder="Search existing customers… (leave blank for walk-in)"
-                      className="w-full border border-slate-200 rounded-xl pl-9 pr-9 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-300 focus:ring-1 focus:ring-indigo-100 bg-white"
-                    />
-                    {selectedCustId ? (
-                      <button onClick={() => { setSelectedCustId(null); setCustSearch(""); }}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
-                        <X size={14} />
-                      </button>
-                    ) : (
-                      <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                    )}
-                  </div>
-
-                  {selectedCustomer && (
-                    <div className="mt-2 px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-xl flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-black flex-shrink-0">
-                        {(selectedCustomer.company || selectedCustomer.name || "?")[0].toUpperCase()}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-indigo-800 truncate">
-                          {selectedCustomer.company || selectedCustomer.name}
-                        </p>
-                        {selectedCustomer.company && (
-                          <p className="text-xs text-indigo-600 truncate">{selectedCustomer.name}</p>
-                        )}
-                        {selectedCustomer.email && (
-                          <p className="text-xs text-indigo-500 truncate">{selectedCustomer.email}</p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {!selectedCustomer && (
+                <>
+                  <CustomerCombobox
+                    customers={customerList}
+                    value={selectedCustId ? String(selectedCustId) : ""}
+                    onSelect={(id) => setSelectedCustId(id ? Number(id) : null)}
+                    onAddNew={() => { setShowNewCust(true); setCustError(null); }}
+                    allowEmpty
+                    lightMode
+                    placeholder="Type customer name or company to search…"
+                  />
+                  {!selectedCustId && (
                     <p className="mt-1.5 text-xs text-slate-400 pl-1">Leave empty to record as a walk-in customer</p>
                   )}
-
-                  {custOpen && !selectedCustId && filteredCustomers.length > 0 && custDropRect && createPortal(
-                    <>
-                      <div className="fixed inset-0 z-[999]" onClick={() => setCustOpen(false)} />
-                      <div
-                        className="fixed z-[1000] bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden"
-                        style={{ top: custDropRect.bottom + 4, left: custDropRect.left, width: custDropRect.width, maxHeight: 260, overflowY: "auto" }}
-                        onClick={e => e.stopPropagation()}
-                      >
-                        {filteredCustomers.map(c => (
-                          <button key={c.id}
-                            onMouseDown={() => { setSelectedCustId(c.id); setCustSearch(""); setCustOpen(false); }}
-                            className="w-full text-left px-3 py-2.5 flex flex-col hover:bg-indigo-50 border-b border-slate-50 last:border-0 transition-colors">
-                            {c.company
-                              ? <>
-                                  <span className="text-sm font-semibold text-slate-800">{c.company}</span>
-                                  <span className="text-xs text-slate-500">{c.name}</span>
-                                </>
-                              : <span className="text-sm font-semibold text-slate-800">{c.name}</span>
-                            }
-                            {c.email && <span className="text-xs text-slate-400">{c.email}</span>}
-                          </button>
-                        ))}
-                      </div>
-                    </>,
-                    document.body
-                  )}
-                </div>
+                </>
               )}
 
               {/* Add New Customer inline form */}
