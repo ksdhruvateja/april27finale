@@ -1,0 +1,10 @@
+[build]
+builder = "NIXPACKS"
+installCommand = "corepack enable && corepack prepare pnpm@9.15.9 --activate && pnpm install --frozen-lockfile --prod=false"
+buildCommand = "pnpm run build:railway"
+
+[deploy]
+startCommand = "node artifacts/api-server/dist/index.mjs"
+healthcheckPath = "/api/healthz"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

@@ -1,0 +1,48 @@
+import { Router, type IRouter } from "express";
+import healthRouter from "./health";
+import dashboardRouter from "./dashboard";
+import customersRouter from "./customers";
+import vendorsRouter from "./vendors";
+import productsRouter from "./products";
+import taxRatesRouter from "./tax-rates";
+import quotesRouter from "./quotes";
+import estimatesRouter from "./estimates";
+import invoicesRouter from "./invoices";
+import purchaseOrdersRouter from "./purchase-orders";
+import billsRouter from "./bills";
+import inventoryRouter from "./inventory";
+import shipmentsRouter from "./shipments";
+import trackRouter from "./track";
+import expensesRouter from "./expenses";
+import bankAccountsRouter from "./bank-accounts";
+import accountingRouter from "./accounting";
+import shippingRouter from "./shipping";
+import usersRouter from "./users";
+import salesLeadsRouter from "./sales-leads";
+import authRouter from "./auth";
+
+const router: IRouter = Router();
+
+router.use(authRouter);
+router.use(healthRouter);
+router.use(dashboardRouter);
+router.use(customersRouter);
+router.use(vendorsRouter);
+router.use(productsRouter);
+router.use(taxRatesRouter);
+router.use(quotesRouter);
+router.use(estimatesRouter);
+router.use(invoicesRouter);
+router.use(purchaseOrdersRouter);
+router.use(billsRouter);
+router.use(inventoryRouter);
+router.use(shipmentsRouter);
+router.use(trackRouter);
+router.use(expensesRouter);
+router.use(bankAccountsRouter);
+router.use(accountingRouter);
+router.use(shippingRouter);
+router.use(usersRouter);
+router.use(salesLeadsRouter);
+
+export default router;

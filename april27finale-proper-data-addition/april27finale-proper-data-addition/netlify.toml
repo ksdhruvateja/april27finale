@@ -1,0 +1,9 @@
+[build]
+base = "artifacts/dashboard"
+command = "pnpm run build"
+publish = "dist/public"
+
+[build.environment]
+NODE_VERSION = "22"
+# Set this in Netlify UI (Site configuration -> Environment variables):
+# VITE_API_BASE_URL = "https://<your-railway-service-domain>"

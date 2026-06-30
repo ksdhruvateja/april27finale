@@ -1,0 +1,15 @@
+[build]
+  base = "quickboo"
+  command = "pnpm --filter @workspace/dashboard run build"
+  publish = "artifacts/dashboard/dist/public"
+
+[[redirects]]
+  from = "/api/*"
+  to = "https://forez-backend-production.up.railway.app/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

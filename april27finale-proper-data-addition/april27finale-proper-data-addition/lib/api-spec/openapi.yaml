@@ -1,0 +1,2674 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: QuickBooks-style business platform API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: dashboard
+    description: Dashboard operations
+  - name: customers
+    description: Customer operations
+  - name: vendors
+    description: Vendor operations
+  - name: products
+    description: Product operations
+  - name: quotes
+    description: Quote operations
+  - name: estimates
+    description: Estimate operations
+  - name: invoices
+    description: Invoice operations
+  - name: bills
+    description: Bill operations
+  - name: purchase-orders
+    description: Purchase order operations
+  - name: inventory
+    description: Inventory operations
+  - name: shipments
+    description: Shipment operations
+  - name: tax-rates
+    description: Tax rate operations
+  - name: sales-leads
+    description: Sales lead operations
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /dashboard/stats:
+    get:
+      operationId: getDashboardStats
+      tags: [dashboard]
+      summary: Get dashboard statistics
+      responses:
+        "200":
+          description: Dashboard stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /customers:
+    get:
+      operationId: listCustomers
+      tags: [customers]
+      summary: List all customers
+      responses:
+        "200":
+          description: List of customers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Customer"
+    post:
+      operationId: createCustomer
+      tags: [customers]
+      summary: Create a customer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCustomerInput"
+      responses:
+        "201":
+          description: Customer created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+
+  /customers/{id}:
+    get:
+      operationId: getCustomer
+      tags: [customers]
+      summary: Get a customer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Customer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+    patch:
+      operationId: updateCustomer
+      tags: [customers]
+      summary: Update a customer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCustomerInput"
+      responses:
+        "200":
+          description: Customer updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+    delete:
+      operationId: deleteCustomer
+      tags: [customers]
+      summary: Delete a customer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Customer deleted
+
+  /vendors:
+    get:
+      operationId: listVendors
+      tags: [vendors]
+      summary: List all vendors
+      responses:
+        "200":
+          description: List of vendors
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Vendor"
+    post:
+      operationId: createVendor
+      tags: [vendors]
+      summary: Create a vendor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateVendorInput"
+      responses:
+        "201":
+          description: Vendor created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vendor"
+
+  /vendors/{id}:
+    get:
+      operationId: getVendor
+      tags: [vendors]
+      summary: Get a vendor
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Vendor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vendor"
+    patch:
+      operationId: updateVendor
+      tags: [vendors]
+      summary: Update a vendor
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateVendorInput"
+      responses:
+        "200":
+          description: Vendor updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Vendor"
+    delete:
+      operationId: deleteVendor
+      tags: [vendors]
+      summary: Delete a vendor
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Vendor deleted
+
+  /products:
+    get:
+      operationId: listProducts
+      tags: [products]
+      summary: List all products
+      responses:
+        "200":
+          description: List of products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+    post:
+      operationId: createProduct
+      tags: [products]
+      summary: Create a product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductInput"
+      responses:
+        "201":
+          description: Product created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+
+  /products/{id}:
+    get:
+      operationId: getProduct
+      tags: [products]
+      summary: Get a product
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+    patch:
+      operationId: updateProduct
+      tags: [products]
+      summary: Update a product
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProductInput"
+      responses:
+        "200":
+          description: Product updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+    delete:
+      operationId: deleteProduct
+      tags: [products]
+      summary: Delete a product
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Product deleted
+
+  /quotes:
+    get:
+      operationId: listQuotes
+      tags: [quotes]
+      summary: List all quotes
+      responses:
+        "200":
+          description: List of quotes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Quote"
+    post:
+      operationId: createQuote
+      tags: [quotes]
+      summary: Create a quote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateQuoteInput"
+      responses:
+        "201":
+          description: Quote created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+
+  /quotes/{id}:
+    get:
+      operationId: getQuote
+      tags: [quotes]
+      summary: Get a quote
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Quote
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+    patch:
+      operationId: updateQuote
+      tags: [quotes]
+      summary: Update a quote
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateQuoteInput"
+      responses:
+        "200":
+          description: Quote updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+    delete:
+      operationId: deleteQuote
+      tags: [quotes]
+      summary: Delete a quote
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Quote deleted
+
+  /quotes/{id}/convert:
+    post:
+      operationId: convertQuoteToInvoice
+      tags: [quotes]
+      summary: Convert quote directly to invoice
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                salesLead:
+                  type: string
+                  nullable: true
+      responses:
+        "201":
+          description: Invoice created from quote
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+
+  /estimates:
+    get:
+      operationId: listEstimates
+      tags: [estimates]
+      summary: List all estimates / order confirmations
+      responses:
+        "200":
+          description: List of estimates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Estimate"
+    post:
+      operationId: createEstimate
+      tags: [estimates]
+      summary: Create an estimate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEstimateInput"
+      responses:
+        "201":
+          description: Estimate created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Estimate"
+
+  /estimates/{id}:
+    get:
+      operationId: getEstimate
+      tags: [estimates]
+      summary: Get an estimate
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Estimate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Estimate"
+    patch:
+      operationId: updateEstimate
+      tags: [estimates]
+      summary: Update an estimate
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateEstimateInput"
+      responses:
+        "200":
+          description: Estimate updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Estimate"
+    delete:
+      operationId: deleteEstimate
+      tags: [estimates]
+      summary: Delete an estimate
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Estimate deleted
+
+  /estimates/{id}/convert:
+    post:
+      operationId: convertEstimateToInvoice
+      tags: [estimates]
+      summary: Convert estimate to invoice
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "201":
+          description: Invoice created from estimate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+
+  /invoices:
+    get:
+      operationId: listInvoices
+      tags: [invoices]
+      summary: List all invoices
+      responses:
+        "200":
+          description: List of invoices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Invoice"
+    post:
+      operationId: createInvoice
+      tags: [invoices]
+      summary: Create an invoice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInvoiceInput"
+      responses:
+        "201":
+          description: Invoice created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+
+  /invoices/{id}:
+    get:
+      operationId: getInvoice
+      tags: [invoices]
+      summary: Get an invoice
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Invoice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+    patch:
+      operationId: updateInvoice
+      tags: [invoices]
+      summary: Update an invoice
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateInvoiceInput"
+      responses:
+        "200":
+          description: Invoice updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+    delete:
+      operationId: deleteInvoice
+      tags: [invoices]
+      summary: Delete an invoice
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Invoice deleted
+
+  /invoices/{id}/pay:
+    post:
+      operationId: payInvoice
+      tags: [invoices]
+      summary: Mark invoice as paid
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PayInvoiceInput"
+      responses:
+        "200":
+          description: Invoice marked as paid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+
+  /purchase-orders:
+    get:
+      operationId: listPurchaseOrders
+      tags: [purchase-orders]
+      summary: List all purchase orders
+      responses:
+        "200":
+          description: List of purchase orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PurchaseOrder"
+    post:
+      operationId: createPurchaseOrder
+      tags: [purchase-orders]
+      summary: Create a purchase order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePurchaseOrderInput"
+      responses:
+        "201":
+          description: Purchase order created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseOrder"
+
+  /purchase-orders/{id}:
+    get:
+      operationId: getPurchaseOrder
+      tags: [purchase-orders]
+      summary: Get a purchase order
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Purchase order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseOrder"
+    patch:
+      operationId: updatePurchaseOrder
+      tags: [purchase-orders]
+      summary: Update a purchase order
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePurchaseOrderInput"
+      responses:
+        "200":
+          description: Purchase order updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseOrder"
+    delete:
+      operationId: deletePurchaseOrder
+      tags: [purchase-orders]
+      summary: Delete a purchase order
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Purchase order deleted
+
+  /purchase-orders/{id}/convert:
+    post:
+      operationId: convertPurchaseOrderToBill
+      tags: [purchase-orders]
+      summary: Convert purchase order to bill
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "201":
+          description: Bill created from purchase order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bill"
+
+  /bills:
+    get:
+      operationId: listBills
+      tags: [bills]
+      summary: List all vendor bills
+      responses:
+        "200":
+          description: List of bills
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Bill"
+    post:
+      operationId: createBill
+      tags: [bills]
+      summary: Create a vendor bill
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBillInput"
+      responses:
+        "201":
+          description: Bill created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bill"
+
+  /bills/{id}:
+    get:
+      operationId: getBill
+      tags: [bills]
+      summary: Get a vendor bill
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Bill
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bill"
+    patch:
+      operationId: updateBill
+      tags: [bills]
+      summary: Update a vendor bill
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBillInput"
+      responses:
+        "200":
+          description: Bill updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bill"
+    delete:
+      operationId: deleteBill
+      tags: [bills]
+      summary: Delete a vendor bill
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Bill deleted
+
+  /bills/{id}/pay:
+    post:
+      operationId: payBill
+      tags: [bills]
+      summary: Mark bill as paid
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PayBillInput"
+      responses:
+        "200":
+          description: Bill marked as paid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bill"
+
+  /inventory:
+    get:
+      operationId: listInventory
+      tags: [inventory]
+      summary: List all inventory items
+      responses:
+        "200":
+          description: List of inventory items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InventoryItem"
+
+  /inventory/{id}:
+    get:
+      operationId: getInventoryItem
+      tags: [inventory]
+      summary: Get an inventory item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Inventory item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryItem"
+    patch:
+      operationId: updateInventoryItem
+      tags: [inventory]
+      summary: Update an inventory item
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateInventoryItemInput"
+      responses:
+        "200":
+          description: Inventory item updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryItem"
+
+  /shipments:
+    get:
+      operationId: listShipments
+      tags: [shipments]
+      summary: List all shipments
+      responses:
+        "200":
+          description: List of shipments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Shipment"
+    post:
+      operationId: createShipment
+      tags: [shipments]
+      summary: Create a shipment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateShipmentInput"
+      responses:
+        "201":
+          description: Shipment created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Shipment"
+
+  /shipments/{id}:
+    get:
+      operationId: getShipment
+      tags: [shipments]
+      summary: Get a shipment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Shipment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Shipment"
+    patch:
+      operationId: updateShipment
+      tags: [shipments]
+      summary: Update a shipment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateShipmentInput"
+      responses:
+        "200":
+          description: Shipment updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Shipment"
+
+  /tax-rates:
+    get:
+      operationId: listTaxRates
+      tags: [tax-rates]
+      summary: List all tax rates
+      responses:
+        "200":
+          description: List of tax rates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TaxRate"
+    post:
+      operationId: createTaxRate
+      tags: [tax-rates]
+      summary: Create a tax rate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTaxRateInput"
+      responses:
+        "201":
+          description: Tax rate created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaxRate"
+
+  /tax-rates/{id}:
+    get:
+      operationId: getTaxRate
+      tags: [tax-rates]
+      summary: Get a tax rate
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Tax rate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaxRate"
+    patch:
+      operationId: updateTaxRate
+      tags: [tax-rates]
+      summary: Update a tax rate
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTaxRateInput"
+      responses:
+        "200":
+          description: Tax rate updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaxRate"
+    delete:
+      operationId: deleteTaxRate
+      tags: [tax-rates]
+      summary: Delete a tax rate
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Tax rate deleted
+
+  /sales-leads:
+    get:
+      operationId: listSalesLeads
+      tags: [sales-leads]
+      summary: List all sales leads
+      responses:
+        "200":
+          description: List of sales leads
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SalesLead"
+    post:
+      operationId: createSalesLead
+      tags: [sales-leads]
+      summary: Create a sales lead
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSalesLeadInput"
+      responses:
+        "201":
+          description: Sales lead created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalesLead"
+
+  /sales-leads/{id}:
+    patch:
+      operationId: updateSalesLead
+      tags: [sales-leads]
+      summary: Update a sales lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSalesLeadInput"
+      responses:
+        "200":
+          description: Sales lead updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SalesLead"
+    delete:
+      operationId: deleteSalesLead
+      tags: [sales-leads]
+      summary: Delete a sales lead
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Sales lead deleted
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    LineItem:
+      type: object
+      properties:
+        productId:
+          type: integer
+          nullable: true
+        description:
+          type: string
+        quantity:
+          type: number
+        unitPrice:
+          type: number
+        taxPercent:
+          type: number
+          default: 0
+        discountPercent:
+          type: number
+          default: 0
+      required:
+        - description
+        - quantity
+        - unitPrice
+
+    DashboardStats:
+      type: object
+      properties:
+        cashIn:
+          type: number
+        cashOut:
+          type: number
+        arDue:
+          type: number
+        arOverdue:
+          type: number
+        apDue:
+          type: number
+        apOverdue:
+          type: number
+        overdueInvoiceCount:
+          type: number
+        unpaidBillCount:
+          type: number
+        totalCustomers:
+          type: number
+        totalVendors:
+          type: number
+        totalProducts:
+          type: number
+        lowStockCount:
+          type: number
+        recentInvoices:
+          type: array
+          items:
+            $ref: "#/components/schemas/Invoice"
+        recentBills:
+          type: array
+          items:
+            $ref: "#/components/schemas/Bill"
+      required:
+        - cashIn
+        - cashOut
+        - arDue
+        - arOverdue
+        - apDue
+        - apOverdue
+        - overdueInvoiceCount
+        - unpaidBillCount
+        - totalCustomers
+        - totalVendors
+        - totalProducts
+        - lowStockCount
+        - recentInvoices
+        - recentBills
+
+    Customer:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        company:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        emails:
+          type: array
+          items:
+            type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        state:
+          type: string
+          nullable: true
+        zipCode:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+        billingAddress:
+          type: object
+          nullable: true
+          additionalProperties: true
+        shippingAddress:
+          type: object
+          nullable: true
+          additionalProperties: true
+        taxExempt:
+          type: boolean
+        accountType:
+          type: string
+          enum: [net30, net60, net90, cash_advance, cod]
+          nullable: true
+        creditLimit:
+          type: number
+          nullable: true
+        salesRep:
+          type: string
+          nullable: true
+        shippingCarrierName:
+          type: string
+          nullable: true
+        shippingAccountNumber:
+          type: string
+          nullable: true
+        taxNumber:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - taxExempt
+        - createdAt
+        - updatedAt
+
+    CreateCustomerInput:
+      type: object
+      properties:
+        name:
+          type: string
+        company:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        emails:
+          type: array
+          items:
+            type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        state:
+          type: string
+          nullable: true
+        zipCode:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+        billingAddress:
+          type: object
+          nullable: true
+          additionalProperties: true
+        shippingAddress:
+          type: object
+          nullable: true
+          additionalProperties: true
+        taxExempt:
+          type: boolean
+        accountType:
+          type: string
+          enum: [net30, net60, net90, cash_advance, cod]
+          nullable: true
+        creditLimit:
+          type: number
+          nullable: true
+        salesRep:
+          type: string
+          nullable: true
+        shippingCarrierName:
+          type: string
+          nullable: true
+        shippingAccountNumber:
+          type: string
+          nullable: true
+        taxNumber:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+      required:
+        - name
+
+    UpdateCustomerInput:
+      type: object
+      properties:
+        name:
+          type: string
+        company:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        emails:
+          type: array
+          items:
+            type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        state:
+          type: string
+          nullable: true
+        zipCode:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+        billingAddress:
+          type: object
+          nullable: true
+          additionalProperties: true
+        shippingAddress:
+          type: object
+          nullable: true
+          additionalProperties: true
+        taxExempt:
+          type: boolean
+        accountType:
+          type: string
+          enum: [net30, net60, net90, cash_advance, cod]
+          nullable: true
+        creditLimit:
+          type: number
+          nullable: true
+        salesRep:
+          type: string
+          nullable: true
+        shippingCarrierName:
+          type: string
+          nullable: true
+        shippingAccountNumber:
+          type: string
+          nullable: true
+        taxNumber:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+
+    Vendor:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        company:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        emails:
+          type: array
+          items:
+            type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        state:
+          type: string
+          nullable: true
+        zipCode:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+        billingAddress:
+          type: object
+          nullable: true
+          additionalProperties: true
+        shippingAddress:
+          type: object
+          nullable: true
+          additionalProperties: true
+        taxExempt:
+          type: boolean
+        salesRep:
+          type: string
+          nullable: true
+        einNumber:
+          type: string
+          nullable: true
+        shippingCarrierName:
+          type: string
+          nullable: true
+        shippingAccountNumber:
+          type: string
+          nullable: true
+        taxNumber:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - taxExempt
+        - createdAt
+        - updatedAt
+
+    CreateVendorInput:
+      type: object
+      properties:
+        name:
+          type: string
+        company:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        emails:
+          type: array
+          items:
+            type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        state:
+          type: string
+          nullable: true
+        zipCode:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+        billingAddress:
+          type: object
+          nullable: true
+          additionalProperties: true
+        shippingAddress:
+          type: object
+          nullable: true
+          additionalProperties: true
+        taxExempt:
+          type: boolean
+        salesRep:
+          type: string
+          nullable: true
+        einNumber:
+          type: string
+          nullable: true
+        shippingCarrierName:
+          type: string
+          nullable: true
+        shippingAccountNumber:
+          type: string
+          nullable: true
+        taxNumber:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+      required:
+        - name
+
+    UpdateVendorInput:
+      type: object
+      properties:
+        name:
+          type: string
+        company:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        emails:
+          type: array
+          items:
+            type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        state:
+          type: string
+          nullable: true
+        zipCode:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+        billingAddress:
+          type: object
+          nullable: true
+          additionalProperties: true
+        shippingAddress:
+          type: object
+          nullable: true
+          additionalProperties: true
+        taxExempt:
+          type: boolean
+        salesRep:
+          type: string
+          nullable: true
+        einNumber:
+          type: string
+          nullable: true
+        shippingCarrierName:
+          type: string
+          nullable: true
+        shippingAccountNumber:
+          type: string
+          nullable: true
+        taxNumber:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        sku:
+          type: string
+          nullable: true
+        category:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        salePrice:
+          type: number
+        costPrice:
+          type: number
+        taxPercent:
+          type: number
+          default: 0
+        discountPercent:
+          type: number
+          default: 0
+        discountAmount:
+          type: number
+        minOrderQty:
+          type: number
+        preferredVendorId:
+          type: integer
+          nullable: true
+        isInventoryItem:
+          type: boolean
+        unit:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - salePrice
+        - costPrice
+        - discountAmount
+        - minOrderQty
+        - isInventoryItem
+        - createdAt
+        - updatedAt
+
+    CreateProductInput:
+      type: object
+      properties:
+        name:
+          type: string
+        sku:
+          type: string
+          nullable: true
+        category:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        salePrice:
+          type: number
+        costPrice:
+          type: number
+        taxPercent:
+          type: number
+          default: 0
+        discountPercent:
+          type: number
+          default: 0
+        discountAmount:
+          type: number
+        minOrderQty:
+          type: number
+        preferredVendorId:
+          type: integer
+          nullable: true
+        isInventoryItem:
+          type: boolean
+        unit:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+      required:
+        - name
+        - salePrice
+        - costPrice
+
+    UpdateProductInput:
+      type: object
+      properties:
+        name:
+          type: string
+        sku:
+          type: string
+          nullable: true
+        category:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        salePrice:
+          type: number
+        costPrice:
+          type: number
+        taxPercent:
+          type: number
+        discountPercent:
+          type: number
+        discountAmount:
+          type: number
+        minOrderQty:
+          type: number
+        preferredVendorId:
+          type: integer
+          nullable: true
+        isInventoryItem:
+          type: boolean
+        unit:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+
+    Quote:
+      type: object
+      properties:
+        id:
+          type: integer
+        customerId:
+          type: integer
+        customerName:
+          type: string
+        status:
+          type: string
+          enum: [draft, sent, accepted, declined, expired]
+        salesLead:
+          type: string
+          nullable: true
+        trackingNumber:
+          type: string
+          nullable: true
+        lineItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/LineItem"
+        subtotal:
+          type: number
+        taxTotal:
+          type: number
+        discountTotal:
+          type: number
+        total:
+          type: number
+        notes:
+          type: string
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - customerId
+        - customerName
+        - status
+        - lineItems
+        - subtotal
+        - taxTotal
+        - discountTotal
+        - total
+        - createdAt
+        - updatedAt
+
+    CreateQuoteInput:
+      type: object
+      properties:
+        customerId:
+          type: integer
+        status:
+          type: string
+          enum: [draft, sent, accepted, declined, expired]
+        salesLead:
+          type: string
+          nullable: true
+        trackingNumber:
+          type: string
+          nullable: true
+        lineItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/LineItem"
+        notes:
+          type: string
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+        - customerId
+        - lineItems
+
+    UpdateQuoteInput:
+      type: object
+      properties:
+        customerId:
+          type: integer
+        status:
+          type: string
+          enum: [draft, sent, accepted, declined, expired]
+        salesLead:
+          type: string
+          nullable: true
+        quoteNumber:
+          type: string
+          nullable: true
+        trackingNumber:
+          type: string
+          nullable: true
+        lineItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/LineItem"
+        notes:
+          type: string
+          nullable: true
+        internalNote:
+          type: string
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    Estimate:
+      type: object
+      properties:
+        id:
+          type: integer
+        customerId:
+          type: integer
+        customerName:
+          type: string
+        quoteId:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum: [draft, approved, rejected, invoiced]
+        lineItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/LineItem"
+        subtotal:
+          type: number
+        taxTotal:
+          type: number
+        discountTotal:
+          type: number
+        total:
+          type: number
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - customerId
+        - customerName
+        - status
+        - lineItems
+        - subtotal
+        - taxTotal
+        - discountTotal
+        - total
+        - createdAt
+        - updatedAt
+
+    CreateEstimateInput:
+      type: object
+      properties:
+        customerId:
+          type: integer
+        quoteId:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum: [draft, approved, rejected, invoiced]
+        lineItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/LineItem"
+        notes:
+          type: string
+          nullable: true
+      required:
+        - customerId
+        - lineItems
+
+    UpdateEstimateInput:
+      type: object
+      properties:
+        customerId:
+          type: integer
+        status:
+          type: string
+          enum: [draft, approved, rejected, invoiced]
+        lineItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/LineItem"
+        notes:
+          type: string
+          nullable: true
+
+    Invoice:
+      type: object
+      properties:
+        id:
+          type: integer
+        customerId:
+          type: integer
+        customerName:
+          type: string
+        estimateId:
+          type: integer
+          nullable: true
+        quoteId:
+          type: integer
+          nullable: true
+        trackingNumber:
+          type: string
+          nullable: true
+        salesLead:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [draft, sent, pending, paid, overdue, cancelled]
+        lineItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/LineItem"
+        subtotal:
+          type: number
+        taxTotal:
+          type: number
+        discountTotal:
+          type: number
+        total:
+          type: number
+        dueDate:
+          type: string
+          format: date-time
+          nullable: true
+        paymentMethod:
+          type: string
+          enum: [stripe, bank_transfer, check, cash]
+          nullable: true
+        paymentNote:
+          type: string
+          nullable: true
+        paidAt:
+          type: string
+          format: date-time
+          nullable: true
+        isQuickInvoice:
+          type: boolean
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - customerId
+        - customerName
+        - status
+        - lineItems
+        - subtotal
+        - taxTotal
+        - discountTotal
+        - total
+        - isQuickInvoice
+        - createdAt
+        - updatedAt
+
+    CreateInvoiceInput:
+      type: object
+      properties:
+        customerId:
+          type: integer
+        estimateId:
+          type: integer
+          nullable: true
+        quoteId:
+          type: integer
+          nullable: true
+        trackingNumber:
+          type: string
+          nullable: true
+        salesLead:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [draft, sent, pending, paid, overdue, cancelled]
+        lineItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/LineItem"
+        dueDate:
+          type: string
+          format: date-time
+          nullable: true
+        isQuickInvoice:
+          type: boolean
+        notes:
+          type: string
+          nullable: true
+      required:
+        - customerId
+        - lineItems
+
+    UpdateInvoiceInput:
+      type: object
+      properties:
+        customerId:
+          type: integer
+        status:
+          type: string
+          enum: [draft, sent, pending, paid, overdue, cancelled]
+        trackingNumber:
+          type: string
+          nullable: true
+        salesLead:
+          type: string
+          nullable: true
+        lineItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/LineItem"
+        dueDate:
+          type: string
+          format: date-time
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        internalNote:
+          type: string
+          nullable: true
+
+    PayInvoiceInput:
+      type: object
+      properties:
+        paymentMethod:
+          type: string
+          enum: [stripe, bank_transfer, check, cash]
+        paymentNote:
+          type: string
+          nullable: true
+      required:
+        - paymentMethod
+
+    PurchaseOrder:
+      type: object
+      properties:
+        id:
+          type: integer
+        vendorId:
+          type: integer
+        vendorName:
+          type: string
+        sourceInvoiceId:
+          type: integer
+          nullable: true
+        poSequence:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum: [draft, sent, received, cancelled]
+        lineItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/LineItem"
+        subtotal:
+          type: number
+        taxTotal:
+          type: number
+        total:
+          type: number
+        notes:
+          type: string
+          nullable: true
+        expectedDate:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - vendorId
+        - vendorName
+        - status
+        - lineItems
+        - subtotal
+        - taxTotal
+        - total
+        - createdAt
+        - updatedAt
+
+    CreatePurchaseOrderInput:
+      type: object
+      properties:
+        vendorId:
+          type: integer
+        sourceInvoiceId:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum: [draft, sent, received, cancelled]
+        lineItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/LineItem"
+        notes:
+          type: string
+          nullable: true
+        expectedDate:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+        - vendorId
+        - lineItems
+
+    UpdatePurchaseOrderInput:
+      type: object
+      properties:
+        vendorId:
+          type: integer
+        status:
+          type: string
+          enum: [draft, sent, received, cancelled]
+        lineItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/LineItem"
+        notes:
+          type: string
+          nullable: true
+        expectedDate:
+          type: string
+          format: date-time
+          nullable: true
+
+    Bill:
+      type: object
+      properties:
+        id:
+          type: integer
+        vendorId:
+          type: integer
+        vendorName:
+          type: string
+        purchaseOrderId:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum: [draft, received, paid, overdue, cancelled]
+        lineItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/LineItem"
+        subtotal:
+          type: number
+        taxTotal:
+          type: number
+        total:
+          type: number
+        dueDate:
+          type: string
+          format: date-time
+          nullable: true
+        paymentMethod:
+          type: string
+          enum: [bank_transfer, check, cash]
+          nullable: true
+        paymentNote:
+          type: string
+          nullable: true
+        paidAt:
+          type: string
+          format: date-time
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - vendorId
+        - vendorName
+        - status
+        - lineItems
+        - subtotal
+        - taxTotal
+        - total
+        - createdAt
+        - updatedAt
+
+    CreateBillInput:
+      type: object
+      properties:
+        vendorId:
+          type: integer
+        purchaseOrderId:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum: [draft, received, paid, overdue, cancelled]
+        lineItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/LineItem"
+        dueDate:
+          type: string
+          format: date-time
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+      required:
+        - vendorId
+        - lineItems
+
+    UpdateBillInput:
+      type: object
+      properties:
+        vendorId:
+          type: integer
+        status:
+          type: string
+          enum: [draft, received, paid, overdue, cancelled]
+        lineItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/LineItem"
+        dueDate:
+          type: string
+          format: date-time
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+
+    PayBillInput:
+      type: object
+      properties:
+        paymentMethod:
+          type: string
+          enum: [wire_transfer, ach, check, cash]
+        paymentNote:
+          type: string
+          nullable: true
+        bankAccountId:
+          type: integer
+          nullable: true
+        checkNumber:
+          type: string
+          nullable: true
+        checkDate:
+          type: string
+          format: date-time
+          nullable: true
+        destRoutingNumber:
+          type: string
+          nullable: true
+        destAccountNumber:
+          type: string
+          nullable: true
+        destAccountName:
+          type: string
+          nullable: true
+        payeeAddress:
+          type: string
+          nullable: true
+        sendViaCheckeeper:
+          type: boolean
+          nullable: true
+      required:
+        - paymentMethod
+
+    InventoryItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        productId:
+          type: integer
+        productName:
+          type: string
+        sku:
+          type: string
+          nullable: true
+        quantity:
+          type: number
+        reorderPoint:
+          type: number
+        unit:
+          type: string
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - productId
+        - productName
+        - quantity
+        - reorderPoint
+        - updatedAt
+
+    UpdateInventoryItemInput:
+      type: object
+      properties:
+        quantity:
+          type: number
+        reorderPoint:
+          type: number
+
+    Shipment:
+      type: object
+      properties:
+        id:
+          type: integer
+        customerId:
+          type: integer
+        customerName:
+          type: string
+        invoiceId:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum: [pending, shipped, delivered, returned]
+        carrier:
+          type: string
+          nullable: true
+        trackingNumber:
+          type: string
+          nullable: true
+        shippedAt:
+          type: string
+          format: date-time
+          nullable: true
+        deliveredAt:
+          type: string
+          format: date-time
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - customerId
+        - customerName
+        - status
+        - createdAt
+        - updatedAt
+
+    CreateShipmentInput:
+      type: object
+      properties:
+        customerId:
+          type: integer
+        invoiceId:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum: [pending, shipped, delivered, returned]
+        carrier:
+          type: string
+          nullable: true
+        trackingNumber:
+          type: string
+          nullable: true
+        shippedAt:
+          type: string
+          format: date-time
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+      required:
+        - customerId
+
+    UpdateShipmentInput:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending, shipped, delivered, returned]
+        carrier:
+          type: string
+          nullable: true
+        trackingNumber:
+          type: string
+          nullable: true
+        shippedAt:
+          type: string
+          format: date-time
+          nullable: true
+        deliveredAt:
+          type: string
+          format: date-time
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+
+    TaxRate:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        rate:
+          type: number
+        country:
+          type: string
+          nullable: true
+        region:
+          type: string
+          nullable: true
+        isDefault:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - rate
+        - isDefault
+        - createdAt
+        - updatedAt
+
+    CreateTaxRateInput:
+      type: object
+      properties:
+        name:
+          type: string
+        rate:
+          type: number
+        country:
+          type: string
+          nullable: true
+        region:
+          type: string
+          nullable: true
+        isDefault:
+          type: boolean
+      required:
+        - name
+        - rate
+
+    UpdateTaxRateInput:
+      type: object
+      properties:
+        name:
+          type: string
+        rate:
+          type: number
+        country:
+          type: string
+          nullable: true
+        region:
+          type: string
+          nullable: true
+        isDefault:
+          type: boolean
+
+    SalesLead:
+      type: object
+      properties:
+        id:
+          type: integer
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          nullable: true
+        mobile:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - firstName
+        - lastName
+        - createdAt
+        - updatedAt
+
+    CreateSalesLeadInput:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          nullable: true
+        mobile:
+          type: string
+          nullable: true
+      required:
+        - firstName
+        - lastName
+
+    UpdateSalesLeadInput:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          nullable: true
+        mobile:
+          type: string
+          nullable: true
+

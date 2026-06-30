@@ -1,0 +1,26 @@
+export const UNIT_OPTIONS = [
+  { value: "ea", label: "Each (ea)" },
+  { value: "pc", label: "Piece (pc)" },
+  { value: "pk", label: "Pack (pk)" },
+  { value: "cs", label: "Case (cs)" },
+  { value: "bx", label: "Box (bx)" },
+  { value: "dz", label: "Dozen (dz)" },
+  { value: "pr", label: "Pair (pr)" },
+  { value: "set", label: "Set" },
+  { value: "bag", label: "Bag" },
+  { value: "roll", label: "Roll" },
+  { value: "ft", label: "Foot (ft)" },
+  { value: "yd", label: "Yard (yd)" },
+  { value: "m", label: "Meter (m)" },
+  { value: "lb", label: "Pound (lb)" },
+  { value: "kg", label: "Kilogram (kg)" },
+  { value: "oz", label: "Ounce (oz)" },
+  { value: "gal", label: "Gallon (gal)" },
+  { value: "L", label: "Liter (L)" },
+  { value: "hr", label: "Hour (hr)" },
+  { value: "day", label: "Day" },
+  { value: "wk", label: "Week (wk)" },
+  { value: "mo", label: "Month (mo)" },
+];
+
+export const UNIT_VALUES = new Set(UNIT_OPTIONS.map(u => u.value));

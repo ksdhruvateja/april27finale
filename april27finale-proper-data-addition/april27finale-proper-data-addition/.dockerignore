@@ -1,0 +1,10 @@
+node_modules
+.git
+.gitignore
+.env
+.env.*
+.agents
+.local
+artifacts/**/node_modules
+lib/**/node_modules
+scripts/node_modules
