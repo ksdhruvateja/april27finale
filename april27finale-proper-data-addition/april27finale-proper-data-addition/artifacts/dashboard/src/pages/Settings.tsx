@@ -140,6 +140,7 @@ function EmailSection() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [isConfigured, setIsConfigured] = useState(false);
 
   useEffect(() => {
@@ -160,6 +161,7 @@ function EmailSection() {
 
   const handleSave = async () => {
     setSaving(true);
+    setTestResult(null);
     try {
       await Promise.all([
         fetch("/api/app-settings/smtp_host", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value: host.trim() }) }),
@@ -173,6 +175,20 @@ function EmailSection() {
       setTimeout(() => setSaved(false), 3000);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleTestSmtp = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const r = await fetch("/api/payments/test-smtp", { method: "POST" });
+      const d = await r.json();
+      setTestResult({ ok: d.ok, msg: d.ok ? d.message : d.error });
+    } catch {
+      setTestResult({ ok: false, msg: "Network error — could not reach the server." });
+    } finally {
+      setTesting(false);
     }
   };
 
@@ -232,12 +248,31 @@ function EmailSection() {
           <p className="text-xs text-slate-400 mt-1.5">If blank, emails will be sent from your username.</p>
         </div>
 
-        <button onClick={handleSave} disabled={saving}
-          className="flex items-center gap-2 self-start px-4 py-2 bg-[hsl(224_50%_15%)] text-white text-sm font-semibold rounded-lg hover:bg-[hsl(224_50%_20%)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-          {saving ? <><Loader2 size={14} className="animate-spin" /> Saving…</>
-            : saved ? <><CheckCircle2 size={14} /> Saved!</>
-            : <><Save size={14} /> Save Email Settings</>}
-        </button>
+        {testResult && (
+          <div className={`flex items-start gap-2 px-4 py-3 rounded-lg border text-sm ${
+            testResult.ok
+              ? "bg-green-50 border-green-200 text-green-800"
+              : "bg-red-50 border-red-200 text-red-800"
+          }`}>
+            {testResult.ok
+              ? <CheckCircle2 size={15} className="text-green-600 mt-0.5 shrink-0" />
+              : <span className="text-red-500 mt-0.5 shrink-0 font-bold text-base leading-none">✕</span>}
+            <span>{testResult.msg}</span>
+          </div>
+        )}
+
+        <div className="flex items-center gap-3">
+          <button onClick={handleSave} disabled={saving}
+            className="flex items-center gap-2 px-4 py-2 bg-[hsl(224_50%_15%)] text-white text-sm font-semibold rounded-lg hover:bg-[hsl(224_50%_20%)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+            {saving ? <><Loader2 size={14} className="animate-spin" /> Saving…</>
+              : saved ? <><CheckCircle2 size={14} /> Saved!</>
+              : <><Save size={14} /> Save Email Settings</>}
+          </button>
+          <button onClick={handleTestSmtp} disabled={testing || !isConfigured}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 text-sm font-semibold rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+            {testing ? <><Loader2 size={14} className="animate-spin" /> Testing…</> : <><Send size={14} /> Test Connection</>}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -251,6 +286,8 @@ function PaymentSection() {
   const [savedUrl, setSavedUrl]     = useState<string | null>(null);
   const [saving, setSaving]         = useState(false);
   const [saved, setSaved]           = useState(false);
+  const [testingLink, setTestingLink] = useState(false);
+  const [linkTestResult, setLinkTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [isConfigured, setIsConfigured] = useState(false);
 
   useEffect(() => {
@@ -262,8 +299,23 @@ function PaymentSection() {
       .then(d => { if (d?.value) setSavedUrl(d.value); });
   }, []);
 
+  const handleTestPaymentLink = async () => {
+    setTestingLink(true);
+    setLinkTestResult(null);
+    try {
+      const r = await fetch("/api/payments/test-payment-link", { method: "POST" });
+      const d = await r.json();
+      setLinkTestResult({ ok: d.ok, msg: d.ok ? d.message : d.error });
+    } catch {
+      setLinkTestResult({ ok: false, msg: "Network error — could not reach the server." });
+    } finally {
+      setTestingLink(false);
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
+    setLinkTestResult(null);
     try {
       if (secretKey.trim()) {
         const r = await fetch("/api/app-settings/stripe_secret_key", {
@@ -372,17 +424,41 @@ function PaymentSection() {
           </p>
         </div>
 
-        <button
-          onClick={handleSave}
-          disabled={(!secretKey.trim() && payUrl.trim() === (savedUrl ?? "")) || saving}
-          className="flex items-center gap-2 self-start px-4 py-2 bg-[hsl(224_50%_15%)] text-white text-sm font-semibold rounded-lg hover:bg-[hsl(224_50%_20%)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {saving
-            ? <><Loader2 size={14} className="animate-spin" /> Saving…</>
-            : saved
-            ? <><CheckCircle2 size={14} /> Saved!</>
-            : <><Save size={14} /> Save Payment Settings</>}
-        </button>
+        {linkTestResult && (
+          <div className={`flex items-start gap-2 px-4 py-3 rounded-lg border text-sm ${
+            linkTestResult.ok
+              ? "bg-green-50 border-green-200 text-green-800"
+              : "bg-red-50 border-red-200 text-red-800"
+          }`}>
+            {linkTestResult.ok
+              ? <CheckCircle2 size={15} className="text-green-600 mt-0.5 shrink-0" />
+              : <span className="text-red-500 mt-0.5 shrink-0 font-bold text-base leading-none">✕</span>}
+            <span>{linkTestResult.msg}</span>
+          </div>
+        )}
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleSave}
+            disabled={(!secretKey.trim() && payUrl.trim() === (savedUrl ?? "")) || saving}
+            className="flex items-center gap-2 px-4 py-2 bg-[hsl(224_50%_15%)] text-white text-sm font-semibold rounded-lg hover:bg-[hsl(224_50%_20%)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {saving
+              ? <><Loader2 size={14} className="animate-spin" /> Saving…</>
+              : saved
+              ? <><CheckCircle2 size={14} /> Saved!</>
+              : <><Save size={14} /> Save Payment Settings</>}
+          </button>
+          <button
+            onClick={handleTestPaymentLink}
+            disabled={testingLink || !savedUrl}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 text-sm font-semibold rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {testingLink
+              ? <><Loader2 size={14} className="animate-spin" /> Testing…</>
+              : <><Link size={14} /> Test Link</>}
+          </button>
+        </div>
       </div>
     </div>
   );
