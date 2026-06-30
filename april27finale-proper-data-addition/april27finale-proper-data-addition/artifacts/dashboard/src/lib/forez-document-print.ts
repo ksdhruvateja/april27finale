@@ -180,6 +180,8 @@ export function buildInvoicePrintHtml(input: {
   total: number;
   notes?: string | null;
   trackingNumber?: string | null;
+  /** Quote number from the source quote — shown as "QUOTE #" and used as order confirmation fallback. */
+  quoteNumber?: string | null;
   paymentMethod?: string | null;
   /** Stripe / hosted pay URL — wired when payment API is configured */
   paymentUrl?: string | null;
@@ -188,6 +190,7 @@ export function buildInvoicePrintHtml(input: {
   const { shipFrom, shipTo } = customerToShipFromShipTo(input.customer, input.customerName);
 
   const invoiceNumber = normalizeForezDocNumber(input.invoiceNumber, "invoice");
+  const quoteNumber = input.quoteNumber?.trim() || undefined;
   const data: ForezInvoiceInput = {
     invoiceTitle: invoiceTitleFromNumber(invoiceNumber),
     invoiceNumber,
@@ -195,7 +198,8 @@ export function buildInvoicePrintHtml(input: {
     dueDate: input.dueDate ?? undefined,
     billTo: shipFrom,
     shipTo,
-    reference: input.trackingNumber?.trim() || undefined,
+    reference: input.trackingNumber?.trim() || quoteNumber || undefined,
+    quoteNumber,
     paymentMethod: invoicePaymentMethodLabel(input.paymentMethod),
     items: lineItemsFromApi(input.lineItems),
     subtotal: input.subtotal,

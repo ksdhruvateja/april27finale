@@ -30,16 +30,27 @@ function calcTotals(lineItems: Array<{ quantity: number; unitPrice: number; taxP
 
 async function withCustomerName(inv: typeof invoicesTable.$inferSelect) {
   const [customer] = await db.select({ name: customersTable.name }).from(customersTable).where(eq(customersTable.id, inv.customerId));
-  return { ...inv, customerName: customer?.name ?? "Unknown", lineItems: inv.lineItems as object[], subtotal: Number(inv.subtotal), taxTotal: Number(inv.taxTotal), discountTotal: Number(inv.discountTotal), total: Number(inv.total), invoiceNumber: inv.invoiceNumber ?? null, trackingNumber: inv.trackingNumber ?? null, quoteId: inv.quoteId ?? null };
+  let quoteNumber: string | null = null;
+  if (inv.quoteId) {
+    const [q] = await db.select({ quoteNumber: quotesTable.quoteNumber }).from(quotesTable).where(eq(quotesTable.id, inv.quoteId));
+    quoteNumber = q?.quoteNumber ?? null;
+  }
+  return { ...inv, customerName: customer?.name ?? "Unknown", lineItems: inv.lineItems as object[], subtotal: Number(inv.subtotal), taxTotal: Number(inv.taxTotal), discountTotal: Number(inv.discountTotal), total: Number(inv.total), invoiceNumber: inv.invoiceNumber ?? null, trackingNumber: inv.trackingNumber ?? null, quoteId: inv.quoteId ?? null, quoteNumber };
 }
 
 router.get("/invoices", async (_req, res): Promise<void> => {
   const invoices = await db.select().from(invoicesTable).orderBy(invoicesTable.createdAt);
   if (invoices.length === 0) { res.json([]); return; }
-  const ids = [...new Set(invoices.map(i => i.customerId))];
-  const customers = await db.select({ id: customersTable.id, name: customersTable.name }).from(customersTable).where(inArray(customersTable.id, ids));
+  const customerIds = [...new Set(invoices.map(i => i.customerId))];
+  const customers = await db.select({ id: customersTable.id, name: customersTable.name }).from(customersTable).where(inArray(customersTable.id, customerIds));
   const cmap = new Map(customers.map(c => [c.id, c.name]));
-  res.json(invoices.map(inv => ({ ...inv, customerName: cmap.get(inv.customerId) ?? "Unknown", lineItems: inv.lineItems as object[], subtotal: Number(inv.subtotal), taxTotal: Number(inv.taxTotal), discountTotal: Number(inv.discountTotal), total: Number(inv.total), invoiceNumber: inv.invoiceNumber ?? null, trackingNumber: inv.trackingNumber ?? null, quoteId: inv.quoteId ?? null })));
+  const quoteIds = [...new Set(invoices.map(i => i.quoteId).filter((id): id is number => id != null))];
+  const quoteMap = new Map<number, string | null>();
+  if (quoteIds.length > 0) {
+    const quotes = await db.select({ id: quotesTable.id, quoteNumber: quotesTable.quoteNumber }).from(quotesTable).where(inArray(quotesTable.id, quoteIds));
+    for (const q of quotes) quoteMap.set(q.id, q.quoteNumber);
+  }
+  res.json(invoices.map(inv => ({ ...inv, customerName: cmap.get(inv.customerId) ?? "Unknown", lineItems: inv.lineItems as object[], subtotal: Number(inv.subtotal), taxTotal: Number(inv.taxTotal), discountTotal: Number(inv.discountTotal), total: Number(inv.total), invoiceNumber: inv.invoiceNumber ?? null, trackingNumber: inv.trackingNumber ?? null, quoteId: inv.quoteId ?? null, quoteNumber: inv.quoteId ? (quoteMap.get(inv.quoteId) ?? null) : null })));
 });
 
 function parseOptionalDate(value: unknown): Date | undefined {

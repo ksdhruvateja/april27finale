@@ -26,7 +26,10 @@ export interface ForezInvoiceInput {
   dueDate?: string;
   billTo: Address;
   shipTo: Address;
+  /** Order confirmation / reference number (trackingNumber or fallback to quoteNumber). */
   reference?: string;
+  /** Source quote number — displayed as "QUOTE #" when present. */
+  quoteNumber?: string;
   paymentMethod?: string;
   items: LineItem[];
   subtotal: number;
@@ -303,16 +306,31 @@ ${renderForezTopHeader(FOREZ_INVOICE, `<div class="doc-title-right">${escapeHtml
   </div>
 </div>
 
+${data.quoteNumber ? `
+<div class="meta-band" style="grid-template-columns:1fr 1fr 1fr;">
+  <div class="meta-cell">
+    <div class="meta-label">ORDER CONFIRMATION #</div>
+    <div class="meta-value">${escapeHtml(data.reference ?? "")}</div>
+  </div>
+  <div class="meta-cell">
+    <div class="meta-label">QUOTE #</div>
+    <div class="meta-value">${escapeHtml(data.quoteNumber)}</div>
+  </div>
+  <div class="meta-cell">
+    <div class="meta-label">PMT METHOD</div>
+    <div class="meta-value">${escapeHtml(data.paymentMethod ?? "ACH")}</div>
+  </div>
+</div>` : `
 <div class="meta-band two-col">
   <div class="meta-cell">
-    <div class="meta-label">REFERENCE #</div>
+    <div class="meta-label">ORDER CONFIRMATION #</div>
     <div class="meta-value">${escapeHtml(data.reference ?? "")}</div>
   </div>
   <div class="meta-cell">
     <div class="meta-label">PMT METHOD</div>
     <div class="meta-value">${escapeHtml(data.paymentMethod ?? "ACH")}</div>
   </div>
-</div>
+</div>`}
 
 <hr class="rule-heavy" />
 

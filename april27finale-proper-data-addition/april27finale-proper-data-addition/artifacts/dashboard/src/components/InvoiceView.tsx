@@ -42,6 +42,7 @@ interface Invoice {
   invoiceNumber?: string | null;
   trackingNumber?: string | null;
   quoteId?: number | null;
+  quoteNumber?: string | null;
 }
 
 interface Props {
@@ -98,6 +99,7 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
       total: invoice.total,
       notes,
       trackingNumber: invoice.trackingNumber,
+      quoteNumber: invoice.quoteNumber,
       paymentMethod: invoice.paymentMethod,
     });
   }, [invoice, customer, effectiveInvoiceNum]);
