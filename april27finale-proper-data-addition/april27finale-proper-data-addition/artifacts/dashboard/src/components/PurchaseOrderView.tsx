@@ -48,7 +48,7 @@ export default function PurchaseOrderView({ po, onClose, sourceInvoiceLabel }: P
 
   const previewHtml = useMemo(() => {
     const reference = sourceInvoiceLabel
-      ? `Invoice ${sourceInvoiceLabel}`
+      ? sourceInvoiceLabel
       : po.sourceInvoiceId
         ? `Invoice #${po.sourceInvoiceId}`
         : undefined;
