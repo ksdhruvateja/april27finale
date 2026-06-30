@@ -140,9 +140,8 @@ export default function QuoteView({ quote, onClose }: Props) {
         total: quote.total,
         notes: quote.notes,
         trackingNumber: (quote as any).trackingNumber,
-        acceptedBy: quote.status === "accepted" ? quote.customerName : undefined,
-        acceptedDate:
-          quote.status === "accepted" ? formatDate(quote.createdAt) : undefined,
+        acceptedBy: undefined,
+        acceptedDate: undefined,
       }),
     [quote, quoteNum, customer],
   );

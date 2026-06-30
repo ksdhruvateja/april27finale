@@ -261,12 +261,8 @@ export function buildQuotePrintHtml(input: {
     return taxable ? { ...item, unit: "T" } : item;
   });
 
-  const acceptedBy =
-    input.acceptedBy?.trim() ||
-    (input.customerName ? input.customerName.split(" ")[0] : undefined);
-  const acceptedDate =
-    input.acceptedDate?.trim() ||
-    (input.dueDate ? formatPrintDate(input.dueDate) : undefined);
+  const acceptedBy = input.acceptedBy?.trim() || undefined;
+  const acceptedDate = input.acceptedDate?.trim() || undefined;
 
   const quoteNumber = normalizeForezDocNumber(input.quoteNumber, "quote");
 

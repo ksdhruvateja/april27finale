@@ -308,12 +308,13 @@ ${referenceBlock}
   </div>
 </div>
 
+${data.acceptedBy || data.acceptedDate ? `
 <div class="signatures-row">
   <span>Accepted By</span>
   <span class="sig-value">${data.acceptedBy ? escapeHtml(data.acceptedBy) : ""}</span>
   <span>Accepted Date</span>
   <span class="sig-value">${data.acceptedDate ? escapeHtml(data.acceptedDate) : ""}</span>
-</div>
+</div>` : ""}
 
 <div class="thanks-footer">Thank You For Your Business!!!</div>
 
