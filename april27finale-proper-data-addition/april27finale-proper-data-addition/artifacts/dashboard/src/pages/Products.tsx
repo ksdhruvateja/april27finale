@@ -1139,7 +1139,7 @@ export default function Products() {
 
         {/* ── PRODUCT INSIGHTS PANEL ───────────────────────────────── */}
         {showInsights && (
-          <div className="glass-card p-5 flex flex-col gap-4 max-h-[min(42vh,520px)] overflow-y-auto">
+          <div className="glass-card p-5 flex flex-col gap-4 max-h-[min(60vh,640px)] overflow-y-auto">
             {/* Insight controls */}
             <div className="flex flex-wrap items-center gap-3">
               {/* View toggle */}
