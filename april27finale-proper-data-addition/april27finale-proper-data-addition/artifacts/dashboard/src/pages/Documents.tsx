@@ -246,7 +246,7 @@ export default function Documents() {
           </div>
 
           {/* ── MAIN content ──────────────────────────────────── */}
-          <div className="flex-1 flex flex-col min-h-0 h-0 p-4 gap-4 overflow-hidden">
+          <div className="flex-1 flex flex-col min-h-0 p-4 gap-4 overflow-hidden">
 
             {/* Toolbar */}
             <div className="flex items-center gap-3 flex-shrink-0">
