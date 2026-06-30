@@ -198,7 +198,7 @@ export default function Shipments() {
 
         {/* ── Analytics Panel ─────────────────────────────── */}
         {showCharts && (
-          <div className="glass-card analytics-panel p-5 flex flex-col gap-4">
+          <div className="glass-card analytics-panel p-5 flex flex-col gap-4 max-h-[min(60vh,640px)] overflow-y-auto">
             {/* KPI row */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[

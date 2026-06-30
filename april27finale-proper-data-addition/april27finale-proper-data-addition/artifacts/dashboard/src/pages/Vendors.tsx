@@ -180,7 +180,7 @@ export default function Vendors() {
 
         {/* Analytics panel */}
         {showCharts && (
-          <div className="glass-card p-5 flex flex-col gap-4 max-h-[min(42vh,520px)] overflow-y-auto">
+          <div className="glass-card p-5 flex flex-col gap-4 max-h-[min(60vh,640px)] overflow-y-auto">
             <div className="flex items-center gap-3 flex-wrap">
               <div className="flex rounded-xl overflow-hidden border border-slate-200 shadow-sm">
                 {([
