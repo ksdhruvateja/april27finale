@@ -1,85 +1,92 @@
 # Railway Deployment Guide
 
-This repo is already configured for Railway in `railway.toml`:
-- Build command: `pnpm run build:railway`
-- Start command: `pnpm run start:railway`
+This repo is fully configured for Railway. The app serves both the API and dashboard from a single service.
 
-The app serves both API and dashboard from one service.
+## What's already done (no extra setup needed)
+- All 23 database tables exist on Neon
+- All data migrated from Replit PostgreSQL → Neon
+- `railway.toml`, `Dockerfile`, and `nixpacks.toml` are configured
+- No Railway PostgreSQL add-on needed — Neon is the database
 
-## 1) Create the Railway project
+---
 
-1. Push your branch to GitHub.
-2. In Railway, click **New Project** -> **Deploy from GitHub Repo**.
-3. Select this repository.
-4. Railway should detect `railway.toml` and use it automatically.
+## Steps to deploy on Railway
 
-## 2) Add a PostgreSQL database
+### 1) Push to GitHub
 
-1. In the same Railway project, click **New** -> **Database** -> **PostgreSQL**.
-2. Open your app service **Variables** tab.
-3. Add:
-  - `NEON_DATABASE_URL=<your neon connection string>`
+Push this repository to GitHub.
 
-Notes:
-- The backend uses `NEON_DATABASE_URL` as the primary source.
-- Fallback aliases are supported: `DATABASE_URL` and `database_url`.
-- `PORT` is injected by Railway automatically.
+### 2) Create a Railway project
 
-## 3) Set app variables
+1. Go to [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub Repo**
+2. Select your repository
+3. Railway auto-detects `railway.toml` — no extra config needed
 
-Minimum required:
-- `NODE_ENV=production`
-- `NEON_DATABASE_URL=<your neon connection string>`
+### 3) Set environment variables
 
-Optional variables (only if you use these features):
+In your Railway service → **Variables** tab, add:
+
+| Variable | Value |
+|---|---|
+| `NEON_DATABASE_URL` | your Neon connection string (postgresql://...) |
+| `NODE_ENV` | `production` |
+| `SESSION_SECRET` | any long random string |
+| `ALLOWED_ORIGIN` | your Railway public URL (e.g. `https://yourapp.up.railway.app`) |
+
+Optional (only if features are used):
 - `EASYSHIP_API_KEY`
 - `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV`
-- `DWOLLA_KEY`, `DWOLLA_SECRET`, `DWOLLA_ENV`
-- `CHECKEEPER_TOKEN`
 - `LOG_LEVEL` (defaults to `info`)
 
-Use `.env.railway.example` as your source-of-truth list.
+> **Note:** Railway injects `PORT` automatically — do not set it manually.
 
-## 4) First deploy
+### 4) Deploy
 
-1. Trigger deploy (automatic on push, or click **Deploy** in Railway).
-2. Wait for build and start to complete.
-3. Open your service URL and verify:
-   - `GET /api/healthz` returns `{ "status": "ok" }`
-
-## 5) Run schema push (important)
-
-Run this once after database is attached (and whenever schema changes):
-
-```bash
-pnpm --filter @workspace/db run push
+Railway triggers a build automatically on every push. The build runs:
+```
+pnpm run build:railway
+```
+Which builds both the dashboard (Vite) and API server (esbuild). Start command:
+```
+node artifacts/api-server/dist/index.mjs
 ```
 
-How to run it:
-- Option A: locally from your machine with `NEON_DATABASE_URL` set.
-- Option B: Railway service shell/CLI with the same env vars.
+### 5) Verify
 
-## 6) Smoke test checklist
+Once deployed, check:
+- `GET https://yourapp.up.railway.app/api/healthz` → `{ "status": "ok" }`
+- Open the root URL → dashboard loads
+- Login: `developer@gmail.com` / `developer143`
 
-- `GET /api/healthz` is healthy.
-- Login works with default dev user:
-  - email: `developer@gmail.com`
-  - password: `developer143`
-- Dashboard loads from the same service URL.
-- If enabled, integrations show configured status:
-  - `GET /api/easyship/status`
-  - `GET /api/plaid/status`
+---
 
-## 7) Production hardening
+## Schema changes (future)
 
-- Rotate default developer credentials after first login.
-- Add a custom domain in Railway.
-- Restrict who can access Railway project variables.
-- Enable Railway alerts/log monitoring.
+If you ever update the Drizzle schema locally, push it to Neon by running:
+
+```bash
+NEON_DATABASE_URL="your-connection-string" pnpm --filter @workspace/db run push-force
+```
+
+---
 
 ## Common failures
 
-- **Build fails during `vite build`**: ensure `NEON_DATABASE_URL` is not required at build time; dashboard build needs devDependencies (`pnpm install --prod=false`). Do not set `NODE_ENV=production` until runtime if install skips dev packages.
-- **Boot loop with DB error**: `NEON_DATABASE_URL` (or fallback alias) missing or invalid.
-- **Deploy succeeds but endpoints fail**: schema not pushed yet; run `pnpm --filter @workspace/db run push`.
-- **Integration errors**: missing provider keys (Plaid/Dwolla/Checkeeper/EasyShip).
+| Symptom | Fix |
+|---|---|
+| Boot loop with DB error | `NEON_DATABASE_URL` missing or wrong |
+| API 500s after deploy | Schema out of sync — run `push-force` against Neon |
+| CORS errors from browser | Set `ALLOWED_ORIGIN` to your Railway domain |
+| Login works but sessions lost on restart | Set `SESSION_SECRET` env var |
+| Build fails on Vite step | Do not set `NODE_ENV=production` during install phase |
+
+---
+
+## Architecture
+
+```
+Railway Service (single container)
+  ├── artifacts/api-server/   Express API on PORT (Railway-injected)
+  │     └── serves dashboard static files from artifacts/dashboard/dist/public/
+  └── Neon PostgreSQL (external, via NEON_DATABASE_URL)
+```
