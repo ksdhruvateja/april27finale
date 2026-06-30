@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.log
+.env
+.env.local
+replit.nixzipFile.zip
+april27finale-proper-data-addition/april27finale-proper-data-addition/node_modules/
+april27finale-proper-data-addition/april27finale-proper-data-addition/artifacts/*/node_modules/
+april27finale-proper-data-addition/april27finale-proper-data-addition/artifacts/*/dist/
+april27finale-proper-data-addition/april27finale-proper-data-addition/lib/*/node_modules/
+april27finale-proper-data-addition/april27finale-proper-data-addition/lib/*/dist/
+april27finale-proper-data-addition/april27finale-proper-data-addition/artifacts/api-server/uploads/

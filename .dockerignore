@@ -1,0 +1,11 @@
+replit.nixzipFile.zip
+
+# Exclude heavy/unnecessary dirs from app folder
+april27finale-proper-data-addition/april27finale-proper-data-addition/node_modules
+april27finale-proper-data-addition/april27finale-proper-data-addition/artifacts/*/node_modules
+april27finale-proper-data-addition/april27finale-proper-data-addition/lib/*/node_modules
+april27finale-proper-data-addition/april27finale-proper-data-addition/artifacts/*/dist
+april27finale-proper-data-addition/april27finale-proper-data-addition/lib/*/dist
+april27finale-proper-data-addition/april27finale-proper-data-addition/attached_assets/forez-backend-test-2
+april27finale-proper-data-addition/april27finale-proper-data-addition/attached_assets/*.zip
+april27finale-proper-data-addition/april27finale-proper-data-addition/artifacts/api-server/uploads
