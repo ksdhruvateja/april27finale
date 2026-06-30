@@ -1,5 +1,7 @@
-import express, { type Express } from "express";
+import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
+import helmet from "helmet";
+import { rateLimit } from "express-rate-limit";
 import pinoHttp from "pino-http";
 import path from "node:path";
 import { existsSync } from "node:fs";
@@ -7,6 +9,38 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 
 const app: Express = express();
+
+const isProd = process.env.NODE_ENV === "production";
+
+app.use(helmet({
+  contentSecurityPolicy: isProd ? {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc:  ["'self'", "'unsafe-inline'"],
+      styleSrc:   ["'self'", "'unsafe-inline'"],
+      imgSrc:     ["'self'", "data:", "blob:"],
+      connectSrc: ["'self'"],
+      fontSrc:    ["'self'"],
+      objectSrc:  ["'none'"],
+      frameSrc:   ["'none'"],
+    },
+  } : false,
+  crossOriginEmbedderPolicy: false,
+  hsts: isProd ? { maxAge: 31536000, includeSubDomains: true } : false,
+}));
+
+const allowedOrigin = process.env.ALLOWED_ORIGIN;
+app.use(
+  cors({
+    origin: allowedOrigin
+      ? (origin, cb) => {
+          if (!origin || origin === allowedOrigin) cb(null, true);
+          else cb(new Error("Not allowed by CORS"));
+        }
+      : true,
+    credentials: true,
+  }),
+);
 
 app.use(
   pinoHttp({
@@ -27,14 +61,29 @@ app.use(
     },
   }),
 );
-app.use(
-  cors({
-    origin: true,
-    credentials: true,
-  }),
-);
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many login attempts. Please wait 15 minutes before trying again." },
+  skip: () => !isProd,
+});
+app.use("/api/auth/login", authLimiter);
+
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please slow down." },
+  skip: () => !isProd,
+});
+app.use("/api", apiLimiter);
+
+app.use(express.json({ limit: "2mb" }));
+app.use(express.urlencoded({ extended: true, limit: "2mb" }));
 
 const dashboardDistPath = path.resolve(
   process.cwd(),
@@ -112,9 +161,8 @@ app.get(hasDashboardBuild ? ["/api", "/api/"] : ["/", "/api", "/api/"], (_req, r
     <div class="section">
       <h2>Default Credentials</h2>
       <div class="creds">
-        <p>Email: <code>developer@gmail.com</code></p>
-        <p>Password: <code>developer143</code></p>
-        <p style="margin:0">Role: <code>developer</code> (full access)</p>
+        <p>Credentials are managed in the <strong>Users</strong> section of the dashboard.</p>
+        <p style="margin:0">Contact your administrator for login details.</p>
       </div>
     </div>
 
@@ -177,5 +225,14 @@ if (hasDashboardBuild) {
     res.sendFile(path.join(dashboardDistPath, "index.html"));
   });
 }
+
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  logger.error(err);
+  const status = typeof err.status === "number" ? err.status : 500;
+  const message = isProd
+    ? status >= 500 ? "An internal server error occurred." : err.message
+    : err.message ?? "Unknown error";
+  res.status(status).json({ error: message });
+});
 
 export default app;

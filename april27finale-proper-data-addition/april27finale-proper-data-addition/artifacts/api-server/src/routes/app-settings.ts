@@ -45,7 +45,8 @@ router.get("/app-settings/:key", async (req, res): Promise<void> => {
   const key = req.params.key;
   const [row] = await db.select().from(appSettingsTable).where(eq(appSettingsTable.key, key));
   if (!row) { res.status(404).json({ error: "Not found" }); return; }
-  res.json({ key: row.key, value: row.value });
+  const value = row.value ? maskValue(row.key, row.value) : row.value;
+  res.json({ key: row.key, value });
 });
 
 router.put("/app-settings/:key", async (req, res): Promise<void> => {
