@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useEffect, useState } from "react";
 import { X, Printer, CheckCircle2, Clock, AlertTriangle, Ban, ShoppingCart } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { formatInvoiceNumber } from "@/lib/forez-document-numbers";
@@ -71,6 +71,13 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
 
 export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPending, onCreatePO }: Props) {
   const { data: customers } = useListCustomers();
+  const [paymentLinkBase, setPaymentLinkBase] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/app-settings/payment_link_url")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.value) setPaymentLinkBase(d.value); });
+  }, []);
 
   const customer = customers?.find((c: any) => c.id === invoice.customerId) as any;
 
@@ -85,6 +92,10 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
         : null;
 
     const notes = [invoice.notes, paidNote].filter(Boolean).join("\n\n") || null;
+
+    const paymentUrl = paymentLinkBase
+      ? `${paymentLinkBase.replace(/\/$/, "")}?invoice_id=${invoice.id}&ref=${encodeURIComponent(effectiveInvoiceNum)}`
+      : undefined;
 
     return buildInvoicePrintHtml({
       invoiceNumber: effectiveInvoiceNum,
@@ -101,8 +112,10 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
       trackingNumber: invoice.trackingNumber,
       quoteNumber: invoice.quoteNumber,
       paymentMethod: invoice.paymentMethod,
+      paymentUrl,
+      showPaymentSection: !!paymentLinkBase,
     });
-  }, [invoice, customer, effectiveInvoiceNum]);
+  }, [invoice, customer, effectiveInvoiceNum, paymentLinkBase]);
 
   function handlePrint() {
     openForezDocumentPrint(previewHtml);

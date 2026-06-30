@@ -13,17 +13,25 @@ const ALLOWED_KEYS = [
   "company_zip",
   "company_phone",
   "company_email",
+  "stripe_secret_key",
+  "stripe_publishable_key",
+  "payment_link_url",
 ];
+
+const MASKED_KEYS = new Set(["easyship_api_key", "stripe_secret_key"]);
+
+function maskValue(key: string, value: string): string {
+  if (MASKED_KEYS.has(key) && value.length > 8) {
+    return value.slice(0, 6) + "••••••••" + value.slice(-4);
+  }
+  return value;
+}
 
 router.get("/app-settings", async (_req, res): Promise<void> => {
   const rows = await db.select().from(appSettingsTable);
   const result: Record<string, string | null> = {};
   for (const row of rows) {
-    if (row.key === "easyship_api_key" && row.value) {
-      result[row.key] = row.value.slice(0, 6) + "••••••••" + row.value.slice(-4);
-    } else {
-      result[row.key] = row.value ?? null;
-    }
+    result[row.key] = row.value ? maskValue(row.key, row.value) : null;
   }
   res.json(result);
 });

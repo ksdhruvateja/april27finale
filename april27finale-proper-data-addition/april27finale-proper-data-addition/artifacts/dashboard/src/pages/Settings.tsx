@@ -1,7 +1,7 @@
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
 import { useState, useEffect } from "react";
-import { Truck, Save, CheckCircle2, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Truck, Save, CheckCircle2, Eye, EyeOff, Loader2, CreditCard, Link } from "lucide-react";
 
 function ShippingSection() {
   const [apiKey, setApiKey] = useState("");
@@ -130,6 +130,151 @@ function ShippingSection() {
   );
 }
 
+function PaymentSection() {
+  const [secretKey, setSecretKey]   = useState("");
+  const [maskedKey, setMaskedKey]   = useState<string | null>(null);
+  const [showKey, setShowKey]       = useState(false);
+  const [payUrl, setPayUrl]         = useState("");
+  const [savedUrl, setSavedUrl]     = useState<string | null>(null);
+  const [saving, setSaving]         = useState(false);
+  const [saved, setSaved]           = useState(false);
+  const [isConfigured, setIsConfigured] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/app-settings/stripe_secret_key")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.value) { setMaskedKey(d.value); setIsConfigured(true); } });
+    fetch("/api/app-settings/payment_link_url")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.value) setSavedUrl(d.value); });
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      if (secretKey.trim()) {
+        const r = await fetch("/api/app-settings/stripe_secret_key", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ value: secretKey.trim() }),
+        });
+        if (r.ok) {
+          setMaskedKey(secretKey.slice(0, 6) + "••••••••" + secretKey.slice(-4));
+          setSecretKey("");
+          setShowKey(false);
+          setIsConfigured(true);
+        }
+      }
+      if (payUrl.trim() !== (savedUrl ?? "")) {
+        await fetch("/api/app-settings/payment_link_url", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ value: payUrl.trim() }),
+        });
+        setSavedUrl(payUrl.trim() || null);
+      }
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleClearKey = async () => {
+    if (!confirm("Remove the Stripe API key?")) return;
+    await fetch("/api/app-settings/stripe_secret_key", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ value: "" }),
+    });
+    setMaskedKey(null);
+    setIsConfigured(false);
+  };
+
+  return (
+    <div className="glass-card p-6 max-w-2xl">
+      <div className="flex items-center gap-2 mb-1">
+        <CreditCard size={16} className="text-[hsl(224_50%_25%)]" />
+        <h2 className="text-slate-800 text-base font-bold">Payments</h2>
+        <span className={`ml-auto inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+          isConfigured
+            ? "bg-green-50 text-green-700 border-green-200"
+            : "bg-slate-100 text-slate-500 border-slate-200"
+        }`}>
+          {isConfigured ? "● Active" : "○ Not connected"}
+        </span>
+      </div>
+      <p className="text-slate-500 text-sm mb-5">
+        Connect your Stripe account to enable the <strong>View and Pay</strong> button on printed invoices. Customers can click the link to pay online.
+      </p>
+
+      {maskedKey && !secretKey && (
+        <div className="flex items-center justify-between p-3 mb-4 rounded-lg bg-green-50 border border-green-200">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={14} className="text-green-600" />
+            <div>
+              <p className="text-sm font-semibold text-green-800">Stripe API Key Connected</p>
+              <p className="text-xs text-green-700 font-mono mt-0.5">{maskedKey}</p>
+            </div>
+          </div>
+          <button onClick={handleClearKey} className="text-xs text-red-500 hover:text-red-700 font-semibold transition-colors">
+            Remove
+          </button>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-4">
+        <div>
+          <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">
+            Stripe Secret Key
+          </label>
+          <div className="relative">
+            <input
+              type={showKey ? "text" : "password"}
+              value={secretKey}
+              onChange={e => setSecretKey(e.target.value)}
+              placeholder={maskedKey ? "Enter new key to replace…" : "sk_live_… or sk_test_…"}
+              className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2.5 pr-10 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-400 transition-colors font-mono"
+            />
+            <button onClick={() => setShowKey(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+              {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
+          <p className="text-xs text-slate-400 mt-1.5">Used server-side to create Stripe Checkout sessions. Never exposed to customers.</p>
+        </div>
+
+        <div>
+          <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+            <Link size={11} /> Payment Link URL
+          </label>
+          <input
+            type="url"
+            value={payUrl || savedUrl || ""}
+            onChange={e => setPayUrl(e.target.value)}
+            placeholder="https://buy.stripe.com/… or your checkout page URL"
+            className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-400 transition-colors"
+          />
+          <p className="text-xs text-slate-400 mt-1.5">
+            This URL appears as the <strong>View and Pay</strong> button on invoice prints. You can use a Stripe Payment Link or your own checkout page. Invoice ID will be appended automatically.
+          </p>
+        </div>
+
+        <button
+          onClick={handleSave}
+          disabled={(!secretKey.trim() && payUrl.trim() === (savedUrl ?? "")) || saving}
+          className="flex items-center gap-2 self-start px-4 py-2 bg-[hsl(224_50%_15%)] text-white text-sm font-semibold rounded-lg hover:bg-[hsl(224_50%_20%)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {saving
+            ? <><Loader2 size={14} className="animate-spin" /> Saving…</>
+            : saved
+            ? <><CheckCircle2 size={14} /> Saved!</>
+            : <><Save size={14} /> Save Payment Settings</>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function Settings() {
   return (
     <Layout>
@@ -162,7 +307,10 @@ export default function Settings() {
         {/* Integrations */}
         <div className="max-w-2xl">
           <h2 className="text-slate-600 text-xs font-bold uppercase tracking-wider mb-3 px-1">Integrations</h2>
-          <ShippingSection />
+          <div className="flex flex-col gap-4">
+            <PaymentSection />
+            <ShippingSection />
+          </div>
         </div>
 
       </div>
