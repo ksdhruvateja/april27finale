@@ -22,7 +22,7 @@ function formatDateStr(d: string | null | undefined): string {
 
 export default function PayNowModal({ invoice, customerEmail, onClose }: Props) {
   const [paymentLinkBase, setPaymentLinkBase] = useState<string | null>(null);
-  const [companyName, setCompanyName] = useState("QuickBoo");
+  const [companyName, setCompanyName] = useState("Team Forez Corp");
   const [smtpReady, setSmtpReady] = useState<boolean | null>(null);
 
   const [tab, setTab] = useState<"link" | "email">("link");

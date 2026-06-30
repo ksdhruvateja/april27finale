@@ -67,7 +67,7 @@ function ShippingSection() {
         </span>
       </div>
       <p className="text-slate-500 text-sm mb-5">
-        Connect your shipping account to fetch live carrier rates and generate shipping labels directly from QuickBoo.
+        Connect your shipping account to fetch live carrier rates and generate shipping labels directly from Team Forez Corp.
       </p>
 
       {masked && !apiKey && (
@@ -188,7 +188,7 @@ function EmailSection() {
         </span>
       </div>
       <p className="text-slate-500 text-sm mb-5">
-        Configure your outgoing mail server so QuickBoo can automatically send invoice payment reminders to customers.
+        Configure your outgoing mail server so Team Forez Corp can automatically send invoice payment reminders to customers.
       </p>
 
       <div className="flex flex-col gap-4">
@@ -227,7 +227,7 @@ function EmailSection() {
         <div>
           <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">From Address (optional)</label>
           <input type="text" value={from} onChange={e => setFrom(e.target.value)}
-            placeholder='QuickBoo <noreply@yourdomain.com>'
+            placeholder='Team Forez Corp <noreply@yourdomain.com>'
             className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-400 transition-colors" />
           <p className="text-xs text-slate-400 mt-1.5">If blank, emails will be sent from your username.</p>
         </div>
@@ -397,7 +397,7 @@ export default function Settings() {
         {/* Company Settings */}
         <div className="glass-card p-6 max-w-2xl">
           <h2 className="text-slate-800 text-base font-bold mb-1">Company Settings</h2>
-          <p className="text-slate-500 text-sm mb-5">Manage your QuickBoo workspace, billing, and team members.</p>
+          <p className="text-slate-500 text-sm mb-5">Manage your Team Forez Corp workspace, billing, and team members.</p>
           <div className="flex flex-col gap-0 rounded-xl border border-slate-200 overflow-hidden">
             {[
               { title: "Company Profile",   desc: "Update company name, logo, and contact info.", action: "Edit" },

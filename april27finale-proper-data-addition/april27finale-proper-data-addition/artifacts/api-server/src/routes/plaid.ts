@@ -47,7 +47,7 @@ router.post("/plaid/create-link-token", async (_req, res): Promise<void> => {
   try {
     const response = await client.linkTokenCreate({
       user: { client_user_id: "quickboo-user-1" },
-      client_name: "QuickBoo",
+      client_name: "Team Forez Corp",
       products: [Products.Transactions, Products.Auth],
       country_codes: [CountryCode.Us],
       language: "en",
@@ -211,7 +211,7 @@ router.post("/plaid/transfer", async (req, res): Promise<void> => {
       network: TransferNetwork.Ach,
       amount,
       ach_class: ACHClass.Ppd,
-      user: { legal_name: "QuickBoo User" },
+      user: { legal_name: "Team Forez Corp User" },
     });
     const authId = authRes.data.authorization.id;
     const txRes = await client.transferCreate({

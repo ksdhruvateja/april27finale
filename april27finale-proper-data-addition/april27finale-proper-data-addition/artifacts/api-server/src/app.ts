@@ -56,7 +56,7 @@ app.get(hasDashboardBuild ? ["/api", "/api/"] : ["/", "/api", "/api/"], (_req, r
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>QuickBoo API</title>
+  <title>Team Forez Corp API</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
@@ -86,7 +86,7 @@ app.get(hasDashboardBuild ? ["/api", "/api/"] : ["/", "/api", "/api/"], (_req, r
 </head>
 <body>
   <header>
-    <h1>⚡ QuickBoo API</h1>
+    <h1>⚡ Team Forez Corp API</h1>
     <span class="badge">LIVE</span>
   </header>
   <div class="container">
