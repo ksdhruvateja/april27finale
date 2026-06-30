@@ -48,6 +48,8 @@ import Tickets from "@/pages/Tickets";
 import History from "@/pages/History";
 import WalkIn from "@/pages/WalkIn";
 import Documents from "@/pages/Documents";
+import Estimates from "@/pages/Estimates";
+import Inventory from "@/pages/Inventory";
 import NotFound from "@/pages/not-found";
 
 interface MutationLogDef {
@@ -416,6 +418,8 @@ function Router() {
       <Route path="/history"         component={() => <GuardedRoute component={History}          path="/history" />} />
       <Route path="/walk-in"         component={() => <GuardedRoute component={WalkIn}           path="/walk-in" />} />
       <Route path="/documents"       component={() => <GuardedRoute component={Documents}        path="/documents" />} />
+      <Route path="/estimates"       component={() => <GuardedRoute component={Estimates}        path="/estimates" />} />
+      <Route path="/inventory"       component={() => <GuardedRoute component={Inventory}        path="/inventory" />} />
       <Route component={NotFound} />
     </Switch>
   );

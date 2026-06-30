@@ -32,10 +32,10 @@ const RoleContext = createContext<RoleContextType | null>(null);
 export const ROLE_ACCESS: Record<Exclude<UserRole, "custom">, string[]> = {
   developer:  ["*"],
   admin:      ["*"],
-  sales:      ["/", "/auctions", "/customers", "/quotes", "/invoices", "/walk-in", "/purchase-orders", "/products", "/shipments", "/sales-leads", "/tickets", "/history", "/documents"],
-  shipper:    ["/purchase-orders", "/shipments", "/documents"],
+  sales:      ["/", "/auctions", "/customers", "/quotes", "/estimates", "/invoices", "/walk-in", "/purchase-orders", "/products", "/inventory", "/shipments", "/sales-leads", "/tickets", "/history", "/documents"],
+  shipper:    ["/purchase-orders", "/shipments", "/inventory", "/documents"],
   accountant: ["/", "/auctions", "/customers", "/invoices", "/walk-in", "/vendors", "/purchase-orders", "/bills", "/tax-rates", "/accounting", "/banking", "/tickets", "/history", "/documents"],
-  viewer:     ["/", "/auctions", "/quotes", "/invoices", "/purchase-orders", "/shipments", "/tickets", "/history", "/documents"],
+  viewer:     ["/", "/auctions", "/quotes", "/estimates", "/invoices", "/purchase-orders", "/shipments", "/inventory", "/tickets", "/history", "/documents"],
 };
 
 export function checkAccess(role: UserRole, path: string, customPermissions?: CustomPermissions): boolean {

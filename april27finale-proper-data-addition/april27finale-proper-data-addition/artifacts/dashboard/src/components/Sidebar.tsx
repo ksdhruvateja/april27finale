@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Users, Store, Package, FileText,
   Receipt, ShoppingCart, CreditCard, Truck, Percent,
-  Settings, BookOpen, Building2, UserCog, LogOut, UserCheck, Gavel, ArrowLeftRight, Headphones, Clock, Zap, FolderOpen,
+  Settings, BookOpen, Building2, UserCog, LogOut, UserCheck, Gavel, ArrowLeftRight, Headphones, Clock, Zap, FolderOpen, ClipboardList, Boxes,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useEffect, useRef } from "react";
@@ -22,6 +22,7 @@ const navGroups = [
     items: [
       { icon: Users,           label: "Customers",        href: "/customers"       },
       { icon: FileText,        label: "Quotes",           href: "/quotes"          },
+      { icon: ClipboardList,   label: "Estimates",        href: "/estimates"       },
       { icon: Receipt,         label: "Invoices",         href: "/invoices"        },
       { icon: Zap,             label: "Walk-in Sale",     href: "/walk-in"         },
       { icon: UserCheck,       label: "Sales Leads",      href: "/sales-leads"     },
@@ -40,6 +41,7 @@ const navGroups = [
     label: "INVENTORY",
     items: [
       { icon: Package, label: "Products",  href: "/products"  },
+      { icon: Boxes,   label: "Inventory", href: "/inventory" },
       { icon: Truck,   label: "Shipments", href: "/shipments" },
     ],
   },

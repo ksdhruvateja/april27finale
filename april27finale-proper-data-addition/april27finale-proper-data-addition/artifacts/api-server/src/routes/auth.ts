@@ -30,6 +30,10 @@ const LoginBody = z.object({
   password: z.string().min(1),
 });
 
+router.get("/auth/me", async (_req, res): Promise<void> => {
+  res.status(401).json({ error: "Not authenticated" });
+});
+
 router.post("/auth/login", async (req, res): Promise<void> => {
   const parsed = LoginBody.safeParse(req.body);
   if (!parsed.success) {
