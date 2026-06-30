@@ -1249,9 +1249,9 @@ export default function Products() {
                 </div>
                 <div className="flex-1 min-w-[220px] max-w-sm">
                   <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-3">Product Breakdown</p>
-                  <div className="overflow-hidden rounded-lg border border-slate-100">
+                  <div className="overflow-hidden rounded-lg border border-slate-100 max-h-52 overflow-y-auto">
                     <table className="w-full text-xs">
-                      <thead>
+                      <thead className="sticky top-0 z-10">
                         <tr style={{ background: "rgba(16,185,129,0.08)" }}>
                           <th className="px-3 py-2 text-left font-semibold text-slate-500">#</th>
                           <th className="px-3 py-2 text-left font-semibold text-slate-500">Product</th>
@@ -1265,7 +1265,7 @@ export default function Products() {
                         ) : productChartData.map((r: any, i: number) => (
                           <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
                             <td className="px-3 py-2 text-slate-400 font-mono text-[10px]">{i + 1}</td>
-                            <td className="px-3 py-2 font-medium text-slate-700 truncate max-w-[130px]" title={r.name}>{r.name}</td>
+                            <td className="px-3 py-2 font-medium text-slate-700 min-w-[120px]" title={r.name}>{r.name}</td>
                             <td className="px-3 py-2 text-right text-slate-500">{r.qty}</td>
                             <td className="px-3 py-2 text-right font-semibold text-emerald-600">${r.revenue.toFixed(2)}</td>
                           </tr>
@@ -1302,9 +1302,9 @@ export default function Products() {
                 {/* Table */}
                 <div className="flex-1 min-w-[220px] max-w-sm">
                   <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-3">Customer Breakdown</p>
-                  <div className="overflow-hidden rounded-lg border border-slate-100">
+                  <div className="overflow-hidden rounded-lg border border-slate-100 max-h-52 overflow-y-auto">
                     <table className="w-full text-xs">
-                      <thead>
+                      <thead className="sticky top-0 z-10">
                         <tr style={{ background: "rgba(59,130,246,0.07)" }}>
                           <th className="px-3 py-2 text-left font-semibold text-slate-500">Customer</th>
                           <th className="px-3 py-2 text-right font-semibold text-slate-500">Qty</th>
@@ -1316,7 +1316,7 @@ export default function Products() {
                           <tr><td colSpan={3} className="px-3 py-4 text-center text-slate-400">No data</td></tr>
                         ) : customerChartData.map((r: any, i: number) => (
                           <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
-                            <td className="px-3 py-2 font-medium text-slate-700 truncate max-w-[140px]" title={r.name}>{r.name}</td>
+                            <td className="px-3 py-2 font-medium text-slate-700 min-w-[120px]" title={r.name}>{r.name}</td>
                             <td className="px-3 py-2 text-right text-slate-500">{r.qty}</td>
                             <td className="px-3 py-2 text-right font-semibold text-blue-600">${r.revenue.toFixed(2)}</td>
                           </tr>
@@ -1353,9 +1353,9 @@ export default function Products() {
                 {/* Table */}
                 <div className="flex-1 min-w-[220px] max-w-sm">
                   <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-3">Vendor Breakdown</p>
-                  <div className="overflow-hidden rounded-lg border border-slate-100">
+                  <div className="overflow-hidden rounded-lg border border-slate-100 max-h-52 overflow-y-auto">
                     <table className="w-full text-xs">
-                      <thead>
+                      <thead className="sticky top-0 z-10">
                         <tr style={{ background: "rgba(139,92,246,0.08)" }}>
                           <th className="px-3 py-2 text-left font-semibold text-slate-500">Vendor</th>
                           <th className="px-3 py-2 text-right font-semibold text-slate-500">Qty</th>
@@ -1367,7 +1367,7 @@ export default function Products() {
                           <tr><td colSpan={3} className="px-3 py-4 text-center text-slate-400">No data</td></tr>
                         ) : vendorChartData.map((r: any, i: number) => (
                           <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
-                            <td className="px-3 py-2 font-medium text-slate-700 truncate max-w-[140px]" title={r.name}>{r.name}</td>
+                            <td className="px-3 py-2 font-medium text-slate-700 min-w-[120px]" title={r.name}>{r.name}</td>
                             <td className="px-3 py-2 text-right text-slate-500">{r.qty}</td>
                             <td className="px-3 py-2 text-right font-semibold text-violet-600">${r.cost.toFixed(2)}</td>
                           </tr>
@@ -1462,9 +1462,9 @@ export default function Products() {
                   <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">
                     <Clock size={11} /> Awaiting Payment ({awaitingPaymentData.length})
                   </p>
-                  <div className="overflow-hidden rounded-lg border border-slate-100">
+                  <div className="overflow-hidden rounded-lg border border-slate-100 max-h-52 overflow-y-auto">
                     <table className="w-full text-xs">
-                      <thead>
+                      <thead className="sticky top-0 z-10">
                         <tr style={{ background: "rgba(245,158,11,0.08)" }}>
                           <th className="px-3 py-2 text-left font-semibold text-slate-500">Invoice</th>
                           <th className="px-3 py-2 text-left font-semibold text-slate-500">Customer</th>
@@ -1478,7 +1478,7 @@ export default function Products() {
                         ) : awaitingPaymentData.map((r: any, i: number) => (
                           <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-amber-50/30"}>
                             <td className="px-3 py-2 font-mono text-blue-600">{r.forezInv}</td>
-                            <td className="px-3 py-2 text-slate-700 truncate max-w-[120px]" title={r.buyerName}>{r.buyerName}</td>
+                            <td className="px-3 py-2 text-slate-700 min-w-[100px]" title={r.buyerName}>{r.buyerName}</td>
                             <td className="px-3 py-2 text-right font-semibold text-slate-700">${r.total.toFixed(2)}</td>
                             <td className="px-3 py-2">
                               <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold capitalize ${

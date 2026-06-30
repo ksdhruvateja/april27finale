@@ -643,7 +643,7 @@ export default function Customers() {
                     <div key={entry.name} className="flex items-center gap-2 p-3 rounded-xl border border-slate-100 bg-white">
                       <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: entry.fill }} />
                       <div>
-                        <p className="text-[10px] text-slate-400 truncate max-w-[80px]">{entry.name}</p>
+                        <p className="text-[10px] text-slate-400 break-words" title={entry.name}>{entry.name}</p>
                         <p className="text-xl font-bold text-slate-700 leading-tight">{entry.value}</p>
                       </div>
                     </div>
