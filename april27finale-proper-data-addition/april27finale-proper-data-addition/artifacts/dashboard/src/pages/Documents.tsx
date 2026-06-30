@@ -91,34 +91,46 @@ export default function Documents() {
 
   const deleteMut = useMutation({
     mutationFn: async (id: number) => {
-      await fetch(`${BASE}/api/documents/${id}`, { method: "DELETE" });
+      const res = await fetch(`${BASE}/api/documents/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Delete failed");
+      }
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["documents"] }),
+    onError: (e: any) => setUploadError(e?.message ?? "Could not delete file"),
   });
 
   const starMut = useMutation({
     mutationFn: async ({ id, starred }: { id: number; starred: boolean }) => {
-      await fetch(`${BASE}/api/documents/${id}`, {
+      const res = await fetch(`${BASE}/api/documents/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ starred }),
       });
+      if (!res.ok) throw new Error("Could not update star");
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["documents"] }),
+    onError: (e: any) => setUploadError(e?.message ?? "Could not update file"),
   });
 
   const editMut = useMutation({
     mutationFn: async ({ id, name, description, category }: any) => {
-      await fetch(`${BASE}/api/documents/${id}`, {
+      const res = await fetch(`${BASE}/api/documents/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, description: description || null, category }),
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Save failed");
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["documents"] });
       setEditDoc(null);
     },
+    onError: (e: any) => setUploadError(e?.message ?? "Could not save changes"),
   });
 
   const uploadFile = useCallback(async (file: File) => {
@@ -131,7 +143,10 @@ export default function Documents() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
       });
-      if (!res1.ok) throw new Error("Could not get upload URL");
+      if (!res1.ok) {
+        const err = await res1.json().catch(() => ({}));
+        throw new Error(err.error ?? "Could not get upload URL");
+      }
       const { uploadURL, objectPath } = await res1.json();
 
       setUploadProgress({ name: file.name, pct: 30 });
@@ -141,7 +156,7 @@ export default function Documents() {
         headers: { "Content-Type": file.type || "application/octet-stream" },
         body: file,
       });
-      if (!res2.ok) throw new Error("Upload to storage failed");
+      if (!res2.ok) throw new Error("File upload failed — please try again");
 
       setUploadProgress({ name: file.name, pct: 80 });
 
@@ -168,10 +183,8 @@ export default function Documents() {
     } catch (e: any) {
       setUploadError(e?.message ?? "Upload failed");
     } finally {
-      setTimeout(() => {
-        setUploading(false);
-        setUploadProgress(null);
-      }, 600);
+      setUploading(false);
+      setUploadProgress(null);
     }
   }, [queryClient]);
 
@@ -180,6 +193,8 @@ export default function Documents() {
     for (const file of Array.from(files)) {
       await uploadFile(file);
     }
+    // Reset so the same file(s) can be re-uploaded if needed
+    if (fileInputRef.current) fileInputRef.current.value = "";
   }, [uploadFile]);
 
   const onDrop = useCallback((e: React.DragEvent) => {
