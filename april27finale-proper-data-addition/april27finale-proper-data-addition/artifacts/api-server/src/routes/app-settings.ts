@@ -16,9 +16,14 @@ const ALLOWED_KEYS = [
   "stripe_secret_key",
   "stripe_publishable_key",
   "payment_link_url",
+  "smtp_host",
+  "smtp_port",
+  "smtp_user",
+  "smtp_pass",
+  "smtp_from",
 ];
 
-const MASKED_KEYS = new Set(["easyship_api_key", "stripe_secret_key"]);
+const MASKED_KEYS = new Set(["easyship_api_key", "stripe_secret_key", "smtp_pass"]);
 
 function maskValue(key: string, value: string): string {
   if (MASKED_KEYS.has(key) && value.length > 8) {

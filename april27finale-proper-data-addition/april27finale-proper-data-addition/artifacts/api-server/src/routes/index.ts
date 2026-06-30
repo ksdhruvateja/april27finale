@@ -27,6 +27,7 @@ import appSettingsRouter from "./app-settings";
 import returnsRouter from "./returns";
 import plaidRouter from "./plaid";
 import ticketsRouter from "./tickets";
+import paymentsRouter from "./payments";
 
 const router: IRouter = Router();
 router.use(storageRouter);
@@ -58,5 +59,6 @@ router.use(appSettingsRouter);
 router.use(returnsRouter);
 router.use(plaidRouter);
 router.use(ticketsRouter);
+router.use(paymentsRouter);
 
 export default router;

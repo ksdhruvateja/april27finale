@@ -1,7 +1,7 @@
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
 import { useState, useEffect } from "react";
-import { Truck, Save, CheckCircle2, Eye, EyeOff, Loader2, CreditCard, Link } from "lucide-react";
+import { Truck, Save, CheckCircle2, Eye, EyeOff, Loader2, CreditCard, Link, Mail, Send } from "lucide-react";
 
 function ShippingSection() {
   const [apiKey, setApiKey] = useState("");
@@ -124,6 +124,119 @@ function ShippingSection() {
             : saved
             ? <><CheckCircle2 size={14} /> Saved!</>
             : <><Save size={14} /> Save API Key</>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function EmailSection() {
+  const [host, setHost] = useState("");
+  const [port, setPort] = useState("587");
+  const [user, setUser] = useState("");
+  const [pass, setPass] = useState("");
+  const [from, setFrom] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [isConfigured, setIsConfigured] = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      const keys = ["smtp_host", "smtp_port", "smtp_user", "smtp_pass", "smtp_from"];
+      const results = await Promise.all(
+        keys.map(k => fetch(`/api/app-settings/${k}`).then(r => r.ok ? r.json() : null))
+      );
+      const [h, p, u, pw, f] = results;
+      if (h?.value) { setHost(h.value); setIsConfigured(true); }
+      if (p?.value) setPort(p.value);
+      if (u?.value) setUser(u.value);
+      if (pw?.value) setPass(pw.value);
+      if (f?.value) setFrom(f.value);
+    };
+    load();
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await Promise.all([
+        fetch("/api/app-settings/smtp_host", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value: host.trim() }) }),
+        fetch("/api/app-settings/smtp_port", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value: port.trim() || "587" }) }),
+        fetch("/api/app-settings/smtp_user", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value: user.trim() }) }),
+        fetch("/api/app-settings/smtp_pass", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value: pass.trim() }) }),
+        fetch("/api/app-settings/smtp_from", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value: from.trim() }) }),
+      ]);
+      setIsConfigured(!!host.trim());
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="glass-card p-6 max-w-2xl">
+      <div className="flex items-center gap-2 mb-1">
+        <Mail size={16} className="text-[hsl(224_50%_25%)]" />
+        <h2 className="text-slate-800 text-base font-bold">Email (SMTP)</h2>
+        <span className={`ml-auto inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+          isConfigured ? "bg-green-50 text-green-700 border-green-200" : "bg-slate-100 text-slate-500 border-slate-200"
+        }`}>
+          {isConfigured ? "● Active" : "○ Not configured"}
+        </span>
+      </div>
+      <p className="text-slate-500 text-sm mb-5">
+        Configure your outgoing mail server so QuickBoo can automatically send invoice payment reminders to customers.
+      </p>
+
+      <div className="flex flex-col gap-4">
+        <div className="grid grid-cols-3 gap-3">
+          <div className="col-span-2">
+            <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">SMTP Host</label>
+            <input type="text" value={host} onChange={e => setHost(e.target.value)}
+              placeholder="smtp.gmail.com"
+              className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-400 transition-colors" />
+          </div>
+          <div>
+            <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">Port</label>
+            <input type="number" value={port} onChange={e => setPort(e.target.value)}
+              placeholder="587"
+              className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-400 transition-colors" />
+          </div>
+        </div>
+        <div>
+          <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">Username / Email</label>
+          <input type="email" value={user} onChange={e => setUser(e.target.value)}
+            placeholder="you@gmail.com"
+            className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-400 transition-colors" />
+        </div>
+        <div>
+          <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">Password / App Password</label>
+          <div className="relative">
+            <input type={showPass ? "text" : "password"} value={pass} onChange={e => setPass(e.target.value)}
+              placeholder="App password or SMTP password"
+              className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2.5 pr-10 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-400 transition-colors font-mono" />
+            <button onClick={() => setShowPass(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+              {showPass ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
+          <p className="text-xs text-slate-400 mt-1.5">For Gmail, generate an <strong>App Password</strong> in your Google Account security settings.</p>
+        </div>
+        <div>
+          <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">From Address (optional)</label>
+          <input type="text" value={from} onChange={e => setFrom(e.target.value)}
+            placeholder='QuickBoo <noreply@yourdomain.com>'
+            className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-400 transition-colors" />
+          <p className="text-xs text-slate-400 mt-1.5">If blank, emails will be sent from your username.</p>
+        </div>
+
+        <button onClick={handleSave} disabled={saving}
+          className="flex items-center gap-2 self-start px-4 py-2 bg-[hsl(224_50%_15%)] text-white text-sm font-semibold rounded-lg hover:bg-[hsl(224_50%_20%)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+          {saving ? <><Loader2 size={14} className="animate-spin" /> Saving…</>
+            : saved ? <><CheckCircle2 size={14} /> Saved!</>
+            : <><Save size={14} /> Save Email Settings</>}
         </button>
       </div>
     </div>
@@ -309,6 +422,7 @@ export default function Settings() {
           <h2 className="text-slate-600 text-xs font-bold uppercase tracking-wider mb-3 px-1">Integrations</h2>
           <div className="flex flex-col gap-4">
             <PaymentSection />
+            <EmailSection />
             <ShippingSection />
           </div>
         </div>

@@ -6,7 +6,7 @@ import Header from "@/components/Header";
 import InvoiceView from "@/components/InvoiceView";
 import InvoiceModal from "@/components/InvoiceModal";
 import { useListInvoices, useDeleteInvoice, usePayInvoice, useUpdateInvoice, getListInvoicesQueryKey, useListCustomers, useListPurchaseOrders, useListShipments } from "@workspace/api-client-react";
-import { Search, Plus, MoreHorizontal, Edit, Trash2, CheckCircle, Eye, X, Truck, ShoppingCart, Hash, Link2, ChevronDown, Pencil, StickyNote, Mail, MessageSquare, Download, Calendar, ChevronRight, BarChart2, ChevronUp, TrendingUp, TrendingDown, Printer, Save } from "lucide-react";
+import { Search, Plus, MoreHorizontal, Edit, Trash2, CheckCircle, Eye, X, Truck, ShoppingCart, Hash, Link2, ChevronDown, Pencil, StickyNote, Mail, MessageSquare, Download, Calendar, ChevronRight, BarChart2, ChevronUp, TrendingUp, TrendingDown, Printer, Save, CreditCard } from "lucide-react";
 import { printShippingSlip } from "@/lib/print-slip";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, Legend, PieChart, Pie, ComposedChart, Line, Area } from "recharts";
 import { useQueryClient } from "@tanstack/react-query";
@@ -16,6 +16,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { formatCurrency, formatDate } from "@/lib/utils";
 import ShipmentModal from "@/components/ShipmentModal";
 import InvoicePoModal from "@/components/InvoicePoModal";
+import PayNowModal from "@/components/PayNowModal";
 import { formatInvoiceNumber, forezDocFallbackNumber } from "@/lib/forez-document-numbers";
 
 type PaymentMethod = "stripe" | "bank_transfer" | "check" | "cash";
@@ -222,6 +223,7 @@ export default function Invoices() {
   const refInputRef = useRef<HTMLInputElement>(null);
   const numSavingRef = useRef(false);
   const refSavingRef = useRef(false);
+  const [payNowInvoice, setPayNowInvoice] = useState<any>(null);
   const [noteOpenId, setNoteOpenId] = useState<number | null>(null);
   const [noteEditId, setNoteEditId] = useState<number | null>(null);
   const [noteEditText, setNoteEditText] = useState("");
@@ -1009,6 +1011,10 @@ export default function Invoices() {
                           className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-all whitespace-nowrap">
                           <ShoppingCart size={11} /> Create PO
                         </button>
+                        <button onClick={e => { e.stopPropagation(); setPayNowInvoice(inv); }}
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-all whitespace-nowrap shadow-sm">
+                          <CreditCard size={11} /> Pay Now
+                        </button>
                         <DropdownMenu>
                           <DropdownMenuTrigger className="p-1.5 hover:bg-slate-100 rounded-lg transition-all" onClick={e => e.stopPropagation()}>
                             <MoreHorizontal size={14} className="text-slate-500" />
@@ -1445,6 +1451,13 @@ export default function Invoices() {
             </div>
           </div>
         </div>
+      )}
+      {payNowInvoice && (
+        <PayNowModal
+          invoice={payNowInvoice}
+          customerEmail={(customerMap.get(Number(payNowInvoice.customerId)) as any)?.email || ""}
+          onClose={() => setPayNowInvoice(null)}
+        />
       )}
     </Layout>
   );
