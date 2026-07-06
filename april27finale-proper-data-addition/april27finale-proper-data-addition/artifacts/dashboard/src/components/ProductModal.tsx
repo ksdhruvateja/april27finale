@@ -119,6 +119,7 @@ export default function ProductModal({ onClose, product, initial, onCreated }: P
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     if (!form.name.trim() || !form.salePrice || !form.costPrice) return;
     const data: any = {
       name: form.name,
@@ -164,6 +165,7 @@ export default function ProductModal({ onClose, product, initial, onCreated }: P
       onClose={onClose}
       maxWidth="max-w-3xl"
       lightMode
+      zIndex={80}
       footer={<SubmitBar onClose={onClose} isLoading={isPending} label={isEdit ? "Save Changes" : "Add Product"} formId="product-form" />}
     >
       <form id="product-form" onSubmit={handleSubmit}>

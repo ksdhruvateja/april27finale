@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo, memo } from "react";
+import { useState, useRef, useEffect, useMemo, memo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Plus, Trash2, Tag, X, GripVertical, Package } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
@@ -494,6 +494,10 @@ export default function LineItemsEditor({
 }: Props) {
   const { data: products } = useListProducts();
   const [inventoryModalIdx, setInventoryModalIdx] = useState<number | null>(null);
+  const itemsRef = useRef(items);
+  const inventoryModalIdxRef = useRef(inventoryModalIdx);
+  itemsRef.current = items;
+  inventoryModalIdxRef.current = inventoryModalIdx;
 
   // ─── Drag-and-drop state ──────────────────────────────────────────────────
   const dragIdxRef = useRef<number | null>(null);
@@ -637,13 +641,13 @@ export default function LineItemsEditor({
       specNotes: (item.specNotes ?? []).filter((_, si) => si !== noteIdx)
     } : item));
 
-  const selectProduct = (idx: number, p: any) => {
+  const selectProduct = useCallback((idx: number, p: any) => {
     const linePrice = vendorPricing
       ? Number(p.costPrice ?? p.salePrice ?? 0)
       : Number(p.salePrice ?? 0);
     const productUnit = p.unit && p.unit.trim() ? p.unit.trim() : "ea";
     onChange(
-      items.map((item, i) =>
+      itemsRef.current.map((item, i) =>
         i === idx
           ? {
               ...item,
@@ -659,7 +663,15 @@ export default function LineItemsEditor({
           : item
       )
     );
-  };
+  }, [onChange, vendorPricing]);
+
+  const handleProductCreated = useCallback((created: { id?: number | null; name?: string | null; sku?: string | null; description?: string | null; unit?: string | null; salePrice?: number | null; costPrice?: number | null }) => {
+    const idx = inventoryModalIdxRef.current;
+    if (idx !== null && created?.id != null) {
+      selectProduct(idx, created);
+    }
+    setInventoryModalIdx(null);
+  }, [selectProduct]);
 
   const resolveUnitOptions = (currentUnit?: string) => {
     if (!currentUnit || UNIT_VALUES.has(currentUnit)) return UNIT_OPTIONS;
@@ -1179,15 +1191,13 @@ export default function LineItemsEditor({
         </div>
       )}
 
-      {inventoryModalIdx !== null && items[inventoryModalIdx] && (
+      {inventoryModalIdx !== null && items[inventoryModalIdx] && createPortal(
         <ProductModal
           initial={lineItemToProductPreset(items[inventoryModalIdx], vendorPricing)}
           onClose={() => setInventoryModalIdx(null)}
-          onCreated={(created) => {
-            selectProduct(inventoryModalIdx, created);
-            setInventoryModalIdx(null);
-          }}
-        />
+          onCreated={handleProductCreated}
+        />,
+        document.body,
       )}
     </div>
   );

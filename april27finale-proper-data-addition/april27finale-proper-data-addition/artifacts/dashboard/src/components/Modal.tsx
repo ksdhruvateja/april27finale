@@ -12,6 +12,7 @@ interface ModalProps {
   panelWidth?: string;
   theme?: "dark" | "light";
   lightMode?: boolean;
+  zIndex?: number;
 }
 
 export default function Modal({
@@ -25,6 +26,7 @@ export default function Modal({
   panelWidth = "w-full",
   theme = "dark",
   lightMode = false,
+  zIndex = 70,
 }: ModalProps) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -35,8 +37,8 @@ export default function Modal({
   if (theme === "light") {
     return (
       <div
-        className="fixed inset-0 z-[70] flex items-center justify-center p-4"
-        style={{ background: "rgba(15,23,42,0.45)", backdropFilter: "blur(8px)" }}
+        className="fixed inset-0 flex items-center justify-center p-4"
+        style={{ zIndex, background: "rgba(15,23,42,0.45)", backdropFilter: "blur(8px)" }}
         onClick={onClose}
       >
         <div
@@ -126,8 +128,8 @@ export default function Modal({
   if (lightMode) {
     return (
       <div
-        className="fixed inset-0 z-[70] flex flex-col"
-        style={{ background: "linear-gradient(160deg, #f0f9ff 0%, #e0f2fe 40%, #f8faff 100%)" }}
+        className="fixed inset-0 flex flex-col"
+        style={{ zIndex, background: "linear-gradient(160deg, #f0f9ff 0%, #e0f2fe 40%, #f8faff 100%)" }}
       >
         <div
           className="flex-shrink-0 flex items-center gap-3 px-6 py-4"

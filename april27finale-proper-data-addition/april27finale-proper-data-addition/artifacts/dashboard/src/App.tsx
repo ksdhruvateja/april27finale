@@ -276,6 +276,10 @@ function applyListCachePatch(key: string | undefined, data: unknown, variables: 
   if (key === "deletePurchaseOrder" && id != null) {
     patchListCache(queryClient, getListPurchaseOrdersQueryKey(), "delete", null, id);
   }
+
+  if (key === "createProduct") patchListCache(queryClient, getListProductsQueryKey(), "create", record);
+  if (key === "updateProduct") patchListCache(queryClient, getListProductsQueryKey(), "update", record);
+  if (key === "deleteProduct" && id != null) patchListCache(queryClient, getListProductsQueryKey(), "delete", null, id);
 }
 
 const mutationCache = new MutationCache({
