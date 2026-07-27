@@ -402,6 +402,7 @@ function OverduesTab() {
         {combined.length === 0 ? (
           <div className="p-10 text-center text-slate-400 text-sm">No overdue or pending items — you're all caught up!</div>
         ) : (
+          <div className="overflow-x-auto overflow-y-auto max-h-[68vh] scrollbar-hide">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/70">
@@ -436,6 +437,7 @@ function OverduesTab() {
               </tr>
             </tfoot>
           </table>
+          </div>
         )}
       </div>
     </div>
@@ -480,6 +482,7 @@ function LedgerTab() {
         {isLoading ? (
           <div className="p-10 flex justify-center"><div className="animate-spin w-6 h-6 border-2 border-slate-800 border-t-transparent rounded-full" /></div>
         ) : (
+          <div className="overflow-x-auto overflow-y-auto max-h-[68vh] scrollbar-hide">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/70">
@@ -506,6 +509,7 @@ function LedgerTab() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>
@@ -563,6 +567,7 @@ function ARTab() {
         ) : filteredRows.length === 0 ? (
           <div className="p-10 text-center text-slate-400 text-sm">No outstanding receivables</div>
         ) : (
+          <div className="overflow-x-auto overflow-y-auto max-h-[68vh] scrollbar-hide">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/70">
@@ -590,6 +595,7 @@ function ARTab() {
               </tr>
             </tfoot>
           </table>
+          </div>
         )}
       </div>
     </div>
@@ -647,6 +653,7 @@ function APTab() {
         ) : filteredRows.length === 0 ? (
           <div className="p-10 text-center text-slate-400 text-sm">No outstanding payables</div>
         ) : (
+          <div className="overflow-x-auto overflow-y-auto max-h-[68vh] scrollbar-hide">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/70">
@@ -674,6 +681,7 @@ function APTab() {
               </tr>
             </tfoot>
           </table>
+          </div>
         )}
       </div>
     </div>
@@ -798,6 +806,7 @@ function ExpensesTab() {
         ) : filtered.length === 0 ? (
           <div className="p-10 text-center text-slate-400 text-sm">No expenses recorded yet</div>
         ) : (
+          <div className="overflow-x-auto overflow-y-auto max-h-[68vh] scrollbar-hide">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/70">
@@ -833,6 +842,7 @@ function ExpensesTab() {
               </tr>
             </tfoot>
           </table>
+          </div>
         )}
       </div>
 
@@ -1084,6 +1094,7 @@ function ReportsTab() {
             )}
           </div>
           <div className="glass-card overflow-hidden">
+            <div className="overflow-x-auto overflow-y-auto max-h-[68vh] scrollbar-hide">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/70">
@@ -1106,12 +1117,14 @@ function ReportsTab() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         </div>
       )}
 
       {section === "product" && (
         <div className="glass-card overflow-hidden">
+          <div className="overflow-x-auto overflow-y-auto max-h-[68vh] scrollbar-hide">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/70">
@@ -1140,6 +1153,7 @@ function ReportsTab() {
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

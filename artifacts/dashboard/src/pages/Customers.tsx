@@ -179,12 +179,16 @@ export default function Customers() {
   }, [customers]);
   const filtered = useMemo(() => {
     const s = debouncedSearch.toLowerCase();
-    if (!s) return customers ?? [];
-    return (customers ?? []).filter(c =>
-      c.name.toLowerCase().includes(s) ||
-      (c.company ?? "").toLowerCase().includes(s) ||
-      (c.email ?? "").toLowerCase().includes(s) ||
-      (c.phone ?? "").includes(s)
+    const result = !s
+      ? (customers ?? [])
+      : (customers ?? []).filter(c =>
+          c.name.toLowerCase().includes(s) ||
+          (c.company ?? "").toLowerCase().includes(s) ||
+          (c.email ?? "").toLowerCase().includes(s) ||
+          (c.phone ?? "").includes(s)
+        );
+    return [...result].sort((a, b) =>
+      (a.company || a.name).localeCompare(b.company || b.name)
     );
   }, [customers, debouncedSearch]);
 
@@ -348,6 +352,7 @@ export default function Customers() {
           ) : filtered?.length === 0 ? (
             <div className="p-10 text-center text-slate-500 text-sm">No customers found.</div>
           ) : (
+            <div className="overflow-x-auto overflow-y-auto max-h-[68vh] scrollbar-hide">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-blue-100 bg-blue-50/70">
@@ -429,6 +434,7 @@ export default function Customers() {
                 })}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </div>

@@ -7,10 +7,171 @@ import { useListCustomers, useListInvoices } from "@workspace/api-client-react";
 import {
   Search, Plus, X, RefreshCw, RotateCcw, DollarSign, AlertTriangle,
   CheckCircle2, Clock, ChevronDown, ChevronUp, MoreHorizontal, Edit, Trash2, Filter,
-  ArrowLeftRight, Package, BarChart2, TrendingDown,
+  ArrowLeftRight, Package, BarChart2, TrendingDown, Printer, Mail, FileDown,
 } from "lucide-react";
+import forézLogo from "@assets/image_1775678558898.png";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, CartesianGrid, PieChart, Pie, Legend } from "recharts";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+
+const BUSINESS_RR = {
+  name: "Forez Corp",
+  line1: "2402 Ocean Ave",
+  line2: "Ronkonkoma, NY 11779",
+  email: "sales@forezcorp.com",
+  website: "www.forezcorp.com",
+};
+
+const TYPE_LABEL_MAP: Record<string, string> = {
+  return:        "Return Authorization",
+  refund:        "Refund Memo",
+  return_refund: "Return & Refund",
+};
+
+function esc(s: string | null | undefined) {
+  return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function printReturn(r: any) {
+  const refNum = `RR-${String(r.id).padStart(4, "0")}`;
+  const docTitle = TYPE_LABEL_MAP[r.type] ?? "Return / Refund";
+
+  const css = `
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Courier New',Courier,monospace;background:#fff;color:#1a1a1a;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:13px}
+    .page{padding:44px 52px;max-width:800px;margin:0 auto}
+    .page-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px}
+    .biz-name{font-weight:700;font-size:13px;margin-bottom:5px}
+    .biz-info{font-size:12px;line-height:1.75;color:#333}
+    .logo-img{height:72px;width:auto;object-fit:contain;display:block}
+    .doc-title{font-family:Georgia,'Times New Roman',serif;font-size:36px;font-weight:400;color:#1a1a1a;margin-bottom:18px}
+    .addr-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin-bottom:18px}
+    .addr-label{font-size:10px;font-weight:700;letter-spacing:1px;margin-bottom:5px}
+    .addr-value{font-size:12px;line-height:1.75}
+    .doc-meta{font-size:12px;line-height:2}
+    .meta-label{font-weight:700}
+    .rule{border:none;border-top:1px solid #1a1a1a;margin:16px 0}
+    .detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px}
+    .detail-label{font-size:10px;font-weight:700;letter-spacing:1px;margin-bottom:4px}
+    .detail-value{font-size:12px;line-height:1.6}
+    .notes-block{font-size:12px;background:#f7f7f7;padding:12px 16px;margin-bottom:20px;line-height:1.65}
+    .notes-label{font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:5px}
+    .amount-box{display:flex;justify-content:flex-end;margin:20px 0}
+    .amount-inner{width:270px;font-size:12px;border-top:2px solid #1a1a1a;padding-top:8px}
+    .amount-row{display:flex;justify-content:space-between;font-size:13px;font-weight:700}
+    .mail-note{font-size:12px;background:#fff7ed;border:1px solid #fed7aa;padding:12px 16px;margin-bottom:20px;line-height:1.65}
+    .mail-label{font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:5px;color:#c2410c}
+    .page-footer{margin-top:64px;text-align:center;font-size:13px;color:#444;font-style:italic}
+    @media print{body{padding:0}@page{margin:28px;size:A4}}
+  `;
+
+  const w = window.open("", "_blank", "width=900,height=700");
+  if (!w) return;
+  w.document.write(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"/><title>${esc(refNum)} — Forez Corp</title>
+<style>${css}</style></head>
+<body><div class="page">
+
+  <div class="page-header">
+    <div>
+      <div class="biz-name">FOREZ CORP.</div>
+      <div class="biz-info">
+        ${BUSINESS_RR.line1}<br/>
+        ${BUSINESS_RR.line2}<br/>
+        USA<br/>
+        ${BUSINESS_RR.email}<br/>
+        ${BUSINESS_RR.website}
+      </div>
+    </div>
+    <img src="${forézLogo}" alt="Forez" class="logo-img"/>
+  </div>
+
+  <div class="doc-title">${esc(docTitle)}</div>
+
+  <div class="addr-row">
+    <div>
+      <div class="addr-label">CUSTOMER</div>
+      <div class="addr-value"><strong>${esc(r.customerName)}</strong></div>
+    </div>
+    <div>
+      <div class="addr-label">RELATED INVOICE</div>
+      <div class="addr-value">${esc(r.invoiceNumber || (r.invoiceId ? `INV-${r.invoiceId}` : "—"))}</div>
+    </div>
+    <div>
+      <div class="doc-meta">
+        <span class="meta-label">REF #</span> ${esc(refNum)}<br/>
+        <span class="meta-label">DATE</span> ${r.createdAt ? new Date(r.createdAt).toLocaleDateString("en-US",{year:"numeric",month:"short",day:"numeric"}) : "—"}<br/>
+        <span class="meta-label">STATUS</span> ${esc(r.status ?? "pending")}
+      </div>
+    </div>
+  </div>
+
+  <hr class="rule"/>
+
+  <div class="detail-grid">
+    <div>
+      <div class="detail-label">REASON FOR ${r.type === "refund" ? "REFUND" : "RETURN"}</div>
+      <div class="detail-value">${esc(r.reason || "—")}</div>
+    </div>
+    <div>
+      <div class="detail-label">REFUND METHOD</div>
+      <div class="detail-value">${esc(r.refundMethod || "—")}</div>
+    </div>
+  </div>
+
+  ${r.notes ? `<div class="notes-block"><div class="notes-label">Notes</div>${esc(r.notes)}</div>` : ""}
+
+  ${r.type !== "return" && r.refundAmount != null ? `
+  <div class="amount-box">
+    <div class="amount-inner">
+      <div class="amount-row"><span>REFUND AMOUNT</span><span>$${Number(r.refundAmount).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}</span></div>
+    </div>
+  </div>` : ""}
+
+  ${r.type !== "refund" ? `
+  <div class="mail-note">
+    <div class="mail-label">📦 Mail-In Instructions</div>
+    Please ship the item(s) to:<br/>
+    <strong>${BUSINESS_RR.name}</strong> — Returns Dept<br/>
+    ${BUSINESS_RR.line1}, ${BUSINESS_RR.line2}<br/>
+    Reference <strong>${esc(refNum)}</strong> on the outside of the package.<br/>
+    Items must be in original packaging. Contact ${BUSINESS_RR.email} with any questions.
+  </div>` : ""}
+
+  <div class="page-footer">Thank You For Your Business!!!</div>
+
+</div></body></html>`);
+  w.document.close();
+  w.focus();
+  setTimeout(() => w.print(), 400);
+}
+
+function mailReturn(r: any) {
+  const refNum = `RR-${String(r.id).padStart(4, "0")}`;
+  const docTitle = TYPE_LABEL_MAP[r.type] ?? "Return / Refund";
+  const subject = encodeURIComponent(`${BUSINESS_RR.name} — ${docTitle} ${refNum}`);
+
+  const mailInSection = r.type !== "refund"
+    ? `\n\nMAIL-IN INSTRUCTIONS:\nPlease ship item(s) to:\n  ${BUSINESS_RR.name} — Returns Dept\n  ${BUSINESS_RR.line1}, ${BUSINESS_RR.line2}\nWrite "${refNum}" on the outside of the package.`
+    : "";
+
+  const refundSection = r.type !== "return" && r.refundAmount != null
+    ? `\nRefund Amount:  $${Number(r.refundAmount).toFixed(2)}\nRefund Method:  ${r.refundMethod || "—"}`
+    : "";
+
+  const body = encodeURIComponent(
+    `Dear ${r.customerName ?? "Customer"},\n\n` +
+    `This email confirms your ${docTitle.toLowerCase()} request with Forez Corp.\n\n` +
+    `Reference #:  ${refNum}\n` +
+    `Invoice #:    ${r.invoiceNumber || (r.invoiceId ? `INV-${r.invoiceId}` : "—")}\n` +
+    `Reason:       ${r.reason || "—"}\n` +
+    `Status:       ${r.status ?? "pending"}` +
+    refundSection +
+    mailInSection +
+    `\n\nIf you have any questions, please contact us at ${BUSINESS_RR.email} or visit ${BUSINESS_RR.website}.\n\nThank you,\n${BUSINESS_RR.name}`
+  );
+
+  window.open(`mailto:?subject=${subject}&body=${body}`, "_blank");
+}
 
 const API = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -575,6 +736,7 @@ export default function Returns() {
               <p className="text-slate-400 text-xs">Create a new record using the button above</p>
             </div>
           ) : (
+            <div className="overflow-x-auto overflow-y-auto max-h-[68vh] scrollbar-hide">
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ background: "rgba(239,246,255,0.95)" }}>
@@ -636,7 +798,19 @@ export default function Returns() {
                         <DropdownMenuTrigger className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-slate-100 rounded-lg transition-all">
                           <MoreHorizontal size={14} className="text-slate-500" />
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="bg-white border-slate-200 shadow-lg text-slate-800 min-w-[140px]">
+                        <DropdownMenuContent align="end" className="bg-white border-slate-200 shadow-lg text-slate-800 min-w-[160px]">
+                          <DropdownMenuItem onClick={() => printReturn(r)}
+                            className="gap-2 cursor-pointer text-sm hover:bg-slate-50 focus:bg-slate-50">
+                            <Printer size={13} /> Print
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => printReturn(r)}
+                            className="gap-2 cursor-pointer text-sm hover:bg-slate-50 focus:bg-slate-50">
+                            <FileDown size={13} /> Save to PDF
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => mailReturn(r)}
+                            className="gap-2 cursor-pointer text-sm hover:bg-slate-50 focus:bg-slate-50">
+                            <Mail size={13} /> Mail to Customer
+                          </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => { setEditRecord(r); setShowModal(true); }}
                             className="gap-2 cursor-pointer text-sm hover:bg-slate-50 focus:bg-slate-50">
                             <Edit size={13} /> Edit
@@ -652,6 +826,7 @@ export default function Returns() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </div>

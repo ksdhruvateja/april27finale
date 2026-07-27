@@ -1569,6 +1569,7 @@ export default function Products() {
           ) : filtered?.length === 0 ? (
             <div className="p-10 text-center text-slate-500 text-sm">No products found.</div>
           ) : (
+            <div className="overflow-x-auto overflow-y-auto max-h-[68vh] scrollbar-hide">
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ background: "rgba(239,246,255,0.95)" }}>
@@ -1780,6 +1781,7 @@ export default function Products() {
                 })}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </div>

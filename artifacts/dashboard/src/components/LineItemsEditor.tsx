@@ -83,7 +83,7 @@ export function calcTotals(
   const afterDiscount = subtotal - orderDiscountAmount;
   const taxTotal = afterDiscount * (orderTaxPercent / 100);
   const freight = Math.max(0, freightCost);
-  return { subtotal, discountTotal: 0, taxTotal, orderDiscountAmount, freight, total: afterDiscount + taxTotal + freight };
+  return { subtotal, discountTotal: orderDiscountAmount, taxTotal, orderDiscountAmount, freight, total: afterDiscount + taxTotal + freight };
 }
 
 const inputCls =
@@ -114,9 +114,10 @@ const SkuDescCells = memo(function SkuDescCells({ item, products, inputCls, inpu
 
   const descSugg = useMemo(() => {
     if (!products?.length) return [];
+    const sorted = [...products].sort((a: any, b: any) => String(a.name ?? "").localeCompare(String(b.name ?? "")));
     const lq = normalize(item.description ?? "");
-    if (!lq) return products.slice(0, 30);
-    return products.filter((p: any) =>
+    if (!lq) return sorted.slice(0, 50);
+    return sorted.filter((p: any) =>
       normalize(p.name).includes(lq) ||
       normalize(p.sku).includes(lq) ||
       normalize(p.description).includes(lq) ||
@@ -126,9 +127,10 @@ const SkuDescCells = memo(function SkuDescCells({ item, products, inputCls, inpu
 
   const skuSugg = useMemo(() => {
     if (!products?.length) return [];
+    const sorted = [...products].sort((a: any, b: any) => String(a.name ?? "").localeCompare(String(b.name ?? "")));
     const lq = normalize(item.sku ?? "");
-    if (!lq) return products.filter((p: any) => p.sku || p.name).slice(0, 25);
-    return products.filter((p: any) =>
+    if (!lq) return sorted.filter((p: any) => p.sku || p.name).slice(0, 50);
+    return sorted.filter((p: any) =>
       normalize(p.sku).includes(lq) ||
       normalize(p.name).includes(lq) ||
       String(p.id ?? "").includes(lq)

@@ -45,6 +45,7 @@ export default function TaxRates() {
           ) : filtered?.length === 0 ? (
             <div className="p-10 text-center text-slate-400 text-sm">No tax rates found.</div>
           ) : (
+            <div className="overflow-x-auto overflow-y-auto max-h-[68vh] scrollbar-hide">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/70">
@@ -83,6 +84,7 @@ export default function TaxRates() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
 export type UserRole = "developer" | "admin" | "sales" | "shipper" | "accountant" | "viewer" | "custom";
 
@@ -49,8 +49,29 @@ export function checkAccess(role: UserRole, path: string, customPermissions?: Cu
   return allowed.some(p => path === p || (p !== "/" && path.startsWith(p)));
 }
 
+const SESSION_KEY = "qb_session";
+
+function loadSession(): CurrentUser | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as CurrentUser;
+  } catch {
+    return null;
+  }
+}
+
 export function RoleProvider({ children }: { children: ReactNode }) {
-  const [currentUser, setCurrentUserState] = useState<CurrentUser | null>(null);
+  const [currentUser, setCurrentUserState] = useState<CurrentUser | null>(loadSession);
+
+  // Keep localStorage in sync whenever the user changes
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem(SESSION_KEY, JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem(SESSION_KEY);
+    }
+  }, [currentUser]);
 
   const setCurrentUser = (user: CurrentUser | null) => {
     setCurrentUserState(user);

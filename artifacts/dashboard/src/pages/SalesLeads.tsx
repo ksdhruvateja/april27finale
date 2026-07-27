@@ -168,6 +168,7 @@ export default function SalesLeads() {
               </p>
             </div>
           ) : (
+            <div className="overflow-x-auto overflow-y-auto max-h-[68vh] scrollbar-hide">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-blue-100 bg-blue-50/70">
@@ -229,6 +230,7 @@ export default function SalesLeads() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </div>

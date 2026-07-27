@@ -11,9 +11,15 @@ interface Props { onClose: () => void; initial?: any; }
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const dateStr = (v: string | null | undefined) => v ? new Date(v).toISOString().slice(0, 10) : "";
-const initItems = (raw: any[]): LineItem[] =>
-  raw?.length ? raw.map(i => ({ ...i, taxPercent: i.taxPercent ?? 0, discountPercent: i.discountPercent ?? 0 }))
+const initItems = (raw: any[]): LineItem[] => {
+  // Strip out auto-generated Freight and Discount line items — those are controlled
+  // separately by the freightCost and orderDiscount state, so re-including them in
+  // the item editor causes duplicates on every save.
+  const real = (raw ?? []).filter((i: any) => i.description !== "Freight" && i.description !== "Discount");
+  return real.length
+    ? real.map(i => ({ ...i, taxPercent: i.taxPercent ?? 0, discountPercent: i.discountPercent ?? 0 }))
     : [{ description: "", quantity: 1, unitPrice: 0 }];
+};
 
 export default function QuoteModal({ onClose, initial }: Props) {
   const create = useCreateQuote();

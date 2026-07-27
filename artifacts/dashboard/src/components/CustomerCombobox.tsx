@@ -26,15 +26,18 @@ export default function CustomerCombobox({ customers, value, onSelect, onAddNew,
   const selected = customers.find(c => String(c.id) === value) ?? null;
   const displayValue = open ? query : (selected ? (selected.company ? `${selected.name} — ${selected.company}` : selected.name) : "");
 
-  const filtered = customers.filter(c => {
-    const q = query.toLowerCase().trim();
-    if (!q) return true;
-    return (
-      c.name.toLowerCase().includes(q) ||
-      (c.company ?? "").toLowerCase().includes(q) ||
-      (c.email ?? "").toLowerCase().includes(q)
-    );
-  }).slice(0, 12);
+  const filtered = customers
+    .filter(c => {
+      const q = query.toLowerCase().trim();
+      if (!q) return true;
+      return (
+        c.name.toLowerCase().includes(q) ||
+        (c.company ?? "").toLowerCase().includes(q) ||
+        (c.email ?? "").toLowerCase().includes(q)
+      );
+    })
+    .sort((a, b) => (a.company || a.name).localeCompare(b.company || b.name))
+    .slice(0, 12);
 
   useEffect(() => {
     if (!open) setQuery("");

@@ -1,0 +1,2 @@
+- [Build process](build-process.md) — API server must be built with the exact pnpm path before restart; `pnpm` alias fails
+- [Freight/Discount line items](freight-discount-initItems.md) — Freight and Discount are virtual line items; filter them out of initItems to prevent duplication on every save

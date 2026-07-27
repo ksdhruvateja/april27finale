@@ -523,7 +523,7 @@ export default function Invoices() {
   return (
     <Layout>
       <Header title="Invoices" subtitle={`${invoices?.length ?? 0} total`} />
-      <div className="flex-1 flex flex-col overflow-hidden px-5 py-4 gap-3 bg-[hsl(220_25%_97%)]">
+      <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 gap-3 flex flex-col bg-[hsl(220_25%_97%)]">
 
         {/* Search + Create */}
         <div className="flex items-center gap-3">
@@ -739,7 +739,7 @@ export default function Invoices() {
           </div>
         )}
 
-        <div className="glass-card flex-1 flex flex-col min-h-0">
+        <div className="glass-card flex flex-col">
           {isLoading ? (
             <div className="p-10 flex justify-center"><div className="animate-spin w-6 h-6 border-2 border-slate-800 border-t-transparent rounded-full" /></div>
           ) : filtered?.length === 0 ? (
@@ -775,7 +775,7 @@ export default function Invoices() {
               <button onClick={() => setSelectedIds(new Set())} className="ml-auto text-xs text-indigo-500 hover:text-indigo-700 font-medium">Clear selection</button>
             </div>
             )}
-          <div className="flex-1 overflow-y-auto min-h-0">
+          <div>
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10">
                 <tr className="border-b border-slate-100 bg-slate-50">
@@ -1241,6 +1241,20 @@ export default function Invoices() {
                   <span className="text-slate-500 text-sm font-medium">This Invoice</span>
                   <span className="text-slate-800 font-bold text-sm">{formatCurrency(inv.total)}</span>
                 </div>
+                {(cust?.shippingCarrierName || cust?.shippingAccountNumber) && (
+                  <div className="flex items-start gap-2.5 py-2.5 px-3 rounded-lg bg-sky-50 border border-sky-200">
+                    <Truck size={14} className="text-sky-600 mt-0.5 flex-shrink-0" />
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <span className="text-sky-700 font-semibold text-xs">Customer Shipping Account</span>
+                      {cust?.shippingCarrierName && (
+                        <span className="text-sky-800 text-xs">Carrier: <span className="font-medium">{cust.shippingCarrierName}</span></span>
+                      )}
+                      {cust?.shippingAccountNumber && (
+                        <span className="text-sky-800 text-xs">Account #: <span className="font-medium font-mono">{cust.shippingAccountNumber}</span></span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Print label shortcut — always visible before proceeding */}

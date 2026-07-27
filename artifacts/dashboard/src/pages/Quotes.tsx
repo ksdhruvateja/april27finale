@@ -168,7 +168,7 @@ export default function Quotes() {
           return [
             q.customerName, (q as any).quoteNumber, (q as any).trackingNumber,
             (q as any).status, (q as any).notes, (q as any).internalNote,
-            String((q as any).id ?? ""), productText,
+            String((q as any).id ?? ""), String((q as any).customerId ?? ""), productText,
           ].some(v => String(v ?? "").toLowerCase().includes(qSearch));
         }
         return true;
@@ -310,7 +310,7 @@ export default function Quotes() {
   const revertOrderConfirmation = (id: number) => {
     setConfirmSavingId(id);
     updateQuote.mutate(
-      { id, data: { status: "sent" } as any },
+      { id, data: { status: "sent", trackingNumber: null } as any },
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListQuotesQueryKey() });
@@ -320,6 +320,21 @@ export default function Quotes() {
         onError: () => {
           setConfirmSavingId(null);
         },
+      },
+    );
+  };
+
+  const declineQuote = (id: number) => {
+    setConfirmSavingId(id);
+    updateQuote.mutate(
+      { id, data: { status: "declined" } as any },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getListQuotesQueryKey() });
+          setConfirmOpenId(null);
+          setConfirmSavingId(null);
+        },
+        onError: () => { setConfirmSavingId(null); },
       },
     );
   };
@@ -711,7 +726,7 @@ export default function Quotes() {
                           onClick={e => { e.stopPropagation(); setEditQuote(q); }}
                           className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100 transition-all whitespace-nowrap"
                         >
-                          <Edit size={11} /> Edit Bill
+                          <Edit size={11} /> Edit Quote
                         </button>
                         <DropdownMenu>
                           <DropdownMenuTrigger className="p-1.5 hover:bg-slate-100 rounded-lg transition-all" onClick={e => e.stopPropagation()}>
@@ -719,7 +734,6 @@ export default function Quotes() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="bg-white border-slate-200 shadow-lg text-slate-800 min-w-[160px]">
                             <DropdownMenuItem onClick={() => setViewQuote(q)} className="gap-2 cursor-pointer text-sm hover:bg-slate-50 focus:bg-slate-50"><Eye size={13} /> View Quote</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setEditQuote(q)} className="gap-2 cursor-pointer text-sm hover:bg-slate-50 focus:bg-slate-50"><Edit size={13} /> Edit Quote</DropdownMenuItem>
                             <DropdownMenuItem onClick={e => startEditNum(q, e)} className="gap-2 cursor-pointer text-sm hover:bg-slate-50 focus:bg-slate-50"><Hash size={13} /> Edit Quote #</DropdownMenuItem>
                             <DropdownMenuItem onClick={() => setViewQuote(q)} className="gap-2 cursor-pointer text-sm text-blue-600 hover:bg-blue-50 focus:bg-blue-50 focus:text-blue-600"><Mail size={13} /> Send Email</DropdownMenuItem>
                             <DropdownMenuItem onClick={() => setViewQuote(q)} className="gap-2 cursor-pointer text-sm text-green-600 hover:bg-green-50 focus:bg-green-50 focus:text-green-600"><MessageSquare size={13} /> Send SMS</DropdownMenuItem>
@@ -773,6 +787,11 @@ export default function Quotes() {
                               <div className="flex items-center gap-2 mt-4">
                                 <button onClick={e => { e.stopPropagation(); setConfirmOpenId(null); setConfirmRefInput(""); }}
                                   className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors whitespace-nowrap">Cancel</button>
+                                <button onClick={e => { e.stopPropagation(); declineQuote(q.id); }}
+                                  disabled={confirmSavingId === q.id}
+                                  className="text-xs px-3 py-1.5 rounded-lg bg-red-50 text-red-600 border border-red-200 font-semibold hover:bg-red-100 transition-colors disabled:opacity-60 whitespace-nowrap">
+                                  ✗ Decline
+                                </button>
                                 <button onClick={e => { e.stopPropagation(); confirmOrder(q.id, confirmRefInput); }}
                                   disabled={confirmSavingId === q.id}
                                   className="text-xs px-4 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-60 whitespace-nowrap">

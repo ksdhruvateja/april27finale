@@ -1,7 +1,7 @@
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
 import { useState, useEffect } from "react";
-import { Truck, Save, CheckCircle2, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Truck, Save, CheckCircle2, Eye, EyeOff, Loader2, FileText, Tag } from "lucide-react";
 
 function ShippingSection() {
   const [apiKey, setApiKey] = useState("");
@@ -130,6 +130,123 @@ function ShippingSection() {
   );
 }
 
+function useSetting(key: string) {
+  const [value, setValue] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    fetch(`/api/app-settings/${key}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.value) setValue(d.value); });
+  }, [key]);
+
+  const save = async (val: string) => {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/app-settings/${key}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ value: val }),
+      });
+      if (res.ok) {
+        setValue(val);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 3000);
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return { value, setValue, saving, saved, save };
+}
+
+function QuoteDefaultsSection() {
+  const validity = useSetting("quote_validity_text");
+  const terms = useSetting("net_terms");
+  const [termsInput, setTermsInput] = useState("");
+
+  // net_terms is stored as a JSON array; display as newline-separated for editing
+  useEffect(() => {
+    if (!terms.value) return;
+    try {
+      const parsed = JSON.parse(terms.value);
+      if (Array.isArray(parsed)) setTermsInput(parsed.join("\n"));
+      else setTermsInput(terms.value);
+    } catch {
+      setTermsInput(terms.value);
+    }
+  }, [terms.value]);
+
+  const saveTerms = () => {
+    const lines = termsInput.split("\n").map(l => l.trim()).filter(Boolean);
+    terms.save(JSON.stringify(lines));
+  };
+
+  return (
+    <div className="glass-card p-6 max-w-2xl flex flex-col gap-6">
+      <div className="flex items-center gap-2 mb-1">
+        <FileText size={16} className="text-[hsl(224_50%_25%)]" />
+        <h2 className="text-slate-800 text-base font-bold">Quote & Payment Defaults</h2>
+      </div>
+
+      {/* Quote validity text */}
+      <div className="flex flex-col gap-2">
+        <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+          Quote Validity Message
+        </label>
+        <p className="text-xs text-slate-400">
+          Shown in the footer of every quote (print &amp; email). Leave blank to use the default "Valid until [expiry date]".
+        </p>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={validity.value}
+            onChange={e => validity.setValue(e.target.value)}
+            placeholder="e.g. Quotes are valid for 30 days from the date of issue."
+            className="flex-1 text-sm bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-400 transition-colors"
+            onKeyDown={e => { if (e.key === "Enter") validity.save(validity.value); }}
+          />
+          <button
+            onClick={() => validity.save(validity.value)}
+            disabled={validity.saving}
+            className="flex items-center gap-2 px-4 py-2 bg-[hsl(224_50%_15%)] text-white text-sm font-semibold rounded-lg hover:bg-[hsl(224_50%_20%)] disabled:opacity-50 transition-colors whitespace-nowrap"
+          >
+            {validity.saving ? <Loader2 size={14} className="animate-spin" /> : validity.saved ? <CheckCircle2 size={14} /> : <Save size={14} />}
+            {validity.saved ? "Saved!" : "Save"}
+          </button>
+        </div>
+      </div>
+
+      {/* Net terms */}
+      <div className="flex flex-col gap-2">
+        <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+          <Tag size={11} /> Payment Terms Options
+        </label>
+        <p className="text-xs text-slate-400">
+          One term per line (e.g. <span className="font-mono text-slate-600">Net 30</span>). These will appear in the Payment Terms dropdown when adding or editing a customer. Leave blank to use built-in defaults.
+        </p>
+        <textarea
+          value={termsInput}
+          onChange={e => setTermsInput(e.target.value)}
+          placeholder={"Net 30\nNet 60\nNet 90\nCash\nCOD\nCash Advance"}
+          rows={6}
+          className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-400 transition-colors resize-none font-mono"
+        />
+        <button
+          onClick={saveTerms}
+          disabled={terms.saving}
+          className="flex items-center gap-2 self-start px-4 py-2 bg-[hsl(224_50%_15%)] text-white text-sm font-semibold rounded-lg hover:bg-[hsl(224_50%_20%)] disabled:opacity-50 transition-colors"
+        >
+          {terms.saving ? <Loader2 size={14} className="animate-spin" /> : terms.saved ? <CheckCircle2 size={14} /> : <Save size={14} />}
+          {terms.saved ? "Saved!" : "Save Terms"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function Settings() {
   return (
     <Layout>
@@ -157,6 +274,12 @@ export default function Settings() {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Quote & Payment Defaults */}
+        <div className="max-w-2xl">
+          <h2 className="text-slate-600 text-xs font-bold uppercase tracking-wider mb-3 px-1">Quote & Payment</h2>
+          <QuoteDefaultsSection />
         </div>
 
         {/* Integrations */}

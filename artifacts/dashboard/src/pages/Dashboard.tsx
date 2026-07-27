@@ -274,7 +274,7 @@ export default function Dashboard() {
         onSearchChange={setSearch}
       />
 
-      <div className={`flex-1 scrollbar-hide px-4 md:px-5 ${isOverview ? "pb-4 pt-4 gap-3 overflow-hidden" : "pb-8 pt-5 gap-5 overflow-y-auto"} flex flex-col bg-[hsl(220_25%_97%)] ${activeTab === 3 ? "!overflow-y-auto !pb-8 !pt-5 !gap-4" : ""}`}>
+      <div className="flex-1 scrollbar-hide overflow-y-auto px-4 md:px-5 pb-8 pt-4 gap-4 flex flex-col bg-[hsl(220_25%_97%)]">
         {searchResults ? (
           <div className="flex flex-col gap-4">
             {journeys.length > 0 && journeys.map((j: any) => (

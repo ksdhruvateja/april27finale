@@ -174,7 +174,7 @@ export default function Bills() {
   return (
     <Layout>
       <Header title="Bills" subtitle={`${bills?.length ?? 0} total`} />
-      <div className="flex-1 flex flex-col overflow-hidden px-5 py-4 gap-4 bg-gradient-to-br from-[#eef6ff] via-[#f8fbff] to-[#edf4ff]">
+      <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 gap-4 flex flex-col bg-gradient-to-br from-[#eef6ff] via-[#f8fbff] to-[#edf4ff]">
 
         {/* Toolbar */}
         <div className="flex justify-between items-center gap-3 flex-shrink-0">
@@ -242,7 +242,7 @@ export default function Bills() {
             <div className="animate-spin w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full" />
           </div>
         ) : (
-          <div className="flex-1 grid grid-cols-2 gap-4 min-h-0">
+          <div className="grid grid-cols-2 gap-4 h-[calc(100vh-200px)]">
 
             {/* LEFT — Pending / Unpaid */}
             <div className="glass-card flex flex-col min-h-0 border border-blue-100/70">

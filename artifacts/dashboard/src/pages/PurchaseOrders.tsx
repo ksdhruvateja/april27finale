@@ -4,7 +4,8 @@ import { useListAuctions } from "@/lib/auctions-api";
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
 import { useListPurchaseOrders, useDeletePurchaseOrder, useConvertPurchaseOrderToBill, useUpdatePurchaseOrder, getListPurchaseOrdersQueryKey, useListVendors, useListBills, useDeleteBill, getListBillsQueryKey, useListShipments } from "@workspace/api-client-react";
-import { Search, Plus, MoreHorizontal, Edit, Trash2, CreditCard, Truck, RefreshCw, BarChart2, ChevronDown, ChevronUp, CheckCircle2, Pencil, Tag, ChevronRight, Save, Calculator, X as XIcon, Percent, DollarSign } from "lucide-react";
+import { Search, Plus, MoreHorizontal, Edit, Trash2, CreditCard, Truck, RefreshCw, BarChart2, ChevronDown, ChevronUp, CheckCircle2, Pencil, Tag, ChevronRight, Save, Calculator, X as XIcon, Percent, DollarSign, Printer } from "lucide-react";
+import forézLogo from "@assets/image_1775678558898.png";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from "recharts";
 import { useQueryClient } from "@tanstack/react-query";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -60,6 +61,214 @@ interface ShipmentContext {
   lineItems: Array<{ description: string; quantity: number }>;
   vendorCarrierName?: string | null;
   vendorCarrierAccount?: string | null;
+}
+
+const BUSINESS_PO = {
+  email: "sales@forezcorp.com",
+  website: "www.forezcorp.com",
+  line1: "2402 Ocean Ave",
+  line2: "Ronkonkoma, NY 11779",
+};
+
+function printSinglePO(po: any) {
+  const accent = "#7C3AED";
+  const esc    = (s: string) => String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+  const poRef = po.sourceInvoiceId && po.poSequence
+    ? `FRZPO-${String(po.sourceInvoiceId).padStart(4,"0")}-${po.poSequence}`
+    : `FRZPO-${String(po.id).padStart(4,"0")}`;
+
+  const lineItemsHTML = (po.lineItems ?? []).map((item: any, idx: number) => {
+    const total = (item.quantity ?? 1) * (item.unitPrice ?? 0);
+    return `<tr>
+      <td class="num" contenteditable="true">${idx + 1}</td>
+      <td contenteditable="true">
+        <div class="item-name">${esc(item.description ?? "—")}</div>
+        ${item.lineDescription ? `<div class="item-desc">${esc(item.lineDescription)}</div>` : ""}
+      </td>
+      <td class="r" contenteditable="true">${item.quantity ?? 1}</td>
+      <td class="r" contenteditable="true">${formatCurrency(item.unitPrice ?? 0)}</td>
+      <td class="r" contenteditable="true" style="font-weight:600">${formatCurrency(total)}</td>
+    </tr>`;
+  }).join("");
+
+  const CSS = `
+    *{box-sizing:border-box;margin:0;padding:0}
+    #toolbar{position:fixed;top:0;left:0;right:0;z-index:9999;display:flex;align-items:center;gap:4px;flex-wrap:wrap;background:#0f172a;padding:8px 14px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 2px 12px rgba(0,0,0,0.4)}
+    .t-label{color:#64748b;font-size:10px;font-weight:700;letter-spacing:0.5px;padding-right:2px;text-transform:uppercase}
+    .t-sep{width:1px;height:20px;background:#1e293b;margin:0 6px;flex-shrink:0}
+    .tb{border:1px solid #1e293b;border-radius:5px;padding:4px 8px;font-size:11px;font-weight:600;cursor:pointer;background:#1e293b;color:#cbd5e1;transition:all 0.15s;white-space:nowrap;font-family:inherit}
+    .tb:hover{background:#334155;color:#fff}
+    .tb.active{background:${accent};color:#fff;border-color:${accent}}
+    .tb-print{background:${accent}!important;color:#fff!important;border-color:${accent}!important;margin-left:auto;padding:4px 16px!important;font-size:12px!important}
+    .tb-print:hover{filter:brightness(1.15)!important}
+    @media print{#toolbar{display:none!important}body{padding-top:0!important;background:#fff!important}.page{box-shadow:none!important;border:none!important;max-width:none!important;margin:0!important;padding:32px 40px!important}.custom-block{border:none!important}.add-row-btn{display:none!important}[contenteditable]{outline:none!important}}
+    body{font-family:Arial,Helvetica,sans-serif;background:#dde3ea;padding-top:54px;-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#1e293b}
+    .page{background:#fff;max-width:840px;margin:20px auto 48px;padding:44px 52px;box-shadow:0 4px 32px rgba(0,0,0,0.10);border:1px solid #e2e8f0;border-radius:2px}
+    .doc-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px}
+    .co-brand{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+    .co-logo{height:48px;width:auto;object-fit:contain;display:block}
+    .co-name{font-size:20px;font-weight:700;color:#0f172a;letter-spacing:0.2px;line-height:1.1}
+    .co-info{font-size:11px;color:#64748b;line-height:1.7}
+    .doc-badge{text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+    .doc-type-pill{background:${accent};color:#fff;font-size:10px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;padding:5px 18px;border-radius:2px;display:inline-block}
+    .doc-number{font-size:22px;font-weight:800;color:#0f172a;line-height:1;letter-spacing:-0.3px}
+    .doc-meta-right{font-size:11px;color:#64748b;line-height:1.9;text-align:right}
+    .doc-meta-right strong{color:#374151;font-weight:700}
+    .accent-stripe{height:3px;background:${accent};margin:0 -52px 28px}
+    .addr-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;margin-bottom:28px}
+    .addr-title{font-size:8px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:${accent};border-bottom:1.5px solid ${accent};padding-bottom:5px;margin-bottom:8px}
+    .addr-body{font-size:12px;color:#374151;line-height:1.75}
+    .addr-body b{color:#0f172a;font-weight:700}
+    table.items{width:100%;border-collapse:collapse;margin-bottom:4px;font-size:12px}
+    table.items thead tr{background:${accent}1a}
+    table.items th{padding:9px 11px;font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:${accent};text-align:left;border-bottom:2px solid ${accent}44}
+    table.items th.r{text-align:right}
+    table.items td{padding:9px 11px;border-bottom:1px solid #f1f5f9;vertical-align:top;color:#374151}
+    table.items td.r{text-align:right}
+    table.items td.num{font-size:11px;color:#94a3b8;width:30px}
+    table.items tbody tr:nth-child(even){background:#faf8ff}
+    table.items tbody tr:last-child td{border-bottom:2px solid #e2e8f0}
+    .item-name{font-weight:600;color:#0f172a;font-size:12px}
+    .item-desc{font-size:11px;color:#64748b;margin-top:2px}
+    .add-row-btn{display:block;width:100%;margin:6px 0 0;background:none;border:1.5px dashed #cbd5e1;border-radius:4px;padding:7px;font-size:11px;color:#94a3b8;cursor:pointer;font-family:inherit;text-align:center}
+    .add-row-btn:hover{background:#f5f0ff;border-color:${accent};color:${accent}}
+    .totals-wrap{display:flex;justify-content:flex-end;margin:14px 0 28px}
+    .totals-box{width:290px;border:1px solid #e2e8f0;border-radius:3px;overflow:hidden;font-size:12px}
+    .totals-grand{background:${accent};color:#fff;display:flex;justify-content:space-between;align-items:center;padding:11px 14px;font-size:13px;font-weight:700}
+    .notes-box{background:#f8fafc;border:1px solid #e2e8f0;border-left:3px solid ${accent};border-radius:3px;padding:12px 16px;margin-bottom:16px;font-size:12px;color:#374151;line-height:1.65}
+    .notes-title{font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:${accent};margin-bottom:6px}
+    .custom-block{border:1.5px dashed #cbd5e1;border-radius:4px;padding:12px 16px;margin:10px 0;font-size:12px;color:#374151;line-height:1.6;min-height:44px}
+    .custom-block:focus{outline:none;border-color:${accent}}
+    [contenteditable]:focus{outline:2px solid ${accent}55;outline-offset:1px;border-radius:2px}
+    [contenteditable]:empty:before{content:attr(data-ph);color:#94a3b8;pointer-events:none}
+    .doc-footer{margin-top:32px;padding-top:16px;border-top:1px solid #e2e8f0;text-align:center;font-size:12px;color:#94a3b8;font-style:italic}
+  `;
+
+  const w = window.open("", "_blank", "width=980,height=860");
+  if (!w) return;
+  w.document.write(`<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"/><title>${esc(poRef)} &#8212; Forez Corp</title>
+<style>${CSS}</style></head>
+<body>
+
+<div id="toolbar">
+  <span class="t-label">Format</span>
+  <button class="tb" onclick="fmt('bold')"><b>B</b></button>
+  <button class="tb" onclick="fmt('italic')"><i>I</i></button>
+  <button class="tb" onclick="fmt('underline')"><u>U</u></button>
+  <div class="t-sep"></div>
+  <span class="t-label">Align</span>
+  <button class="tb tb-align" id="al-l" onclick="aln('left')">&#9664; Left</button>
+  <button class="tb tb-align" id="al-c" onclick="aln('center')">&#9646; Centre</button>
+  <button class="tb tb-align" id="al-r" onclick="aln('right')">Right &#9654;</button>
+  <div class="t-sep"></div>
+  <span class="t-label">Content</span>
+  <button class="tb" onclick="addBlock()">&#65291; Add Block</button>
+  <button class="tb" onclick="addRow()">&#65291; Add Row</button>
+  <button class="tb" onclick="removeBlock()" style="color:#f87171">&#10005; Remove</button>
+  <div class="t-sep"></div>
+  <button class="tb tb-print" onclick="window.print()">&#128424;&nbsp; Print / Save PDF</button>
+</div>
+
+<div class="page" id="doc">
+
+  <div class="doc-header">
+    <div>
+      <div class="co-brand">
+        <img src="${forézLogo}" alt="Forez" class="co-logo"/>
+        <div class="co-name" contenteditable="true">FOREZ CORP.</div>
+      </div>
+      <div class="co-info" contenteditable="true">${BUSINESS_PO.line1}<br/>${BUSINESS_PO.line2}<br/>United States &nbsp;|&nbsp; ${BUSINESS_PO.email}<br/>${BUSINESS_PO.website}</div>
+    </div>
+    <div class="doc-badge">
+      <div class="doc-type-pill" contenteditable="true">PURCHASE ORDER</div>
+      <div class="doc-number" contenteditable="true">${esc(poRef)}</div>
+      <div class="doc-meta-right" contenteditable="true"><strong>Date:</strong> ${formatDate(po.createdAt)}${po.expectedDate ? `<br/><strong>Expected:</strong> ${formatDate(po.expectedDate)}` : ""}<br/><strong>Status:</strong> ${esc(po.status ?? "draft")}</div>
+    </div>
+  </div>
+
+  <div class="accent-stripe"></div>
+
+  <div class="addr-grid">
+    <div>
+      <div class="addr-title">Vendor</div>
+      <div class="addr-body" contenteditable="true"><b>${esc(po.vendorName ?? "—")}</b></div>
+    </div>
+    <div>
+      <div class="addr-title">Ship To</div>
+      <div class="addr-body" contenteditable="true"><b>Forez Corp</b><br/>${BUSINESS_PO.line1}<br/>${BUSINESS_PO.line2}<br/>United States</div>
+    </div>
+    <div>
+      <div class="addr-title">PO Details</div>
+      <div class="addr-body" contenteditable="true"><b>PO #</b> ${esc(poRef)}<br/><b>Date:</b> ${formatDate(po.createdAt)}${po.expectedDate ? `<br/><b>Expected:</b> ${formatDate(po.expectedDate)}` : ""}<br/><b>Status:</b> ${esc(po.status ?? "draft")}</div>
+    </div>
+  </div>
+
+  <table class="items">
+    <thead>
+      <tr>
+        <th>#</th><th>Description</th>
+        <th class="r">Qty</th><th class="r">Unit Price</th><th class="r">Amount</th>
+      </tr>
+    </thead>
+    <tbody>${lineItemsHTML || `<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:20px">No line items — click &#65291; Add Row above</td></tr>`}</tbody>
+  </table>
+  <button class="add-row-btn" onclick="addRow()">&#65291; Add Line Item</button>
+
+  <div class="totals-wrap">
+    <div class="totals-box">
+      <div class="totals-grand"><span>TOTAL</span><span contenteditable="true">${formatCurrency(po.total ?? 0)}</span></div>
+    </div>
+  </div>
+
+  ${po.notes ? `<div class="notes-box"><div class="notes-title">Notes</div><div contenteditable="true">${esc(po.notes)}</div></div>` : ""}
+
+  <div class="doc-footer" contenteditable="true">Thank You For Your Business!</div>
+</div>
+
+<script>
+(function(){
+  var lf=null;
+  document.addEventListener('focusin',function(e){if(e.target&&e.target.getAttribute&&e.target.getAttribute('contenteditable')==='true')lf=e.target;});
+  window.fmt=function(c){document.execCommand(c,false,null);};
+  window.aln=function(d){
+    document.execCommand('justify'+d[0].toUpperCase()+d.slice(1),false,null);
+    document.querySelectorAll('.tb-align').forEach(function(b){b.classList.remove('active');});
+    var el=document.getElementById('al-'+d[0]);if(el)el.classList.add('active');
+  };
+  window.addBlock=function(){
+    var b=document.createElement('div');
+    b.className='custom-block';b.setAttribute('contenteditable','true');
+    b.setAttribute('data-ph','Click to type here\u2026');
+    var footer=document.querySelector('.doc-footer');
+    document.getElementById('doc').insertBefore(b,footer);b.focus();
+  };
+  window.removeBlock=function(){
+    if(lf&&lf.id!=='doc'&&!lf.classList.contains('doc-footer')&&!lf.classList.contains('page')){
+      if(window.confirm('Remove this section?')){lf.remove();lf=null;}
+    }
+  };
+  window.addRow=function(){
+    var tbody=document.querySelector('table.items tbody');if(!tbody)return;
+    var cols=document.querySelectorAll('table.items thead th').length;
+    var tr=document.createElement('tr');
+    for(var i=0;i<cols;i++){
+      var td=document.createElement('td');td.setAttribute('contenteditable','true');
+      if(i===0){td.className='num';td.textContent=tbody.children.length+1;}
+      else if(i===1){td.textContent='';}
+      else{td.className='r';td.textContent='—';}
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+    var c=tr.querySelector('td:nth-child(2)');if(c)c.focus();
+  };
+})();
+<\/script>
+</body></html>`);
+  w.document.close();
+  w.focus();
 }
 
 export default function PurchaseOrders() {
@@ -447,7 +656,7 @@ export default function PurchaseOrders() {
   return (
     <Layout>
       <Header title="Purchase Orders" subtitle={`${pos?.length ?? 0} total`} />
-      <div className="flex-1 flex flex-col overflow-hidden px-5 py-4 gap-4 bg-gradient-to-br from-[#eef6ff] via-[#f8fbff] to-[#edf4ff]">
+      <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 gap-4 flex flex-col bg-gradient-to-br from-[#eef6ff] via-[#f8fbff] to-[#edf4ff]">
         <div className="flex justify-between items-center gap-3">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
@@ -646,7 +855,7 @@ export default function PurchaseOrders() {
           )}
         </div>
 
-        <div className="glass-card flex-1 flex flex-col min-h-0 border border-blue-100/70">
+        <div className="glass-card flex flex-col border border-blue-100/70">
           {isLoading ? (
             <div className="p-10 flex justify-center"><div className="animate-spin w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full" /></div>
           ) : filtered?.length === 0 ? (
@@ -706,7 +915,7 @@ export default function PurchaseOrders() {
                 </button>
               </div>
             )}
-            <div className="flex-1 overflow-y-auto min-h-0">
+            <div>
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10">
                 <tr className="border-b border-blue-100 bg-blue-50/80">
@@ -855,6 +1064,7 @@ export default function PurchaseOrders() {
                             {po.status !== "received" && po.status !== "cancelled" && (
                               <DropdownMenuItem onClick={() => handleConvert(po.id)} className="gap-2 cursor-pointer text-sm hover:bg-slate-50 focus:bg-slate-50"><CreditCard size={13} /> Convert to Bill</DropdownMenuItem>
                             )}
+                            <DropdownMenuItem onClick={() => printSinglePO(po)} className="gap-2 cursor-pointer text-sm hover:bg-slate-50 focus:bg-slate-50"><Printer size={13} /> Print / PDF</DropdownMenuItem>
                             <DropdownMenuItem onClick={() => setEditPO(po)} className="gap-2 cursor-pointer text-sm hover:bg-slate-50 focus:bg-slate-50"><Edit size={13} /> Edit</DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleDelete(po.id)} className="gap-2 text-red-500 cursor-pointer text-sm hover:bg-red-50 focus:bg-red-50 focus:text-red-500"><Trash2 size={13} /> Delete</DropdownMenuItem>
                           </DropdownMenuContent>

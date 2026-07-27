@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import {
   X, Printer, Clock, CheckCircle2, XCircle, FileText,
   Mail, MessageSquare, Download, Copy, Check
@@ -76,6 +76,13 @@ export default function QuoteView({ quote, onClose }: Props) {
   const [emailTo, setEmailTo] = useState(quote.customerEmail ?? "");
   const [smsTo, setSmsTo] = useState(quote.customerPhone ?? "");
   const [copied, setCopied] = useState(false);
+  const [validityText, setValidityText] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/app-settings/quote_validity_text")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.value) setValidityText(d.value); });
+  }, []);
 
   const status = STATUS_CONFIG[quote.status] ?? STATUS_CONFIG.draft;
   const quoteNum = (quote as any).quoteNumber ?? `FRZQ - ${Math.max(5100, 5099 + Number(quote.id ?? 0))}`;
@@ -126,129 +133,221 @@ export default function QuoteView({ quote, onClose }: Props) {
   }
 
   function handlePrint(_download = false) {
-    const w = window.open("", "_blank", "width=900,height=700");
+    const accent   = quote.status === "accepted" ? "#276749" : "#1D4E89";
+    const docLabel = quote.status === "accepted" ? "ORDER CONFIRMATION" : "QUOTE";
+
+    const customerBlock = [
+      `<b>${escapeHtml(quote.customerName)}</b>`,
+      quote.customerAddress ? escapeHtml(quote.customerAddress) : null,
+      ([quote.customerCity, quote.customerState].filter(Boolean).join(", ") + (quote.customerZip ? ` ${escapeHtml(quote.customerZip)}` : "")) || null,
+      quote.customerCountry && quote.customerCountry !== "US" ? escapeHtml(quote.customerCountry) : null,
+      quote.customerEmail ? escapeHtml(quote.customerEmail) : null,
+      quote.customerPhone ? escapeHtml(quote.customerPhone) : null,
+    ].filter(Boolean).join("<br/>");
+
+    const lineItemsHTML = (quote.lineItems as LineItem[]).map((item, idx) => {
+      const gross   = item.quantity * item.unitPrice;
+      const disc    = gross * (item.discountPercent / 100);
+      const taxable = gross - disc;
+      const net     = taxable + taxable * (item.taxPercent / 100);
+      return `<tr>
+        <td class="num" contenteditable="true">${idx + 1}</td>
+        <td contenteditable="true">
+          <div class="item-name">${item.description ? nl2br(item.description) : "—"}</div>
+          ${item.lineDescription ? `<div class="item-desc">${nl2br(item.lineDescription)}</div>` : ""}
+        </td>
+        <td class="r" contenteditable="true">${item.quantity}</td>
+        <td class="r" contenteditable="true">${formatCurrency(item.unitPrice)}</td>
+        <td class="r" contenteditable="true">${item.discountPercent > 0 ? item.discountPercent + "%" : "—"}</td>
+        <td class="r" contenteditable="true">${item.taxPercent > 0 ? item.taxPercent + "%" : "—"}</td>
+        <td class="r" contenteditable="true" style="font-weight:600">${formatCurrency(net)}</td>
+      </tr>`;
+    }).join("");
+
+    const CSS = `
+      *{box-sizing:border-box;margin:0;padding:0}
+      #toolbar{position:fixed;top:0;left:0;right:0;z-index:9999;display:flex;align-items:center;gap:4px;flex-wrap:wrap;background:#0f172a;padding:8px 14px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 2px 12px rgba(0,0,0,0.4)}
+      .t-label{color:#64748b;font-size:10px;font-weight:700;letter-spacing:0.5px;padding-right:2px;text-transform:uppercase}
+      .t-sep{width:1px;height:20px;background:#1e293b;margin:0 6px;flex-shrink:0}
+      .tb{border:1px solid #1e293b;border-radius:5px;padding:4px 8px;font-size:11px;font-weight:600;cursor:pointer;background:#1e293b;color:#cbd5e1;transition:all 0.15s;white-space:nowrap;font-family:inherit}
+      .tb:hover{background:#334155;color:#fff}
+      .tb.active{background:${accent};color:#fff;border-color:${accent}}
+      .tb-print{background:${accent}!important;color:#fff!important;border-color:${accent}!important;margin-left:auto;padding:4px 16px!important;font-size:12px!important}
+      .tb-print:hover{filter:brightness(1.15)!important}
+      @media print{#toolbar{display:none!important}body{padding-top:0!important;background:#fff!important}.page{box-shadow:none!important;border:none!important;max-width:none!important;margin:0!important;padding:32px 40px!important}.custom-block{border:none!important}.add-row-btn{display:none!important}[contenteditable]{outline:none!important}}
+      body{font-family:Arial,Helvetica,sans-serif;background:#dde3ea;padding-top:54px;-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#1e293b}
+      .page{background:#fff;max-width:840px;margin:20px auto 48px;padding:44px 52px;box-shadow:0 4px 32px rgba(0,0,0,0.10);border:1px solid #e2e8f0;border-radius:2px}
+      .doc-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px}
+      .co-brand{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+      .co-logo{height:48px;width:auto;object-fit:contain;display:block}
+      .co-name{font-size:20px;font-weight:700;color:#0f172a;letter-spacing:0.2px;line-height:1.1}
+      .co-info{font-size:11px;color:#64748b;line-height:1.7}
+      .doc-badge{text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+      .doc-type-pill{background:${accent};color:#fff;font-size:10px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;padding:5px 18px;border-radius:2px;display:inline-block}
+      .doc-number{font-size:26px;font-weight:800;color:#0f172a;line-height:1;letter-spacing:-0.5px}
+      .doc-meta-right{font-size:11px;color:#64748b;line-height:1.9;text-align:right}
+      .doc-meta-right strong{color:#374151;font-weight:700}
+      .accent-stripe{height:3px;background:${accent};margin:0 -52px 28px}
+      .addr-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;margin-bottom:28px}
+      .addr-title{font-size:8px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:${accent};border-bottom:1.5px solid ${accent};padding-bottom:5px;margin-bottom:8px}
+      .addr-body{font-size:12px;color:#374151;line-height:1.75}
+      .addr-body b{color:#0f172a;font-weight:700}
+      table.items{width:100%;border-collapse:collapse;margin-bottom:4px;font-size:12px}
+      table.items thead tr{background:${accent}1a}
+      table.items th{padding:9px 11px;font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:${accent};text-align:left;border-bottom:2px solid ${accent}44}
+      table.items th.r{text-align:right}
+      table.items td{padding:9px 11px;border-bottom:1px solid #f1f5f9;vertical-align:top;color:#374151}
+      table.items td.r{text-align:right}
+      table.items td.num{font-size:11px;color:#94a3b8;width:30px}
+      table.items tbody tr:nth-child(even){background:#f8faff}
+      table.items tbody tr:last-child td{border-bottom:2px solid #e2e8f0}
+      .item-name{font-weight:600;color:#0f172a;font-size:12px}
+      .item-desc{font-size:11px;color:#64748b;margin-top:2px}
+      .add-row-btn{display:block;width:100%;margin:6px 0 0;background:none;border:1.5px dashed #cbd5e1;border-radius:4px;padding:7px;font-size:11px;color:#94a3b8;cursor:pointer;font-family:inherit;text-align:center}
+      .add-row-btn:hover{background:#f0f4ff;border-color:${accent};color:${accent}}
+      .totals-wrap{display:flex;justify-content:flex-end;margin:14px 0 28px}
+      .totals-box{width:290px;border:1px solid #e2e8f0;border-radius:3px;overflow:hidden;font-size:12px}
+      .totals-row{display:flex;justify-content:space-between;align-items:center;padding:8px 14px;border-bottom:1px solid #f1f5f9;color:#374151}
+      .totals-grand{background:${accent};color:#fff;display:flex;justify-content:space-between;align-items:center;padding:11px 14px;font-size:13px;font-weight:700}
+      .notes-box{background:#f8fafc;border:1px solid #e2e8f0;border-left:3px solid ${accent};border-radius:3px;padding:12px 16px;margin-bottom:16px;font-size:12px;color:#374151;line-height:1.65}
+      .notes-title{font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:${accent};margin-bottom:6px}
+      .custom-block{border:1.5px dashed #cbd5e1;border-radius:4px;padding:12px 16px;margin:10px 0;font-size:12px;color:#374151;line-height:1.6;min-height:44px}
+      .custom-block:focus{outline:none;border-color:${accent}}
+      [contenteditable]:focus{outline:2px solid ${accent}55;outline-offset:1px;border-radius:2px}
+      [contenteditable]:empty:before{content:attr(data-ph);color:#94a3b8;pointer-events:none}
+      .doc-footer{margin-top:32px;padding-top:16px;border-top:1px solid #e2e8f0;text-align:center;font-size:12px;color:#94a3b8;font-style:italic}
+    `;
+
+    const w = window.open("", "_blank", "width=980,height=860");
     if (!w) return;
-    w.document.write(`
-      <html><head><title>${quoteNum} — Forez Corp</title>
-      <style>
-        *{box-sizing:border-box;margin:0;padding:0}
-        body{font-family:'Segoe UI',sans-serif;background:#fff;color:#111;padding:48px}
-        .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:36px}
-        .logo-block{display:flex;align-items:center;gap:12px}
-        .logo-img{width:42px;height:42px;border-radius:8px;object-fit:contain}
-        .company-name{font-size:20px;font-weight:800;letter-spacing:-0.5px;color:#111}
-        .company-sub{font-size:10px;color:#888;letter-spacing:2px;text-transform:uppercase;margin-top:2px}
-        .company-addr{font-size:11px;color:#666;line-height:1.6;margin-top:6px}
-        h1{font-size:30px;font-weight:900;letter-spacing:-1px;color:#000}
-        .badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:99px;font-size:12px;font-weight:700;margin-top:6px}
-        .badge-accepted{background:#d4f400;color:#000}
-        .badge-sent{background:#dbeafe;color:#1e40af}
-        .badge-declined{background:#fee2e2;color:#dc2626}
-        .badge-draft{background:#f5f5f5;color:#555}
-        .meta{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;margin:28px 0}
-        .meta-block h4{font-size:10px;text-transform:uppercase;letter-spacing:2px;color:#888;margin-bottom:6px}
-        .meta-block p{font-size:13px;color:#111;line-height:1.6}
-        .meta-block p strong{font-weight:700}
-        hr{border:none;border-top:1px solid #e0e0e0;margin:24px 0}
-        table{width:100%;border-collapse:collapse;margin-bottom:24px}
-        thead tr{background:#f5f5f5}
-        th{text-align:left;padding:10px 12px;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#555;border-bottom:2px solid #e0e0e0}
-        td{padding:12px;font-size:14px;border-bottom:1px solid #f0f0f0;vertical-align:top}
-        td.right{text-align:right}
-        .item-name{font-size:14px;font-weight:600;color:#111;white-space:pre-wrap}
-        .item-desc{font-size:12px;color:#888;margin-top:2px;line-height:1.4}
-        .totals{display:flex;justify-content:flex-end}
-        .totals-table{width:280px}
-        .totals-row{display:flex;justify-content:space-between;padding:6px 0;font-size:13px;border-bottom:1px solid #f0f0f0}
-        .totals-total{display:flex;justify-content:space-between;padding:10px 0 0;font-size:18px;font-weight:800;color:#000;border-top:2px solid #000;margin-top:4px}
-        .notes{font-size:12px;color:#666;line-height:1.6;margin-top:20px;padding:16px;background:#f9f9f9;border-radius:6px}
-        .footer{margin-top:48px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid #e0e0e0;padding-top:16px}
-        .footer-logo{display:flex;align-items:center;gap:8px}
-        .footer-logo-img{width:22px;height:22px;border-radius:4px;object-fit:contain}
-        .footer-co{font-size:12px;font-weight:700;color:#333}
-        .footer-right{font-size:10px;color:#aaa;text-align:right}
-        @media print{body{padding:0} @page{margin:40px}}
-      </style></head><body>
-      <div class="header">
-        <div>
-          <div class="logo-block">
-            <img src="${forézLogo}" alt="Forez Corp" class="logo-img" />
-            <div>
-              <div class="company-name">Forez Corp</div>
-              <div class="company-sub">Industrial &amp; Commercial Supplies</div>
-            </div>
-          </div>
-          <div class="company-addr">
-            ${BUSINESS.line1}, ${BUSINESS.line2}<br/>
-            ${BUSINESS.phone} &nbsp;·&nbsp; ${BUSINESS.email}
-          </div>
-        </div>
-        <div style="text-align:right">
-          <h1>${quoteNum}</h1>
-          <span class="badge badge-${quote.status}">${status.label}</span>
-          <div style="margin-top:12px;font-size:11px;color:#888">
-            <div><strong>Issued:</strong> ${formatDate(quote.createdAt)}</div>
-            ${quote.expiresAt ? `<div style="margin-top:4px"><strong>Expires:</strong> ${formatDate(quote.expiresAt)}</div>` : ""}
-          </div>
-        </div>
+    w.document.write(`<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"/><title>${escapeHtml(quoteNum)} — Forez Corp</title>
+<style>${CSS}</style></head>
+<body>
+
+<div id="toolbar">
+  <span class="t-label">Format</span>
+  <button class="tb" onclick="fmt('bold')"><b>B</b></button>
+  <button class="tb" onclick="fmt('italic')"><i>I</i></button>
+  <button class="tb" onclick="fmt('underline')"><u>U</u></button>
+  <div class="t-sep"></div>
+  <span class="t-label">Align</span>
+  <button class="tb tb-align" id="al-l" onclick="aln('left')" title="Left">&#9664; Left</button>
+  <button class="tb tb-align" id="al-c" onclick="aln('center')" title="Center">&#9646; Centre</button>
+  <button class="tb tb-align" id="al-r" onclick="aln('right')" title="Right">Right &#9654;</button>
+  <div class="t-sep"></div>
+  <span class="t-label">Content</span>
+  <button class="tb" onclick="addBlock()">＋ Add Block</button>
+  <button class="tb" onclick="addRow()">＋ Add Row</button>
+  <button class="tb" onclick="removeBlock()" style="color:#f87171">✕ Remove</button>
+  <div class="t-sep"></div>
+  <button class="tb tb-print" onclick="window.print()">&#128424;&nbsp; Print / Save PDF</button>
+</div>
+
+<div class="page" id="doc">
+
+  <div class="doc-header">
+    <div>
+      <div class="co-brand">
+        <img src="${forézLogo}" alt="Forez" class="co-logo"/>
+        <div class="co-name" contenteditable="true">FOREZ CORP.</div>
       </div>
-      <hr/>
-      <div class="meta">
-        <div class="meta-block">
-          <h4>Prepared By</h4>
-          <p><strong>${BUSINESS.name}</strong><br/>${BUSINESS.line1}<br/>${BUSINESS.line2}<br/>${BUSINESS.email}</p>
-        </div>
-        <div class="meta-block">
-          <h4>Prepared For</h4>
-          <p><strong>${quote.customerName}</strong>${customerAddrLine ? `<br/>${customerAddrLine.replace(/\n/g, "<br/>")}` : ""}${quote.customerEmail ? `<br/>${quote.customerEmail}` : ""}${quote.customerPhone ? `<br/>${quote.customerPhone}` : ""}</p>
-        </div>
-        <div class="meta-block" style="text-align:right"></div>
-      </div>
-      <hr/>
-      <table>
-        <thead><tr><th>Description</th><th style="text-align:right">Qty</th><th style="text-align:right">Unit Price</th><th style="text-align:right">Discount</th><th style="text-align:right">Tax</th><th style="text-align:right">Amount</th></tr></thead>
-        <tbody>${(quote.lineItems as LineItem[]).map(item => {
-          const gross = item.quantity * item.unitPrice;
-          const disc = gross * (item.discountPercent / 100);
-          const taxable = gross - disc;
-          const net = taxable + taxable * (item.taxPercent / 100);
-          return `<tr>
-            <td>
-              <div class="item-name">${item.description ? nl2br(item.description) : "—"}</div>
-              ${item.lineDescription ? `<div class="item-desc">${nl2br(item.lineDescription)}</div>` : ""}
-            </td>
-            <td class="right">${item.quantity}</td>
-            <td class="right">${formatCurrency(item.unitPrice)}</td>
-            <td class="right">${item.discountPercent > 0 ? item.discountPercent + "%" : "—"}</td>
-            <td class="right">${item.taxPercent > 0 ? item.taxPercent + "%" : "—"}</td>
-            <td class="right" style="font-weight:600">${formatCurrency(net)}</td>
-          </tr>`;
-        }).join("")}</tbody>
-      </table>
-      <div class="totals">
-        <div class="totals-table">
-          <div class="totals-row"><span>Subtotal</span><span>${formatCurrency(quote.subtotal)}</span></div>
-          ${quote.discountTotal > 0 ? `<div class="totals-row"><span>Discount</span><span style="color:#dc2626">-${formatCurrency(quote.discountTotal)}</span></div>` : ""}
-          <div class="totals-row"><span>Tax</span><span>${formatCurrency(quote.taxTotal)}</span></div>
-          <div class="totals-total"><span>Total</span><span>${formatCurrency(quote.total)}</span></div>
-        </div>
-      </div>
-      ${quote.notes ? `<div class="notes"><strong>Notes:</strong> ${quote.notes}</div>` : ""}
-      <div class="footer">
-        <div class="footer-logo">
-          <img src="${forézLogo}" alt="Forez Corp" class="footer-logo-img" />
-          <div class="footer-co">Forez Corp</div>
-        </div>
-        <div class="footer-right">
-          ${quote.expiresAt ? `Quote valid until ${formatDate(quote.expiresAt)}` : "Thank you for your business"}<br/>
-          ${BUSINESS.website}
-        </div>
-      </div>
-      </body></html>
-    `);
+      <div class="co-info" contenteditable="true">${BUSINESS.line1}<br/>${BUSINESS.line2}<br/>United States &nbsp;|&nbsp; ${BUSINESS.phone}<br/>${BUSINESS.email} &nbsp;|&nbsp; ${BUSINESS.website}</div>
+    </div>
+    <div class="doc-badge">
+      <div class="doc-type-pill" contenteditable="true">${docLabel}</div>
+      <div class="doc-number" contenteditable="true">${escapeHtml(quoteNum)}</div>
+      <div class="doc-meta-right" contenteditable="true"><strong>Date:</strong> ${formatDate(quote.createdAt)}${quote.expiresAt ? `<br/><strong>Expires:</strong> ${formatDate(quote.expiresAt)}` : ""}<br/><strong>Status:</strong> ${escapeHtml(status.label)}</div>
+    </div>
+  </div>
+
+  <div class="accent-stripe"></div>
+
+  <div class="addr-grid">
+    <div>
+      <div class="addr-title">Bill To</div>
+      <div class="addr-body" contenteditable="true">${customerBlock}</div>
+    </div>
+    <div></div>
+    <div>
+      <div class="addr-title">Quote Details</div>
+      <div class="addr-body" contenteditable="true"><b>Quote #</b> ${escapeHtml(quoteNum)}<br/><b>Date:</b> ${formatDate(quote.createdAt)}${quote.expiresAt ? `<br/><b>Expires:</b> ${formatDate(quote.expiresAt)}` : ""}<br/><b>Status:</b> ${escapeHtml(status.label)}</div>
+    </div>
+  </div>
+
+  <table class="items">
+    <thead>
+      <tr>
+        <th>#</th><th>Description</th>
+        <th class="r">Qty</th><th class="r">Unit Price</th>
+        <th class="r">Disc %</th><th class="r">Tax %</th><th class="r">Amount</th>
+      </tr>
+    </thead>
+    <tbody>${lineItemsHTML}</tbody>
+  </table>
+  <button class="add-row-btn" onclick="addRow()">＋ Add Line Item</button>
+
+  <div class="totals-wrap">
+    <div class="totals-box">
+      <div class="totals-row"><span>Subtotal</span><span contenteditable="true">${formatCurrency(quote.subtotal)}</span></div>
+      ${quote.discountTotal > 0 ? `<div class="totals-row"><span>Discount</span><span contenteditable="true" style="color:#dc2626">&#8722;${formatCurrency(quote.discountTotal)}</span></div>` : ""}
+      <div class="totals-row"><span>Tax</span><span contenteditable="true">${formatCurrency(quote.taxTotal)}</span></div>
+      <div class="totals-grand"><span>TOTAL</span><span contenteditable="true">${formatCurrency(quote.total)}</span></div>
+    </div>
+  </div>
+
+  ${quote.notes ? `<div class="notes-box"><div class="notes-title">Notes</div><div contenteditable="true">${nl2br(quote.notes)}</div></div>` : ""}
+
+  <div class="notes-box" style="background:#fffbeb;border-left-color:#b45309">
+    <div class="notes-title" style="color:#b45309">Validity</div>
+    <div contenteditable="true">${escapeHtml(validityText || (quote.expiresAt ? `Valid until ${formatDate(quote.expiresAt)}` : "Valid for 30 days from issue date"))}</div>
+  </div>
+
+  <div class="doc-footer" contenteditable="true">Thank You For Your Business!</div>
+</div>
+
+<script>
+(function(){
+  var lf=null;
+  document.addEventListener('focusin',function(e){if(e.target&&e.target.getAttribute&&e.target.getAttribute('contenteditable')==='true')lf=e.target;});
+  window.fmt=function(c){document.execCommand(c,false,null);};
+  window.aln=function(d){
+    document.execCommand('justify'+d[0].toUpperCase()+d.slice(1),false,null);
+    document.querySelectorAll('.tb-align').forEach(function(b){b.classList.remove('active');});
+    var el=document.getElementById('al-'+d[0]);if(el)el.classList.add('active');
+  };
+  window.addBlock=function(){
+    var b=document.createElement('div');
+    b.className='custom-block';b.setAttribute('contenteditable','true');
+    b.setAttribute('data-ph','Click to type here\u2026');
+    var footer=document.querySelector('.doc-footer');
+    document.getElementById('doc').insertBefore(b,footer);b.focus();
+  };
+  window.removeBlock=function(){
+    if(lf&&lf.id!=='doc'&&!lf.classList.contains('doc-footer')&&!lf.classList.contains('page')){
+      if(window.confirm('Remove this section?')){lf.remove();lf=null;}
+    }
+  };
+  window.addRow=function(){
+    var tbody=document.querySelector('table.items tbody');if(!tbody)return;
+    var cols=document.querySelectorAll('table.items thead th').length;
+    var tr=document.createElement('tr');
+    for(var i=0;i<cols;i++){
+      var td=document.createElement('td');td.setAttribute('contenteditable','true');
+      if(i===0){td.className='num';td.textContent=tbody.children.length+1;}
+      else if(i===1){td.textContent='';}
+      else{td.className='r';td.textContent='—';}
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+    var c=tr.querySelector('td:nth-child(2)');if(c)c.focus();
+  };
+})();
+<\/script>
+</body></html>`);
     w.document.close();
     w.focus();
-    setTimeout(() => { w.print(); }, 400);
   }
 
   return (
@@ -450,7 +549,7 @@ export default function QuoteView({ quote, onClose }: Props) {
               <span className="text-white/30 text-xs">Forez Corp · {BUSINESS.website}</span>
             </div>
             <span className="text-white/25 text-xs">
-              {quote.expiresAt ? `Valid until ${formatDate(quote.expiresAt)}` : "Thank you for your business"}
+              {validityText || (quote.expiresAt ? `Valid until ${formatDate(quote.expiresAt)}` : "Thank you for your business")}
             </span>
           </div>
         </div>
@@ -519,7 +618,7 @@ function SendPanel({ title, icon, fields, previewLabel, previewText, primaryLabe
       ))}
       <div>
         <label className="text-white/35 text-[10px] uppercase tracking-wider block mb-1.5">{previewLabel}</label>
-        <pre className="bg-white/4 border border-white/8 rounded-lg p-3 text-white/55 text-xs font-mono leading-relaxed max-h-32 overflow-y-auto whitespace-pre-wrap">
+        <pre className="bg-white/4 border border-white/8 rounded-lg p-3 text-white/90 text-xs font-mono leading-relaxed max-h-32 overflow-y-auto whitespace-pre-wrap">
           {previewText}
         </pre>
       </div>

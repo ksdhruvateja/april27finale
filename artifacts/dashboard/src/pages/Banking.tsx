@@ -421,6 +421,7 @@ export default function Banking() {
                   : "No transactions match your filters."}
               </div>
             ) : (
+              <div className="overflow-x-auto overflow-y-auto max-h-[68vh] scrollbar-hide">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50/70">
@@ -469,6 +470,7 @@ export default function Banking() {
                   })}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         </div>

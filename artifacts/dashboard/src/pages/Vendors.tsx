@@ -301,6 +301,7 @@ export default function Vendors() {
           ) : filtered?.length === 0 ? (
             <div className="p-10 text-center text-slate-500 text-sm">No vendors found.</div>
           ) : (
+            <div className="overflow-x-auto overflow-y-auto max-h-[68vh] scrollbar-hide">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-blue-100 bg-blue-50/70">
@@ -438,6 +439,7 @@ export default function Vendors() {
                 })}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </div>

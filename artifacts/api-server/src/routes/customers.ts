@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { eq, sql, and, inArray } from "drizzle-orm";
+import { eq, sql, and, inArray, asc } from "drizzle-orm";
 import { db, customersTable, invoicesTable } from "@workspace/db";
 import {
   CreateCustomerBody,
@@ -29,7 +29,7 @@ async function withBalances(customers: (typeof customersTable.$inferSelect)[]) {
 }
 
 router.get("/customers", async (req, res): Promise<void> => {
-  const customers = await db.select().from(customersTable).orderBy(customersTable.createdAt);
+  const customers = await db.select().from(customersTable).orderBy(asc(customersTable.name));
   res.json(await withBalances(customers));
 });
 

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useCreateCustomer, useUpdateCustomer, getListCustomersQueryKey, useListSalesLeads, useListCustomers } from "@workspace/api-client-react";
+import { useState, useEffect } from "react";
+import { useCreateCustomer, useUpdateCustomer, getListCustomersQueryKey, useListSalesLeads } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import Modal, { LightFormField, LightFormInput, LightFormSelect, LightFormTextarea, LightSubmitBar } from "./Modal";
 import { Plus, X, ShieldCheck, ShieldOff, Phone } from "lucide-react";
@@ -107,13 +107,24 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
   const isEdit = !!customer;
 
   const { data: salesLeads = [] } = useListSalesLeads();
-  const { data: customers = [] } = useListCustomers();
+  // Only pull from actual sales leads (staff), not customer records — avoids vendor names appearing
   const allRepNames = Array.from(
-    new Set([
-      ...salesLeads.map((lead: any) => `${lead.firstName} ${lead.lastName}`).filter(Boolean),
-      ...customers.map((c: any) => c.name).filter(Boolean)
-    ])
+    new Set(salesLeads.map((lead: any) => `${lead.firstName} ${lead.lastName}`.trim()).filter(Boolean))
   ).sort();
+
+  const [netTermOptions, setNetTermOptions] = useState<string[]>([]);
+  useEffect(() => {
+    fetch("/api/app-settings/net_terms")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.value) {
+          try {
+            const parsed = JSON.parse(d.value);
+            if (Array.isArray(parsed) && parsed.length > 0) setNetTermOptions(parsed);
+          } catch { /* ignore parse errors */ }
+        }
+      });
+  }, []);
 
   const [form, setForm] = useState({
     name: customer?.name ?? "",
@@ -306,12 +317,18 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
             <LightFormField label="Payment Terms">
               <LightFormSelect value={form.accountType} onChange={set("accountType")}>
                 <option value="">Select terms…</option>
-                <option value="net30">Net 30 (invoice due in 30 days)</option>
-                <option value="net60">Net 60 (invoice due in 60 days)</option>
-                <option value="net90">Net 90 (invoice due in 90 days)</option>
-                <option value="cash">Cash (immediate payment)</option>
-                <option value="cash_advance">Cash Advance (pay before delivery)</option>
-                <option value="cod">COD (pay on delivery)</option>
+                {netTermOptions.length > 0 ? (
+                  netTermOptions.map(t => <option key={t} value={t}>{t}</option>)
+                ) : (
+                  <>
+                    <option value="net30">Net 30 (invoice due in 30 days)</option>
+                    <option value="net60">Net 60 (invoice due in 60 days)</option>
+                    <option value="net90">Net 90 (invoice due in 90 days)</option>
+                    <option value="cash">Cash (immediate payment)</option>
+                    <option value="cash_advance">Cash Advance (pay before delivery)</option>
+                    <option value="cod">COD (pay on delivery)</option>
+                  </>
+                )}
               </LightFormSelect>
             </LightFormField>
             <LightFormField label="Credit Limit ($)">

@@ -70,6 +70,8 @@ interface CustomerInfo {
   zipCode?: string | null;
   country?: string | null;
   phone?: string | null;
+  shippingCarrierName?: string | null;
+  shippingAccountNumber?: string | null;
 }
 
 interface LineItem {
@@ -370,7 +372,21 @@ export default function ShippingRateModal({ customerId, invoiceId, customerName,
               <Truck size={16} className="text-[hsl(224_50%_25%)]" />
               Create Shipment
             </h2>
-            <p className="text-slate-500 text-xs mt-0.5">{customerName}</p>
+            <p className="text-slate-500 text-xs mt-0.5">{customer?.company ? `${customer.company} · ${customerName}` : customerName}</p>
+            {(customer?.shippingCarrierName || customer?.shippingAccountNumber) && (
+              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                {customer.shippingCarrierName && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-50 border border-sky-200 text-sky-700">
+                    <Truck size={9} /> {customer.shippingCarrierName}
+                  </span>
+                )}
+                {customer.shippingAccountNumber && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-50 border border-sky-200 text-sky-700 font-mono">
+                    Acct# {customer.shippingAccountNumber}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -395,6 +411,25 @@ export default function ShippingRateModal({ customerId, invoiceId, customerName,
           {/* ── Step 0: Shipping Type Selection ── */}
           {step === "type" && (
             <div className="px-6 py-6 flex flex-col gap-5">
+              {(customer?.shippingCarrierName || customer?.shippingAccountNumber) && (
+                <div className="flex items-start gap-3 p-3.5 rounded-xl bg-sky-50 border border-sky-200">
+                  <Truck size={15} className="text-sky-600 mt-0.5 flex-shrink-0" />
+                  <div className="flex flex-col gap-0.5 min-w-0">
+                    <p className="text-sky-700 font-semibold text-xs">Customer Shipping Account</p>
+                    {customer?.company && (
+                      <span className="text-sky-800 text-xs">Company: <span className="font-medium">{customer.company}</span></span>
+                    )}
+                    <div className="flex flex-wrap gap-x-4 gap-y-0.5">
+                      {customer?.shippingCarrierName && (
+                        <span className="text-sky-800 text-xs">Carrier: <span className="font-medium">{customer.shippingCarrierName}</span></span>
+                      )}
+                      {customer?.shippingAccountNumber && (
+                        <span className="text-sky-800 text-xs">Account #: <span className="font-medium font-mono">{customer.shippingAccountNumber}</span></span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
               {(vendorCarrierName || vendorCarrierAccount) && (
                 <div className="flex items-start gap-3 p-3.5 rounded-xl bg-sky-50 border border-sky-200">
                   <Truck size={15} className="text-sky-600 mt-0.5 flex-shrink-0" />
