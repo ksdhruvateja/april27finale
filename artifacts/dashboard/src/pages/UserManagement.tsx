@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
 import { useRole, UserRole, CustomPermissions } from "@/context/RoleContext";
-import { Plus, Trash2, Pencil, X, Check, ShieldAlert, Settings2 } from "lucide-react";
+import { Plus, Trash2, Pencil, X, Check, ShieldAlert, Settings2, ChevronDown, ChevronUp } from "lucide-react";
 
 interface AppUser {
   id: number;
@@ -15,13 +15,13 @@ interface AppUser {
 }
 
 const ROLES: { value: UserRole; label: string; desc: string; color: string }[] = [
-  { value: "developer",  label: "Developer",    desc: "Full access + manage all users",           color: "#a78bfa" },
-  { value: "admin",      label: "Admin",         desc: "Full access, can invite sales/shippers",   color: "#60a5fa" },
-  { value: "sales",      label: "Sales",         desc: "Quotes, invoices, POs, shipments",         color: "#34d399" },
-  { value: "shipper",    label: "Shipper",        desc: "Shipments & POs, no prices",               color: "#93c5fd" },
-  { value: "accountant", label: "Accountant",    desc: "Finance, banking, reports",                color: "#fbbf24" },
-  { value: "viewer",     label: "Viewer",         desc: "Read-only: quotes, invoices, POs",        color: "#9ca3af" },
-  { value: "custom",     label: "Custom Role",   desc: "Choose specific module access manually",   color: "#fb923c" },
+  { value: "developer",  label: "Developer",   desc: "Full access + manage all users",          color: "#a78bfa" },
+  { value: "admin",      label: "Admin",        desc: "Full access, can invite sales/shippers",  color: "#60a5fa" },
+  { value: "sales",      label: "Sales",        desc: "Quotes, invoices, POs, shipments",        color: "#34d399" },
+  { value: "shipper",    label: "Shipper",       desc: "Shipments & POs, no prices",              color: "#93c5fd" },
+  { value: "accountant", label: "Accountant",   desc: "Finance, banking, reports",               color: "#fbbf24" },
+  { value: "viewer",     label: "Viewer",        desc: "Read-only: quotes, invoices, POs",       color: "#9ca3af" },
+  { value: "custom",     label: "Custom Role",  desc: "Choose specific module access manually",  color: "#fb923c" },
 ];
 
 const ROLE_BADGE: Record<string, string> = {
@@ -43,37 +43,65 @@ const ROLE_TEXT: Record<string, string> = {
   custom:     "#fdba74",
 };
 
+// ─── All navigable tabs ───────────────────────────────────────────────────────
 const ALL_MODULES = [
-  { path: "/",               label: "Dashboard",       group: "MAIN"       },
-  { path: "/customers",      label: "Customers",       group: "SALES"      },
-  { path: "/quotes",         label: "Quotes",          group: "SALES"      },
-  { path: "/invoices",       label: "Invoices",        group: "SALES"      },
-  { path: "/sales-leads",    label: "Sales Leads",     group: "SALES"      },
-  { path: "/vendors",        label: "Vendors",         group: "PURCHASING" },
-  { path: "/purchase-orders",label: "Purchase Orders", group: "PURCHASING" },
-  { path: "/bills",          label: "Bills",           group: "PURCHASING" },
-  { path: "/products",       label: "Products",        group: "INVENTORY"  },
-  { path: "/shipments",      label: "Shipments",       group: "INVENTORY"  },
-  { path: "/tax-rates",      label: "Tax Rates",       group: "FINANCE"    },
-  { path: "/accounting",     label: "Accounting",      group: "FINANCE"    },
-  { path: "/banking",        label: "Banking",         group: "FINANCE"    },
+  { path: "/",                label: "Dashboard",         group: "MAIN"       },
+  { path: "/auctions",        label: "Auctions",          group: "MAIN"       },
+  { path: "/tickets",         label: "Tickets",           group: "MAIN"       },
+  { path: "/customers",       label: "Customers",         group: "SALES"      },
+  { path: "/quotes",          label: "Quotes",            group: "SALES"      },
+  { path: "/invoices",        label: "Invoices",          group: "SALES"      },
+  { path: "/walk-in",         label: "Walk-in Sale",      group: "SALES"      },
+  { path: "/sales-leads",     label: "Sales Leads",       group: "SALES"      },
+  { path: "/returns-refunds", label: "Returns & Refunds", group: "SALES"      },
+  { path: "/vendors",         label: "Vendors",           group: "PURCHASING" },
+  { path: "/purchase-orders", label: "Purchase Orders",   group: "PURCHASING" },
+  { path: "/bills",           label: "Bills",             group: "PURCHASING" },
+  { path: "/products",        label: "Products",          group: "INVENTORY"  },
+  { path: "/shipments",       label: "Shipments",         group: "INVENTORY"  },
+  { path: "/tax-rates",       label: "Tax Rates",         group: "FINANCE"    },
+  { path: "/accounting",      label: "Accounting",        group: "FINANCE"    },
+  { path: "/banking",         label: "Banking",           group: "FINANCE"    },
+  { path: "/documents",       label: "Documents",         group: "SYSTEM"     },
+  { path: "/users",           label: "Users",             group: "SYSTEM"     },
+  { path: "/history",         label: "History",           group: "SYSTEM"     },
+  { path: "/settings",        label: "Settings",          group: "SYSTEM"     },
 ];
 
-const MODULE_GROUPS = ["MAIN", "SALES", "PURCHASING", "INVENTORY", "FINANCE"] as const;
+const MODULE_GROUPS = ["MAIN", "SALES", "PURCHASING", "INVENTORY", "FINANCE", "SYSTEM"] as const;
+const ALL_PATHS = ALL_MODULES.map(m => m.path);
 
-const DEFAULT_CUSTOM: CustomPermissions = {
-  allowedPaths: ["/", "/purchase-orders", "/shipments"],
-  readOnly: false,
-  hidePrices: false,
+// Default tab access per role — used to pre-populate the picker when selecting a role
+const ROLE_DEFAULT_PATHS: Record<string, string[]> = {
+  developer:  ALL_PATHS,
+  admin:      ALL_PATHS,
+  sales:      ["/", "/auctions", "/tickets", "/customers", "/quotes", "/invoices", "/walk-in",
+               "/sales-leads", "/returns-refunds", "/purchase-orders", "/products", "/shipments",
+               "/documents", "/history"],
+  shipper:    ["/purchase-orders", "/shipments", "/documents"],
+  accountant: ["/", "/auctions", "/tickets", "/customers", "/invoices", "/walk-in", "/vendors",
+               "/purchase-orders", "/bills", "/tax-rates", "/accounting", "/banking",
+               "/documents", "/history"],
+  viewer:     ["/", "/auctions", "/quotes", "/invoices", "/purchase-orders", "/shipments",
+               "/tickets", "/history", "/documents"],
+  custom:     ["/", "/purchase-orders", "/shipments"],
 };
 
-// ─── Custom Permission Picker ─────────────────────────────────────────────────
-function CustomPermPicker({
+const makeDefaultPerms = (role: string): CustomPermissions => ({
+  allowedPaths: ROLE_DEFAULT_PATHS[role] ?? ALL_PATHS,
+  readOnly:     false,
+  hidePrices:   false,
+});
+
+// ─── Tab Picker ───────────────────────────────────────────────────────────────
+function TabPicker({
   value,
   onChange,
+  showRestrictions,
 }: {
   value: CustomPermissions;
   onChange: (v: CustomPermissions) => void;
+  showRestrictions?: boolean;
 }) {
   const toggle = (path: string) => {
     const has = value.allowedPaths.includes(path);
@@ -88,30 +116,53 @@ function CustomPermPicker({
   const toggleGroup = (group: string) => {
     const groupPaths = ALL_MODULES.filter(m => m.group === group).map(m => m.path);
     const allOn = groupPaths.every(p => value.allowedPaths.includes(p));
-    if (allOn) {
-      onChange({ ...value, allowedPaths: value.allowedPaths.filter(p => !groupPaths.includes(p)) });
-    } else {
-      const merged = [...new Set([...value.allowedPaths, ...groupPaths])];
-      onChange({ ...value, allowedPaths: merged });
-    }
+    onChange({
+      ...value,
+      allowedPaths: allOn
+        ? value.allowedPaths.filter(p => !groupPaths.includes(p))
+        : [...new Set([...value.allowedPaths, ...groupPaths])],
+    });
   };
+
+  const selectAll = () => onChange({ ...value, allowedPaths: ALL_PATHS });
+  const clearAll  = () => onChange({ ...value, allowedPaths: [] });
+  const allOn     = ALL_PATHS.every(p => value.allowedPaths.includes(p));
 
   return (
     <div
       className="rounded-xl p-4 mt-2"
       style={{ background: "rgba(59,130,246,0.07)", border: "1px solid rgba(59,130,246,0.20)" }}
     >
-      <div className="flex items-center gap-2 mb-3">
-        <Settings2 size={13} style={{ color: "#2563eb" }} />
-        <span className="text-[12px] font-black uppercase tracking-wider" style={{ color: "#2563eb" }}>
-          Module Access
-        </span>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Settings2 size={13} style={{ color: "#2563eb" }} />
+          <span className="text-[12px] font-black uppercase tracking-wider" style={{ color: "#2563eb" }}>
+            Tab Access
+          </span>
+          <span className="text-[11px] font-semibold ml-1" style={{ color: "rgba(71,85,105,0.65)" }}>
+            ({value.allowedPaths.length}/{ALL_PATHS.length} tabs)
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={allOn ? clearAll : selectAll}
+            className="text-[11px] font-bold px-2.5 py-1 rounded-lg transition-colors"
+            style={{
+              background: allOn ? "rgba(239,68,68,0.10)" : "rgba(37,99,235,0.10)",
+              color: allOn ? "#ef4444" : "#2563eb",
+            }}
+          >
+            {allOn ? "Clear All" : "Select All"}
+          </button>
+        </div>
       </div>
 
       {/* Module checkboxes grouped */}
       <div className="flex flex-col gap-3 mb-4">
         {MODULE_GROUPS.map(group => {
-          const mods = ALL_MODULES.filter(m => m.group === group);
+          const mods  = ALL_MODULES.filter(m => m.group === group);
           const allOn = mods.every(m => value.allowedPaths.includes(m.path));
           const someOn = mods.some(m => value.allowedPaths.includes(m.path));
           return (
@@ -128,7 +179,7 @@ function CustomPermPicker({
                     border: allOn ? "none" : "1px solid rgba(148,163,184,0.35)",
                   }}
                 >
-                  {allOn && <Check size={9} color="#fff" strokeWidth={3} />}
+                  {allOn  && <Check size={9} color="#fff" strokeWidth={3} />}
                   {!allOn && someOn && <div className="w-1.5 h-0.5 rounded-full" style={{ background: "#2563eb" }} />}
                 </div>
                 <span className="text-[10px] font-black tracking-widest uppercase" style={{ color: "rgba(71,85,105,0.75)" }}>
@@ -170,61 +221,115 @@ function CustomPermPicker({
         })}
       </div>
 
-      {/* Extra options */}
-      <div
-        className="flex flex-col gap-2 pt-3"
-        style={{ borderTop: "1px solid rgba(148,163,184,0.20)" }}
-      >
-        <label className="text-[10px] font-black uppercase tracking-wider mb-1" style={{ color: "rgba(71,85,105,0.75)" }}>
-          Restrictions
-        </label>
-        {[
-          { key: "readOnly",   label: "Read-only mode",  desc: "Cannot create, edit, or delete anything" },
-          { key: "hidePrices", label: "Hide prices",     desc: "Prices are hidden across all modules"    },
-        ].map(opt => {
-          const on = value[opt.key as keyof CustomPermissions] as boolean;
-          return (
-            <button
-              key={opt.key}
-              type="button"
-              onClick={() => onChange({ ...value, [opt.key]: !on })}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors"
-              style={{
-                background: on ? "rgba(239,68,68,0.10)" : "rgba(255,255,255,0.04)",
-                border: on ? "1px solid rgba(239,68,68,0.25)" : "1px solid rgba(148,163,184,0.20)",
-              }}
-            >
-              <div
-                className="w-8 h-4.5 rounded-full flex items-center transition-all flex-shrink-0 relative"
+      {/* Restrictions — only for custom role */}
+      {showRestrictions && (
+        <div
+          className="flex flex-col gap-2 pt-3"
+          style={{ borderTop: "1px solid rgba(148,163,184,0.20)" }}
+        >
+          <label className="text-[10px] font-black uppercase tracking-wider mb-1" style={{ color: "rgba(71,85,105,0.75)" }}>
+            Restrictions
+          </label>
+          {[
+            { key: "readOnly",   label: "Read-only mode", desc: "Cannot create, edit, or delete anything" },
+            { key: "hidePrices", label: "Hide prices",    desc: "Prices are hidden across all modules"    },
+          ].map(opt => {
+            const on = value[opt.key as keyof CustomPermissions] as boolean;
+            return (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => onChange({ ...value, [opt.key]: !on })}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors"
                 style={{
-                  background: on ? "#ef4444" : "rgba(255,255,255,0.15)",
-                  width: 32,
-                  height: 18,
+                  background: on ? "rgba(239,68,68,0.10)" : "rgba(255,255,255,0.04)",
+                  border: on ? "1px solid rgba(239,68,68,0.25)" : "1px solid rgba(148,163,184,0.20)",
                 }}
               >
                 <div
-                  className="absolute rounded-full transition-all"
-                  style={{
-                    width: 12,
-                    height: 12,
-                    background: "#ffffff",
-                    left: on ? 16 : 4,
-                    top: 3,
-                  }}
-                />
-              </div>
-              <div>
-                <div className="text-[12px] font-bold" style={{ color: on ? "#b91c1c" : "#1e293b" }}>
-                  {opt.label}
+                  className="rounded-full flex items-center transition-all flex-shrink-0 relative"
+                  style={{ width: 32, height: 18, background: on ? "#ef4444" : "rgba(255,255,255,0.15)" }}
+                >
+                  <div
+                    className="absolute rounded-full transition-all"
+                    style={{ width: 12, height: 12, background: "#ffffff", left: on ? 16 : 4, top: 3 }}
+                  />
                 </div>
-                <div className="text-[10px] font-semibold" style={{ color: "rgba(71,85,105,0.75)" }}>
-                  {opt.desc}
+                <div>
+                  <div className="text-[12px] font-bold" style={{ color: on ? "#b91c1c" : "#1e293b" }}>{opt.label}</div>
+                  <div className="text-[10px] font-semibold" style={{ color: "rgba(71,85,105,0.75)" }}>{opt.desc}</div>
                 </div>
-              </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Inline tab editor on a user row ─────────────────────────────────────────
+function UserTabEditor({ user, onSaved }: { user: AppUser; onSaved: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [perms, setPerms] = useState<CustomPermissions>(() => {
+    try { return user.customPermissions ? JSON.parse(user.customPermissions) : makeDefaultPerms(user.role); }
+    catch { return makeDefaultPerms(user.role); }
+  });
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    await fetch(`/api/users/${user.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ customPermissions: JSON.stringify(perms) }),
+    });
+    setSaving(false);
+    setOpen(false);
+    onSaved();
+  };
+
+  const count = perms.allowedPaths.length;
+
+  return (
+    <div className="px-6 pb-1 pt-0">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-2 text-[11px] font-bold px-3 py-1.5 rounded-lg transition-colors"
+        style={{ background: "rgba(37,99,235,0.08)", color: "#2563eb", border: "1px solid rgba(37,99,235,0.18)" }}
+      >
+        <Settings2 size={11} />
+        Manage Tabs ({count}/{ALL_PATHS.length})
+        {open ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+      </button>
+
+      {open && (
+        <div className="mt-2">
+          <TabPicker
+            value={perms}
+            onChange={setPerms}
+            showRestrictions={user.role === "custom"}
+          />
+          <div className="flex items-center gap-2 mt-3">
+            <button
+              onClick={save}
+              disabled={saving}
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[12px] font-bold text-white"
+              style={{ background: "linear-gradient(135deg,#3b82f6,#2563eb)" }}
+            >
+              <Check size={12} /> {saving ? "Saving…" : "Save Tab Access"}
             </button>
-          );
-        })}
-      </div>
+            <button
+              onClick={() => setOpen(false)}
+              className="px-3 py-1.5 rounded-lg text-[12px] font-bold"
+              style={{ background: "rgba(148,163,184,0.18)", color: "#475569" }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -233,22 +338,30 @@ function CustomPermPicker({
 export default function UserManagement() {
   const { currentUser, canManageUsers } = useRole();
 
-  const isDeveloper = currentUser?.role === "developer";
-  const availableRoles = isDeveloper
-    ? ROLES
-    : ROLES.filter(r => r.value !== "developer");
+  const isDeveloper  = currentUser?.role === "developer";
+  const availableRoles = isDeveloper ? ROLES : ROLES.filter(r => r.value !== "developer");
 
-  const [users, setUsers]         = useState<AppUser[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [adding, setAdding]       = useState(false);
+  const [users,     setUsers]     = useState<AppUser[]>([]);
+  const [loading,   setLoading]   = useState(true);
+  const [adding,    setAdding]    = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editRole, setEditRole]   = useState<UserRole>("viewer");
-  const [editName, setEditName]   = useState("");
-  const [editCustomPerms, setEditCustomPerms] = useState<CustomPermissions>(DEFAULT_CUSTOM);
-  const [form, setForm] = useState({ email: "", name: "", role: "viewer" as UserRole, password: "" });
-  const [customPerms, setCustomPerms] = useState<CustomPermissions>(DEFAULT_CUSTOM);
-  const [error, setError]   = useState("");
+
+  // ── Add form state ──
+  const [form, setForm] = useState({
+    email: "", name: "", role: "viewer" as UserRole, password: "",
+  });
+  const [formPerms, setFormPerms] = useState<CustomPermissions>(makeDefaultPerms("viewer"));
+
+  // ── Edit form state ──
+  const [editRole,  setEditRole]  = useState<UserRole>("viewer");
+  const [editName,  setEditName]  = useState("");
+  const [editPerms, setEditPerms] = useState<CustomPermissions>(makeDefaultPerms("viewer"));
+
+  const [error,  setError]  = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Expanded tab-editor rows
+  const [expandedTabEdit, setExpandedTabEdit] = useState<number | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -261,50 +374,56 @@ export default function UserManagement() {
 
   useEffect(() => { load(); }, []);
 
+  // When role changes in add form, reset tab defaults
+  const setFormRole = (role: UserRole) => {
+    setForm(f => ({ ...f, role }));
+    setFormPerms(p => ({ ...p, allowedPaths: ROLE_DEFAULT_PATHS[role] ?? ALL_PATHS }));
+  };
+
+  // When role changes in edit form, reset tab defaults
+  const setEditRoleAndPaths = (role: UserRole) => {
+    setEditRole(role);
+    setEditPerms(p => ({ ...p, allowedPaths: ROLE_DEFAULT_PATHS[role] ?? ALL_PATHS }));
+  };
+
   const handleAdd = async () => {
-    if (!form.email) { setError("Email is required."); return; }
+    if (!form.email)    { setError("Email is required.");    return; }
     if (!form.password) { setError("Password is required."); return; }
-    if (form.role === "custom" && customPerms.allowedPaths.length === 0) {
-      setError("Select at least one module for a custom role.");
-      return;
+    if (formPerms.allowedPaths.length === 0) {
+      setError("Select at least one tab for this user."); return;
     }
     setSaving(true); setError("");
-    const body: any = {
-      email: form.email,
-      name: form.name || undefined,
-      role: form.role,
-      password: form.password,
-      invitedBy: currentUser?.email,
-    };
-    if (form.role === "custom") {
-      body.customPermissions = JSON.stringify(customPerms);
-    }
     const res = await fetch("/api/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        email:             form.email,
+        name:              form.name || undefined,
+        role:              form.role,
+        password:          form.password,
+        invitedBy:         currentUser?.email,
+        customPermissions: JSON.stringify(formPerms),
+      }),
     });
     const data = await res.json();
     if (!res.ok) { setError(data.error ?? "Failed to add user."); setSaving(false); return; }
     setAdding(false);
     setForm({ email: "", name: "", role: "viewer", password: "" });
-    setCustomPerms(DEFAULT_CUSTOM);
+    setFormPerms(makeDefaultPerms("viewer"));
     load();
     setSaving(false);
   };
 
   const handleEdit = async (id: number) => {
     setSaving(true);
-    const body: any = { role: editRole, name: editName };
-    if (editRole === "custom") {
-      body.customPermissions = JSON.stringify(editCustomPerms);
-    } else {
-      body.customPermissions = null;
-    }
     await fetch(`/api/users/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        role:              editRole,
+        name:              editName,
+        customPermissions: JSON.stringify(editPerms),
+      }),
     });
     setEditingId(null);
     load();
@@ -322,33 +441,35 @@ export default function UserManagement() {
     setEditRole(u.role as UserRole);
     setEditName(u.name ?? "");
     try {
-      setEditCustomPerms(u.customPermissions ? JSON.parse(u.customPermissions) : DEFAULT_CUSTOM);
+      const stored = u.customPermissions ? JSON.parse(u.customPermissions) : null;
+      setEditPerms(stored ?? makeDefaultPerms(u.role));
     } catch {
-      setEditCustomPerms(DEFAULT_CUSTOM);
+      setEditPerms(makeDefaultPerms(u.role));
     }
   };
 
-  const getCustomSummary = (u: AppUser) => {
-    if (u.role !== "custom" || !u.customPermissions) return null;
+  const getTabSummary = (u: AppUser) => {
     try {
-      const cp: CustomPermissions = JSON.parse(u.customPermissions);
+      const cp: CustomPermissions = u.customPermissions
+        ? JSON.parse(u.customPermissions)
+        : { allowedPaths: ROLE_DEFAULT_PATHS[u.role] ?? ALL_PATHS, readOnly: false, hidePrices: false };
+      const count = cp.allowedPaths.length;
+      const total = ALL_PATHS.length;
+      if (count === total) return `All ${total} tabs`;
       const labels = cp.allowedPaths
         .map(p => ALL_MODULES.find(m => m.path === p)?.label)
-        .filter(Boolean);
-      const extras: string[] = [];
-      if (cp.readOnly) extras.push("read-only");
-      if (cp.hidePrices) extras.push("no prices");
-      return [...labels, ...extras].join(", ");
-    } catch {
-      return null;
-    }
+        .filter(Boolean)
+        .slice(0, 3);
+      const extra = count > 3 ? ` +${count - 3}` : "";
+      return labels.join(", ") + extra;
+    } catch { return null; }
   };
 
   if (!canManageUsers) {
     return (
       <Layout>
         <Header title="User Management" />
-        <div className="flex-1 flex items-center justify-center px-6 py-8" style={{ background: "transparent" }}>
+        <div className="flex-1 flex items-center justify-center px-6 py-8">
           <div className="glass-card p-10 max-w-md text-center">
             <ShieldAlert size={36} className="mx-auto mb-3" style={{ color: "#3b82f6" }} />
             <h2 className="text-[18px] font-black mb-2" style={{ color: "#0f172a" }}>Access Denied</h2>
@@ -404,7 +525,7 @@ export default function UserManagement() {
 
         {/* Users table */}
         <div className="glass-card overflow-hidden">
-          {/* Header row */}
+          {/* Header */}
           <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
             <div>
               <h2 className="text-[15px] font-black" style={{ color: "#0f172a" }}>Team Members</h2>
@@ -417,14 +538,13 @@ export default function UserManagement() {
               className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-bold text-white transition-all hover:scale-105"
               style={{ background: "linear-gradient(135deg,#3b82f6,#2563eb)", boxShadow: "0 4px 14px rgba(59,130,246,0.35)" }}
             >
-              <Plus size={14} />
-              Add User
+              <Plus size={14} /> Add User
             </button>
           </div>
 
-          {/* Add form */}
+          {/* ── Add form ── */}
           {adding && (
-            <div className="px-6 py-4" style={{ background: "rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+            <div className="px-6 py-5" style={{ background: "rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
               <div className="flex flex-wrap items-end gap-3 mb-0">
                 <div className="flex flex-col gap-1 flex-1 min-w-[180px]">
                   <label className="text-[11px] font-black uppercase tracking-wider" style={{ color: "rgba(71,85,105,0.85)" }}>Email *</label>
@@ -463,7 +583,7 @@ export default function UserManagement() {
                   <label className="text-[11px] font-black uppercase tracking-wider" style={{ color: "rgba(71,85,105,0.85)" }}>Role</label>
                   <select
                     value={form.role}
-                    onChange={e => setForm(f => ({ ...f, role: e.target.value as UserRole }))}
+                    onChange={e => setFormRole(e.target.value as UserRole)}
                     className="input-light"
                     style={{ fontSize: 13 }}
                   >
@@ -489,16 +609,18 @@ export default function UserManagement() {
                 </div>
               </div>
 
-              {/* Custom permissions picker */}
-              {form.role === "custom" && (
-                <CustomPermPicker value={customPerms} onChange={setCustomPerms} />
-              )}
+              {/* Tab picker — always shown */}
+              <TabPicker
+                value={formPerms}
+                onChange={setFormPerms}
+                showRestrictions={form.role === "custom"}
+              />
 
               {error && <p className="mt-2 text-[12px] font-bold" style={{ color: "#f87171" }}>{error}</p>}
             </div>
           )}
 
-          {/* User rows */}
+          {/* ── User rows ── */}
           {loading ? (
             <div className="text-center py-12 text-[13px] font-semibold" style={{ color: "rgba(71,85,105,0.80)" }}>Loading…</div>
           ) : users.length === 0 ? (
@@ -507,6 +629,7 @@ export default function UserManagement() {
             <div className="divide-y" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
               {users.map(u => (
                 <div key={u.id}>
+                  {/* Main user row */}
                   <div
                     className="flex items-center gap-4 px-6 py-4 transition-all"
                     style={{ background: "transparent" }}
@@ -521,7 +644,7 @@ export default function UserManagement() {
                       {(u.name ?? u.email).slice(0, 2).toUpperCase()}
                     </div>
 
-                    {/* Name + email + custom summary */}
+                    {/* Name + email */}
                     <div className="flex-1 min-w-0">
                       {editingId === u.id ? (
                         <input
@@ -537,10 +660,10 @@ export default function UserManagement() {
                         </div>
                       )}
                       <div className="text-[11px] font-semibold truncate" style={{ color: "rgba(71,85,105,0.80)" }}>{u.email}</div>
-                      {u.role === "custom" && !editingId && (() => {
-                        const summary = getCustomSummary(u);
+                      {!editingId && (() => {
+                        const summary = getTabSummary(u);
                         return summary ? (
-                          <div className="text-[10px] font-semibold mt-0.5 truncate" style={{ color: "rgba(37,99,235,0.80)" }}>
+                          <div className="text-[10px] font-semibold mt-0.5 truncate" style={{ color: "rgba(37,99,235,0.75)" }}>
                             {summary}
                           </div>
                         ) : null;
@@ -552,7 +675,7 @@ export default function UserManagement() {
                       {editingId === u.id ? (
                         <select
                           value={editRole}
-                          onChange={e => setEditRole(e.target.value as UserRole)}
+                          onChange={e => setEditRoleAndPaths(e.target.value as UserRole)}
                           className="input-light"
                           style={{ fontSize: 12, padding: "4px 10px" }}
                         >
@@ -607,6 +730,7 @@ export default function UserManagement() {
                             style={{ background: "rgba(59,130,246,0.12)", color: "#60a5fa" }}
                             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(59,130,246,0.22)"; }}
                             onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "rgba(59,130,246,0.12)"; }}
+                            title="Edit name / role"
                           >
                             <Pencil size={12} />
                           </button>
@@ -616,6 +740,7 @@ export default function UserManagement() {
                             style={{ background: "rgba(248,113,113,0.12)", color: "#f87171" }}
                             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(248,113,113,0.22)"; }}
                             onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "rgba(248,113,113,0.12)"; }}
+                            title="Remove user"
                           >
                             <Trash2 size={12} />
                           </button>
@@ -624,11 +749,23 @@ export default function UserManagement() {
                     </div>
                   </div>
 
-                  {/* Inline custom permission picker when editing a custom role user */}
-                  {editingId === u.id && editRole === "custom" && (
+                  {/* Inline tab picker when editing name/role */}
+                  {editingId === u.id && (
                     <div className="px-6 pb-5">
-                      <CustomPermPicker value={editCustomPerms} onChange={setEditCustomPerms} />
+                      <TabPicker
+                        value={editPerms}
+                        onChange={setEditPerms}
+                        showRestrictions={editRole === "custom"}
+                      />
                     </div>
+                  )}
+
+                  {/* Manage Tabs expander (when not in name/role edit mode) */}
+                  {editingId !== u.id && (
+                    <UserTabEditor
+                      user={u}
+                      onSaved={() => { load(); setExpandedTabEdit(null); }}
+                    />
                   )}
                 </div>
               ))}

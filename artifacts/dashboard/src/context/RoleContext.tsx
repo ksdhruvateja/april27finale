@@ -38,11 +38,12 @@ export const ROLE_ACCESS: Record<Exclude<UserRole, "custom">, string[]> = {
 };
 
 export function checkAccess(role: UserRole, path: string, customPermissions?: CustomPermissions): boolean {
-  if (role === "custom") {
-    if (!customPermissions) return false;
-    const allowed = customPermissions.allowedPaths;
-    return allowed.some(p => path === p || (p !== "/" && path.startsWith(p)));
+  // If an explicit tab list has been set for this user (any role), honour it for navigation visibility.
+  if (customPermissions?.allowedPaths && customPermissions.allowedPaths.length > 0) {
+    return customPermissions.allowedPaths.some(p => path === p || (p !== "/" && path.startsWith(p)));
   }
+  // Fall back to role-level defaults.
+  if (role === "custom") return false; // custom with no paths = no access
   const allowed = ROLE_ACCESS[role as Exclude<UserRole, "custom">];
   if (!allowed) return false;
   if (allowed.includes("*")) return true;
