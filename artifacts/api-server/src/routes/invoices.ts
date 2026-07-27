@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { eq, inArray } from "drizzle-orm";
-import { db, invoicesTable, customersTable, quotesTable, purchaseOrdersTable, shipmentsTable } from "@workspace/db";
+import { db, invoicesTable, customersTable, quotesTable, purchaseOrdersTable, shipmentsTable, paymentsTable } from "@workspace/db";
 import { getNextDocNumber } from "../lib/doc-numbers";
 import {
   CreateInvoiceBody,
@@ -110,18 +110,34 @@ router.delete("/invoices/:id", async (req, res): Promise<void> => {
   res.sendStatus(204);
 });
 
+/* POST /api/invoices/:id/pay — manual payment recording (cash, check, bank transfer) */
 router.post("/invoices/:id/pay", async (req, res): Promise<void> => {
   const params = PayInvoiceParams.safeParse({ id: Number(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id) });
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const parsed = PayInvoiceBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+  const paidAt = new Date();
   const [inv] = await db.update(invoicesTable).set({
     status: "paid",
     paymentMethod: parsed.data.paymentMethod,
     paymentNote: parsed.data.paymentNote ?? null,
-    paidAt: new Date(),
+    paidAt,
   }).where(eq(invoicesTable.id, params.data.id)).returning();
   if (!inv) { res.status(404).json({ error: "Invoice not found" }); return; }
+
+  // Record in payments table
+  const amountCents = Math.round(Number(inv.total) * 100);
+  await db.insert(paymentsTable).values({
+    invoiceId: inv.id,
+    customerId: inv.customerId,
+    amountCents,
+    currency: "usd",
+    method: parsed.data.paymentMethod ?? "cash",
+    note: parsed.data.paymentNote ?? null,
+    paidAt,
+  }).catch(() => {/* non-fatal if payments table doesn't exist yet */});
+
   res.json(await withCustomerName(inv));
 });
 

@@ -1,7 +1,7 @@
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
-import { useState, useEffect } from "react";
-import { Truck, Save, CheckCircle2, Eye, EyeOff, Loader2, FileText, Tag } from "lucide-react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { Truck, Save, CheckCircle2, Eye, EyeOff, Loader2, FileText, Tag, Pencil, Trash2, Plus, X, Check } from "lucide-react";
 
 function ShippingSection() {
   const [apiKey, setApiKey] = useState("");
@@ -165,23 +165,54 @@ function useSetting(key: string) {
 function QuoteDefaultsSection() {
   const validity = useSetting("quote_validity_text");
   const terms = useSetting("net_terms");
-  const [termsInput, setTermsInput] = useState("");
 
-  // net_terms is stored as a JSON array; display as newline-separated for editing
-  useEffect(() => {
-    if (!terms.value) return;
+  // ── Parse stored JSON array ──────────────────────────────────────
+  const termsList: string[] = useMemo(() => {
+    if (!terms.value) return [];
     try {
       const parsed = JSON.parse(terms.value);
-      if (Array.isArray(parsed)) setTermsInput(parsed.join("\n"));
-      else setTermsInput(terms.value);
+      return Array.isArray(parsed) ? parsed : terms.value ? [terms.value] : [];
     } catch {
-      setTermsInput(terms.value);
+      return terms.value ? [terms.value] : [];
     }
   }, [terms.value]);
 
-  const saveTerms = () => {
-    const lines = termsInput.split("\n").map(l => l.trim()).filter(Boolean);
-    terms.save(JSON.stringify(lines));
+  const [newTerm, setNewTerm] = useState("");
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [editingVal, setEditingVal] = useState("");
+  const editInputRef = useRef<HTMLInputElement>(null);
+  const addInputRef = useRef<HTMLInputElement>(null);
+
+  const persist = (list: string[]) => terms.save(JSON.stringify(list));
+
+  const addTerm = () => {
+    const t = newTerm.trim();
+    if (!t) return;
+    persist([...termsList, t]);
+    setNewTerm("");
+    setTimeout(() => addInputRef.current?.focus(), 50);
+  };
+
+  const startEdit = (idx: number) => {
+    setEditingIdx(idx);
+    setEditingVal(termsList[idx]);
+    setTimeout(() => { editInputRef.current?.select(); }, 30);
+  };
+
+  const commitEdit = () => {
+    if (editingIdx === null) return;
+    const t = editingVal.trim();
+    const updated = [...termsList];
+    if (t) updated[editingIdx] = t;
+    else updated.splice(editingIdx, 1);
+    persist(updated);
+    setEditingIdx(null);
+  };
+
+  const cancelEdit = () => setEditingIdx(null);
+
+  const deleteTerm = (idx: number) => {
+    persist(termsList.filter((_, i) => i !== idx));
   };
 
   return (
@@ -191,7 +222,7 @@ function QuoteDefaultsSection() {
         <h2 className="text-slate-800 text-base font-bold">Quote & Payment Defaults</h2>
       </div>
 
-      {/* Quote validity text */}
+      {/* ── Quote Validity Message ─────────────────────────────────── */}
       <div className="flex flex-col gap-2">
         <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
           Quote Validity Message
@@ -219,29 +250,98 @@ function QuoteDefaultsSection() {
         </div>
       </div>
 
-      {/* Net terms */}
-      <div className="flex flex-col gap-2">
-        <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-          <Tag size={11} /> Payment Terms Options
-        </label>
-        <p className="text-xs text-slate-400">
-          One term per line (e.g. <span className="font-mono text-slate-600">Net 30</span>). These will appear in the Payment Terms dropdown when adding or editing a customer. Leave blank to use built-in defaults.
-        </p>
-        <textarea
-          value={termsInput}
-          onChange={e => setTermsInput(e.target.value)}
-          placeholder={"Net 30\nNet 60\nNet 90\nCash\nCOD\nCash Advance"}
-          rows={6}
-          className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-400 transition-colors resize-none font-mono"
-        />
-        <button
-          onClick={saveTerms}
-          disabled={terms.saving}
-          className="flex items-center gap-2 self-start px-4 py-2 bg-[hsl(224_50%_15%)] text-white text-sm font-semibold rounded-lg hover:bg-[hsl(224_50%_20%)] disabled:opacity-50 transition-colors"
-        >
-          {terms.saving ? <Loader2 size={14} className="animate-spin" /> : terms.saved ? <CheckCircle2 size={14} /> : <Save size={14} />}
-          {terms.saved ? "Saved!" : "Save Terms"}
-        </button>
+      {/* ── Payment Terms List ─────────────────────────────────────── */}
+      <div className="flex flex-col gap-3">
+        <div>
+          <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+            <Tag size={11} /> Payment Terms Options
+          </label>
+          <p className="text-xs text-slate-400 mt-1">
+            These appear in the <strong>Payment Terms</strong> dropdown when adding or editing a customer.
+            Changes take effect immediately everywhere.
+          </p>
+        </div>
+
+        {/* Term rows */}
+        <div className="rounded-xl border border-slate-200 overflow-hidden bg-white divide-y divide-slate-100">
+          {termsList.length === 0 && (
+            <div className="px-4 py-5 text-center text-slate-400 text-sm">
+              No payment terms saved yet. Add one below.
+            </div>
+          )}
+
+          {termsList.map((term, idx) => (
+            <div key={idx} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 transition-colors group">
+              {editingIdx === idx ? (
+                <>
+                  <input
+                    ref={editInputRef}
+                    value={editingVal}
+                    onChange={e => setEditingVal(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") cancelEdit(); }}
+                    className="flex-1 text-sm border border-blue-400 rounded-lg px-3 py-1.5 text-slate-800 focus:outline-none bg-blue-50"
+                    autoFocus
+                  />
+                  <button onClick={commitEdit} title="Save" className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors">
+                    <Check size={14} />
+                  </button>
+                  <button onClick={cancelEdit} title="Cancel" className="p-1.5 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors">
+                    <X size={14} />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="flex-1 text-sm text-slate-800 font-medium">{term}</span>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => startEdit(idx)}
+                      title="Edit"
+                      className="p-1.5 rounded-lg hover:bg-blue-50 text-slate-400 hover:text-blue-600 transition-colors"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                    <button
+                      onClick={() => deleteTerm(idx)}
+                      title="Delete"
+                      className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+
+          {/* Add new term row */}
+          <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50">
+            <Plus size={14} className="text-slate-400 flex-shrink-0" />
+            <input
+              ref={addInputRef}
+              value={newTerm}
+              onChange={e => setNewTerm(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") addTerm(); }}
+              placeholder="Add a payment term… (e.g. Net 45)"
+              className="flex-1 text-sm bg-transparent border-none outline-none text-slate-800 placeholder:text-slate-400"
+            />
+            {newTerm.trim() && (
+              <button
+                onClick={addTerm}
+                className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[hsl(224_50%_15%)] text-white text-xs font-semibold hover:bg-[hsl(224_50%_20%)] transition-colors"
+              >
+                {terms.saving ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
+                Add
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Saved feedback */}
+        {terms.saved && (
+          <p className="text-xs text-emerald-600 flex items-center gap-1.5 font-medium">
+            <CheckCircle2 size={12} /> Payment terms updated — changes are live everywhere.
+          </p>
+        )}
       </div>
     </div>
   );

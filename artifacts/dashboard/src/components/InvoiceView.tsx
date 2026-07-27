@@ -1,8 +1,10 @@
-import { useRef } from "react";
-import { X, Printer, CheckCircle2, Clock, AlertTriangle, Ban, ShoppingCart, Link2 } from "lucide-react";
+import { useRef, useState } from "react";
+import { X, Printer, CheckCircle2, Clock, AlertTriangle, Ban, ShoppingCart, Link2, CreditCard, ExternalLink, Copy, Check, Loader2, DollarSign } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { useListCustomers } from "@workspace/api-client-react";
+import { useListCustomers, getListInvoicesQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import forézLogo from "@assets/image_1775678558898.png";
+import StripeCollectModal from "@/components/StripeCollectModal";
 
 interface LineItem {
   description: string;
@@ -82,11 +84,57 @@ const escapeHtml = (value: string) =>
 
 const nl2br = (value: string) => escapeHtml(value).replace(/\r?\n/g, "<br/>");
 
+const API = import.meta.env.BASE_URL.replace(/\/$/, "");
+
 export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPending, onCreatePO }: Props) {
   const printRef = useRef<HTMLDivElement>(null);
   const { data: customers } = useListCustomers();
+  const queryClient = useQueryClient();
+
+  const invalidateAfterPayment = () => {
+    queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
+    queryClient.invalidateQueries({ queryKey: ["accounting-ar"] });
+    queryClient.invalidateQueries({ queryKey: ["accounting-pnl"] });
+    queryClient.invalidateQueries({ queryKey: ["accounting-ap"] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard/stats"] });
+    queryClient.invalidateQueries({ queryKey: ["payments-history"] });
+    queryClient.invalidateQueries({ queryKey: ["accounting-customer-revenue"] });
+    queryClient.invalidateQueries({ queryKey: ["accounting-product-profit"] });
+  };
+
+  // Payment link state
+  const [payLinkLoading, setPayLinkLoading] = useState(false);
+  const [payLinkUrl, setPayLinkUrl] = useState<string | null>(null);
+  const [payLinkCopied, setPayLinkCopied] = useState(false);
+  const [showStripeCollect, setShowStripeCollect] = useState(false);
+
+  const generatePaymentLink = async () => {
+    setPayLinkLoading(true);
+    try {
+      const res = await fetch(`${API}/api/invoices/${invoice.id}/payment-link`, { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert((err as any).error ?? "Failed to generate payment link");
+        return;
+      }
+      const { url } = await res.json();
+      setPayLinkUrl(url);
+    } catch {
+      alert("Failed to generate payment link — check your Stripe configuration.");
+    } finally {
+      setPayLinkLoading(false);
+    }
+  };
+
+  const copyLink = async () => {
+    if (!payLinkUrl) return;
+    await navigator.clipboard.writeText(payLinkUrl).catch(() => {});
+    setPayLinkCopied(true);
+    setTimeout(() => setPayLinkCopied(false), 2000);
+  };
 
   const customer = customers?.find((c: any) => c.id === invoice.customerId) as any;
+  const customerDisplayName = customer?.company || customer?.name || `Customer #${invoice.customerId}`;
   const addr = customer?.shippingAddress ?? customer?.billingAddress;
 
   const effectiveInvoiceNum = invoice.invoiceNumber ?? `FRZI - ${Math.max(5100, 5099 + Number(invoice.id ?? 0))}`;
@@ -359,11 +407,30 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
               <p className="text-white/40 text-xs">Forez Corp · Industrial &amp; Commercial Supplies</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {onCreatePO && (
               <button onClick={onCreatePO} className="flex items-center gap-1.5 text-xs font-semibold bg-amber-400/10 border border-amber-400/30 text-amber-300 px-3 py-1.5 rounded-lg hover:bg-amber-400/20 transition-colors">
                 <ShoppingCart size={13} /> Create PO(s)
               </button>
+            )}
+            {invoice.status !== "paid" && invoice.status !== "cancelled" && (
+              <>
+                <button
+                  onClick={() => generatePaymentLink(false)}
+                  disabled={payLinkLoading}
+                  className="flex items-center gap-1.5 text-xs font-semibold bg-indigo-500/15 border border-indigo-400/30 text-indigo-300 px-3 py-1.5 rounded-lg hover:bg-indigo-500/25 transition-colors disabled:opacity-50"
+                >
+                  {payLinkLoading ? <Loader2 size={13} className="animate-spin" /> : <Link2 size={13} />}
+                  Send Payment Link
+                </button>
+                <button
+                  onClick={() => setShowStripeCollect(true)}
+                  className="flex items-center gap-1.5 text-xs font-semibold bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 px-3 py-1.5 rounded-lg hover:bg-emerald-500/25 transition-colors"
+                >
+                  <CreditCard size={13} />
+                  Collect Payment
+                </button>
+              </>
             )}
             {invoice.status !== "pending" && invoice.status !== "paid" && invoice.status !== "cancelled" && onMarkPending && (
               <button onClick={() => onMarkPending(invoice.id)} className="flex items-center gap-1.5 text-xs font-semibold bg-amber-400/10 border border-amber-400/30 text-amber-300 px-3 py-1.5 rounded-lg hover:bg-amber-400/20 transition-colors">
@@ -511,6 +578,36 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
             </div>
           )}
 
+          {/* Pay Securely CTA — only shown when invoice is not paid/cancelled */}
+          {invoice.status !== "paid" && invoice.status !== "cancelled" && (
+            <div className="rounded-2xl border border-emerald-400/25 bg-emerald-500/8 p-5 flex items-center justify-between gap-4">
+              <div>
+                <p className="text-emerald-300 font-bold text-sm leading-tight">Ready to pay?</p>
+                <p className="text-white/40 text-xs mt-0.5">Secure payment powered by Stripe — card or bank transfer accepted.</p>
+              </div>
+              <button
+                onClick={async () => {
+                  setPayLinkLoading(true);
+                  try {
+                    const res = await fetch(`${API}/api/invoices/${invoice.id}/payment-link`, { method: "POST" });
+                    if (!res.ok) { alert("Could not generate payment link — check Stripe configuration."); return; }
+                    const { url } = await res.json();
+                    window.open(url, "_blank");
+                  } catch { alert("Failed to generate payment link."); }
+                  finally { setPayLinkLoading(false); }
+                }}
+                disabled={payLinkLoading}
+                className="flex-shrink-0 flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-sm transition-colors disabled:opacity-50 shadow-lg shadow-emerald-900/30"
+              >
+                {payLinkLoading
+                  ? <Loader2 size={14} className="animate-spin" />
+                  : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/></svg>
+                }
+                Pay Securely →
+              </button>
+            </div>
+          )}
+
           {/* Footer */}
           <div className="flex items-center justify-between pt-2 border-t border-white/8">
             <div className="flex items-center gap-2">
@@ -523,6 +620,65 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
           </div>
         </div>
       </div>
+
+      {/* Stripe In-Person Payment Modal */}
+      {showStripeCollect && (
+        <StripeCollectModal
+          invoiceId={invoice.id}
+          invoiceNumber={invoice.invoiceNumber ?? `FRZI-${invoice.id}`}
+          total={Number(invoice.total ?? 0)}
+          customerName={customerDisplayName}
+          onClose={() => setShowStripeCollect(false)}
+          onSuccess={() => {
+            setShowStripeCollect(false);
+            invalidateAfterPayment();
+            if (onMarkPaid) onMarkPaid(invoice.id);
+          }}
+        />
+      )}
+
+      {/* Payment Link Popup */}
+      {payLinkUrl && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" onClick={() => setPayLinkUrl(null)}>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="relative z-10 bg-white rounded-2xl border border-slate-200 shadow-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center">
+                <Link2 size={16} className="text-indigo-600" />
+              </div>
+              <div>
+                <h3 className="text-slate-800 font-bold text-base leading-tight">Payment Link Ready</h3>
+                <p className="text-slate-400 text-xs">Share this link with your customer to collect payment online</p>
+              </div>
+              <button onClick={() => setPayLinkUrl(null)} className="ml-auto p-1.5 rounded-lg hover:bg-slate-100 text-slate-400"><X size={16} /></button>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-4">
+              <p className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold mb-1.5">Stripe Checkout URL</p>
+              <p className="text-slate-700 text-xs font-mono break-all leading-relaxed">{payLinkUrl}</p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={copyLink}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors"
+              >
+                {payLinkCopied ? <><Check size={14} className="text-emerald-500" /> Copied!</> : <><Copy size={14} /> Copy Link</>}
+              </button>
+              <button
+                onClick={() => window.open(payLinkUrl, "_blank")}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors"
+              >
+                <ExternalLink size={14} /> Open Link
+              </button>
+            </div>
+
+            <p className="text-slate-400 text-xs text-center mt-3">
+              The invoice will automatically update to <strong>Paid</strong> once the customer completes payment.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

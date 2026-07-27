@@ -130,9 +130,12 @@ const queryClient = new QueryClient({
   mutationCache,
   defaultOptions: {
     queries: {
-      staleTime: 10 * 60 * 1000,
-      gcTime: 30 * 60 * 1000,
-      refetchOnWindowFocus: false,
+      staleTime: 20_000,                  // data fresh for 20s, then background-refetch
+      gcTime: 5 * 60 * 1000,             // keep in cache 5min
+      refetchOnWindowFocus: true,         // refresh whenever user switches back to tab
+      refetchOnReconnect: true,           // refresh after network reconnect
+      refetchInterval: 30_000,            // poll every 30s across all queries
+      refetchIntervalInBackground: false, // pause polling when tab is hidden
       retry: 1,
     },
   },

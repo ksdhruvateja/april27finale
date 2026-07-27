@@ -9,7 +9,7 @@ import {
   ArrowUpRight, ArrowDownRight, Plus, Trash2, Edit, BarChart2,
   Building2, CreditCard, Wallet, PiggyBank, Receipt,
   Package, X, Users, Store, Table2, Download, Filter, Search,
-  Pencil, Check, AlertTriangle, Palette,
+  Pencil, Check, AlertTriangle, Palette, History,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid } from "recharts";
 import { EXPENSE_CATEGORIES } from "@/lib/expenseCategories";
@@ -519,6 +519,73 @@ function LedgerTab() {
 /* ══════════════════════════════════════════════════════════════ */
 /*  AR AGING TAB                                                   */
 /* ══════════════════════════════════════════════════════════════ */
+const METHOD_LABELS: Record<string, string> = {
+  stripe: "Credit Card (Stripe)",
+  bank_transfer: "Bank Transfer",
+  check: "Check",
+  cash: "Cash",
+};
+const METHOD_COLORS: Record<string, string> = {
+  stripe: "text-indigo-700 bg-indigo-50 border-indigo-200",
+  bank_transfer: "text-blue-700 bg-blue-50 border-blue-200",
+  check: "text-amber-700 bg-amber-50 border-amber-200",
+  cash: "text-emerald-700 bg-emerald-50 border-emerald-200",
+};
+
+function PaymentHistorySection() {
+  const { data, isLoading } = useQuery({
+    queryKey: ["payments-history"],
+    queryFn: () => apiFetch("/api/payments"),
+    refetchInterval: 30000,
+  });
+  const payments: any[] = data ?? [];
+
+  return (
+    <div className="glass-card overflow-hidden">
+      <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 flex items-center gap-2">
+        <CreditCard size={14} className="text-emerald-600" />
+        <span className="text-slate-700 font-semibold text-sm">Payment History</span>
+        <span className="ml-auto text-xs text-slate-400">{payments.length} payment{payments.length !== 1 ? "s" : ""}</span>
+      </div>
+      {isLoading ? (
+        <div className="p-8 flex justify-center"><div className="animate-spin w-5 h-5 border-2 border-slate-800 border-t-transparent rounded-full" /></div>
+      ) : payments.length === 0 ? (
+        <div className="p-8 text-center text-slate-400 text-sm">No payments recorded yet</div>
+      ) : (
+        <div className="overflow-x-auto overflow-y-auto max-h-72 scrollbar-hide">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 bg-slate-50/70">
+                {["Date","Invoice #","Customer","Amount","Method","Reference"].map(h => (
+                  <th key={h} className="px-4 py-2.5 text-left text-slate-400 font-medium text-[11px] uppercase tracking-wider">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {payments.map((p: any) => (
+                <tr key={p.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                  <td className="px-4 py-2.5 text-slate-500 text-xs">{formatDate(p.paidAt)}</td>
+                  <td className="px-4 py-2.5 font-mono text-xs text-slate-600">{p.invoiceNumber ?? `INV-${p.invoiceId}`}</td>
+                  <td className="px-4 py-2.5 text-slate-800 font-medium">{p.customerName ?? `Customer #${p.customerId}`}</td>
+                  <td className="px-4 py-2.5 font-bold text-emerald-700">{formatCurrency(p.amount)}</td>
+                  <td className="px-4 py-2.5">
+                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${METHOD_COLORS[p.method] ?? "text-slate-600 bg-slate-50 border-slate-200"}`}>
+                      {METHOD_LABELS[p.method] ?? p.method}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2.5 font-mono text-[11px] text-slate-400 max-w-[140px] truncate">
+                    {p.stripeChargeId ?? p.stripePaymentIntentId ?? p.stripeCheckoutSessionId ?? p.note ?? "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ARTab() {
   const { data, isLoading } = useQuery({ queryKey: ["accounting-ar"], queryFn: () => apiFetch("/api/accounting/ar-aging") });
   const [bucketFilter, setBucketFilter] = useState<string>("all");
@@ -598,6 +665,8 @@ function ARTab() {
           </div>
         )}
       </div>
+
+      <PaymentHistorySection />
     </div>
   );
 }

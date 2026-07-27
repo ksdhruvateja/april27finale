@@ -6,7 +6,7 @@ import Header from "@/components/Header";
 import InvoiceView from "@/components/InvoiceView";
 import InvoiceModal from "@/components/InvoiceModal";
 import { useListInvoices, useDeleteInvoice, usePayInvoice, useUpdateInvoice, getListInvoicesQueryKey, useListCustomers, useListPurchaseOrders, useListShipments } from "@workspace/api-client-react";
-import { Search, Plus, MoreHorizontal, Edit, Trash2, CheckCircle, Eye, X, Truck, ShoppingCart, Hash, Link2, ChevronDown, Pencil, StickyNote, Mail, MessageSquare, Download, Calendar, ChevronRight, BarChart2, ChevronUp, TrendingUp, TrendingDown, Printer, Save } from "lucide-react";
+import { Search, Plus, MoreHorizontal, Edit, Trash2, CheckCircle, Eye, X, Truck, ShoppingCart, Hash, Link2, ChevronDown, Pencil, StickyNote, Mail, MessageSquare, Download, Calendar, ChevronRight, BarChart2, ChevronUp, TrendingUp, TrendingDown, Printer, Save, CreditCard, ExternalLink, Copy, Check, Loader2 } from "lucide-react";
 import { printShippingSlip } from "@/lib/print-slip";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, Legend, PieChart, Pie, ComposedChart, Line, Area } from "recharts";
 import { useQueryClient } from "@tanstack/react-query";
@@ -14,8 +14,11 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { formatCurrency, formatDate } from "@/lib/utils";
 import ShipmentModal from "@/components/ShipmentModal";
 import InvoicePoModal from "@/components/InvoicePoModal";
+import StripeCollectModal from "@/components/StripeCollectModal";
 
 type PaymentMethod = "stripe" | "bank_transfer" | "check" | "cash";
+
+const STRIPE_METHODS: PaymentMethod[] = ["stripe", "bank_transfer"];
 
 const INVOICE_STATUSES: { value: string; label: string; cls: string }[] = [
   { value: "draft",        label: "Draft",        cls: "text-slate-500  bg-slate-50  border-slate-200" },
@@ -26,8 +29,9 @@ const INVOICE_STATUSES: { value: string; label: string; cls: string }[] = [
   { value: "cancelled",    label: "Cancelled",    cls: "text-slate-400  bg-slate-50  border-slate-200" },
 ];
 
-const PAYMENT_METHODS: { value: PaymentMethod; label: string; desc: string }[] = [
-  { value: "stripe",        label: "Credit Card",   desc: "Process via Stripe" },
+const PAYMENT_METHODS: { value: PaymentMethod; label: string; desc: string; stripe?: boolean }[] = [
+  { value: "stripe",        label: "Credit Card",   desc: "Charged via Stripe", stripe: true },
+  { value: "bank_transfer", label: "Bank / ACH",    desc: "ACH via Stripe",     stripe: true },
   { value: "bank_transfer", label: "Bank Transfer", desc: "ACH / wire transfer" },
   { value: "check",         label: "Check",         desc: "Physical check" },
   { value: "cash",          label: "Cash",          desc: "Cash payment" },
@@ -119,6 +123,12 @@ export default function Invoices() {
   const [payDate, setPayDate] = useState<string>("");
   const [earlyDiscount, setEarlyDiscount] = useState<string>("");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [payLinkDialog, setPayLinkDialog] = useState<{ id: number; invoiceNum: string } | null>(null);
+  const [payLinkUrl, setPayLinkUrl] = useState<string | null>(null);
+  const [payLinkLoading, setPayLinkLoading] = useState(false);
+  const [payLinkCopied, setPayLinkCopied] = useState(false);
+  const [stripeCollectInvoice, setStripeCollectInvoice] = useState<{ id: number; invoiceNumber: string; total: number; customerName: string } | null>(null);
+  const BASE_URL = import.meta.env.BASE_URL.replace(/\/$/, "");
 
   /* ── Analytics ────────────────────────────────────── */
   const [showCharts, setShowCharts] = useState(false);
@@ -308,7 +318,12 @@ export default function Invoices() {
     e.stopPropagation();
     if (confirm("Delete this invoice?")) {
       deleteInvoice.mutate({ id }, {
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() })
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
+          queryClient.invalidateQueries({ queryKey: ["accounting-pnl"] });
+          queryClient.invalidateQueries({ queryKey: ["accounting-ar"] });
+          queryClient.invalidateQueries({ queryKey: ["dashboard/stats"] });
+        }
       });
     }
   };
@@ -362,7 +377,11 @@ export default function Invoices() {
         queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
         queryClient.invalidateQueries({ queryKey: ["accounting-pnl"] });
         queryClient.invalidateQueries({ queryKey: ["accounting-ar"] });
+        queryClient.invalidateQueries({ queryKey: ["accounting-ap"] });
         queryClient.invalidateQueries({ queryKey: ["dashboard/stats"] });
+        queryClient.invalidateQueries({ queryKey: ["payments-history"] });
+        queryClient.invalidateQueries({ queryKey: ["accounting-customer-revenue"] });
+        queryClient.invalidateQueries({ queryKey: ["accounting-product-profit"] });
       },
       onError: () => {
         queryClient.setQueryData(getListInvoicesQueryKey(), (old: InvoiceData[] | undefined) =>
@@ -490,6 +509,17 @@ export default function Invoices() {
     }
   };
 
+  const invalidateAfterPayment = () => {
+    queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
+    queryClient.invalidateQueries({ queryKey: ["accounting-ar"] });
+    queryClient.invalidateQueries({ queryKey: ["accounting-pnl"] });
+    queryClient.invalidateQueries({ queryKey: ["accounting-ap"] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard/stats"] });
+    queryClient.invalidateQueries({ queryKey: ["payments-history"] });
+    queryClient.invalidateQueries({ queryKey: ["accounting-customer-revenue"] });
+    queryClient.invalidateQueries({ queryKey: ["accounting-product-profit"] });
+  };
+
   const confirmPay = () => {
     if (!payDialog) return;
     const noteParts: string[] = [];
@@ -498,11 +528,40 @@ export default function Invoices() {
     if (payNote) noteParts.push(payNote);
     payInvoice.mutate({ id: payDialog.id, data: { paymentMethod: selectedMethod, paymentNote: noteParts.join(" | ") || undefined } }, {
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
+        invalidateAfterPayment();
         setPayDialog(null);
         setViewInvoice(null);
       }
     });
+  };
+
+  const openPaymentLink = async (invoiceId: number, invoiceNum: string) => {
+    setPayLinkDialog({ id: invoiceId, invoiceNum });
+    setPayLinkUrl(null);
+    setPayLinkLoading(true);
+    try {
+      const res = await fetch(`${BASE_URL}/api/invoices/${invoiceId}/payment-link`, { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert((err as any).error ?? "Failed to generate payment link");
+        setPayLinkDialog(null);
+        return;
+      }
+      const { url } = await res.json();
+      setPayLinkUrl(url);
+    } catch {
+      alert("Failed to generate payment link — check Stripe configuration in Secrets.");
+      setPayLinkDialog(null);
+    } finally {
+      setPayLinkLoading(false);
+    }
+  };
+
+  const copyPayLink = async () => {
+    if (!payLinkUrl) return;
+    await navigator.clipboard.writeText(payLinkUrl).catch(() => {});
+    setPayLinkCopied(true);
+    setTimeout(() => setPayLinkCopied(false), 2000);
   };
 
   const STATUS_TABS: { value: StatusFilter; label: string }[] = [
@@ -901,6 +960,23 @@ export default function Invoices() {
                       <div className="flex items-center justify-end gap-1.5">
                         <button title="Send Email" onClick={e => { e.stopPropagation(); setViewInvoice(inv); }}
                           className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-500 transition-all"><Mail size={13} /></button>
+                        {inv.status !== "paid" && inv.status !== "cancelled" && (
+                          <button
+                            title="Collect Payment via Stripe"
+                            onClick={e => {
+                              e.stopPropagation();
+                              setStripeCollectInvoice({
+                                id: inv.id,
+                                invoiceNumber: inv.invoiceNumber ?? `FRZI-${inv.id}`,
+                                total: Number(inv.total ?? 0),
+                                customerName: (() => { const c = customerMap.get(Number(inv.customerId)); return (c as any)?.company || (c as any)?.name || `Customer #${inv.customerId}`; })(),
+                              });
+                            }}
+                            className="flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100 transition-all whitespace-nowrap"
+                          >
+                            <CreditCard size={11} /> Pay
+                          </button>
+                        )}
                         <button title="Send SMS" onClick={e => { e.stopPropagation(); setViewInvoice(inv); }}
                           className="p-1.5 rounded-lg hover:bg-green-50 text-green-500 transition-all"><MessageSquare size={13} /></button>
                         <button title="Download" onClick={e => { e.stopPropagation(); setViewInvoice(inv); }}
@@ -930,6 +1006,11 @@ export default function Invoices() {
                             <DropdownMenuItem onClick={e => startEditRef(inv, e)} className="gap-2 cursor-pointer text-sm hover:bg-slate-50 focus:bg-slate-50">
                               <Link2 size={13} /> Edit Order Ref
                             </DropdownMenuItem>
+                            {inv.status !== "paid" && inv.status !== "cancelled" && (
+                              <DropdownMenuItem onClick={e => { e.stopPropagation(); openPaymentLink(inv.id, inv.invoiceNumber ?? `FRZI-${inv.id}`); }} className="gap-2 cursor-pointer text-sm text-indigo-600 hover:bg-indigo-50 focus:bg-indigo-50 focus:text-indigo-600">
+                                <Link2 size={13} /> Send Payment Link
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem onClick={e => openPayDialog(inv.id, e)} className="gap-2 cursor-pointer text-sm text-emerald-600 hover:bg-emerald-50 focus:bg-emerald-50 focus:text-emerald-600">
                               <CheckCircle size={13} /> Mark Paid
                             </DropdownMenuItem>
@@ -1295,6 +1376,70 @@ export default function Invoices() {
       )}
       {poInvoice && <InvoicePoModal invoice={poInvoice} onClose={() => setPoInvoice(null)} />}
 
+      {/* Stripe In-Person Payment Modal */}
+      {stripeCollectInvoice && (
+        <StripeCollectModal
+          invoiceId={stripeCollectInvoice.id}
+          invoiceNumber={stripeCollectInvoice.invoiceNumber}
+          total={stripeCollectInvoice.total}
+          customerName={stripeCollectInvoice.customerName}
+          onClose={() => setStripeCollectInvoice(null)}
+          onSuccess={() => {
+            invalidateAfterPayment();
+            setStripeCollectInvoice(null);
+            setViewInvoice(null);
+          }}
+        />
+      )}
+
+      {/* Payment Link Dialog */}
+      {payLinkDialog && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4" onClick={() => { setPayLinkDialog(null); setPayLinkUrl(null); }}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div className="relative z-10 bg-white rounded-2xl border border-slate-200 shadow-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                <CreditCard size={16} className="text-indigo-600" />
+              </div>
+              <div>
+                <h3 className="text-slate-800 font-bold text-base leading-tight">Payment Link</h3>
+                <p className="text-slate-400 text-xs">{payLinkDialog.invoiceNum}</p>
+              </div>
+              <button onClick={() => { setPayLinkDialog(null); setPayLinkUrl(null); }} className="ml-auto p-1.5 rounded-lg hover:bg-slate-100 text-slate-400">
+                <X size={16} />
+              </button>
+            </div>
+
+            {payLinkLoading ? (
+              <div className="flex flex-col items-center gap-3 py-6">
+                <Loader2 size={24} className="animate-spin text-indigo-500" />
+                <p className="text-slate-500 text-sm">Generating Stripe Checkout link…</p>
+              </div>
+            ) : payLinkUrl ? (
+              <>
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-4">
+                  <p className="text-slate-400 text-[10px] uppercase tracking-wider font-semibold mb-1.5">Stripe Checkout URL</p>
+                  <p className="text-slate-700 text-xs font-mono break-all leading-relaxed">{payLinkUrl}</p>
+                </div>
+                <div className="flex gap-3 mb-3">
+                  <button onClick={copyPayLink}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors">
+                    {payLinkCopied ? <><Check size={14} className="text-emerald-500" /> Copied!</> : <><Copy size={14} /> Copy Link</>}
+                  </button>
+                  <button onClick={() => window.open(payLinkUrl, "_blank")}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors">
+                    <ExternalLink size={14} /> Open in Browser
+                  </button>
+                </div>
+                <p className="text-slate-400 text-xs text-center">Invoice auto-updates to <strong>Paid</strong> once the customer completes payment via Stripe.</p>
+              </>
+            ) : (
+              <p className="text-red-500 text-sm text-center py-4">Failed to generate link. Check Stripe secrets in your environment.</p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Pay Dialog */}
       {payDialog && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" onClick={() => setPayDialog(null)}>
@@ -1342,12 +1487,41 @@ export default function Invoices() {
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-400" />
               </div>
             </div>
-            <div className="flex gap-3 mt-5">
+            {/* Stripe notice */}
+            {STRIPE_METHODS.includes(selectedMethod) && (
+              <div className="flex items-start gap-2 p-3 rounded-xl bg-indigo-50 border border-indigo-200">
+                <CreditCard size={14} className="text-indigo-500 mt-0.5 flex-shrink-0" />
+                <p className="text-indigo-700 text-xs leading-relaxed">
+                  <strong>Routed through Stripe.</strong> Clicking "Charge via Stripe" will open the secure payment form to collect the card or bank details now.
+                </p>
+              </div>
+            )}
+
+            <div className="flex gap-3 mt-1">
               <button onClick={() => setPayDialog(null)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50">Cancel</button>
-              <button onClick={confirmPay} disabled={payInvoice.isPending}
-                className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50">
-                {payInvoice.isPending ? "Saving…" : "Confirm Payment"}
-              </button>
+              {STRIPE_METHODS.includes(selectedMethod) ? (
+                <button
+                  onClick={() => {
+                    const inv = (invoices as any[])?.find((i: any) => i.id === payDialog!.id);
+                    if (!inv) return;
+                    setStripeCollectInvoice({
+                      id: inv.id,
+                      invoiceNumber: inv.invoiceNumber ?? `FRZI-${inv.id}`,
+                      total: Number(inv.total ?? 0),
+                      customerName: inv.customer?.company || inv.customer?.name || `Customer #${inv.customerId}`,
+                    });
+                    setPayDialog(null);
+                  }}
+                  className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700"
+                >
+                  <span className="flex items-center justify-center gap-1.5"><CreditCard size={13} /> Charge via Stripe</span>
+                </button>
+              ) : (
+                <button onClick={confirmPay} disabled={payInvoice.isPending}
+                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50">
+                  {payInvoice.isPending ? "Saving…" : "Confirm Payment"}
+                </button>
+              )}
             </div>
           </div>
         </div>
