@@ -1,4 +1,8 @@
 #!/bin/bash
 set -e
-pnpm install --frozen-lockfile
-pnpm --filter db push
+
+# Install any new packages added by merged tasks
+COREPACK_ENABLE_STRICT=0 pnpm install
+
+# Push schema changes non-interactively (--force skips prompts)
+COREPACK_ENABLE_STRICT=0 pnpm --filter @workspace/db run push-force

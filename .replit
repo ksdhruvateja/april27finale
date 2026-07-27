@@ -38,7 +38,7 @@ expertMode = true
 
 [postMerge]
 path = "scripts/post-merge.sh"
-timeoutMs = 20000
+timeoutMs = 90000
 
 [[ports]]
 localPort = 3000
@@ -94,4 +94,3 @@ channel = "stable-25_05"
 [userenv]
 
 [userenv.shared]
-GITHUB_TOKEN = "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"
