@@ -19,13 +19,16 @@ function firstAccessiblePath(role: UserRole, customPermissions?: CustomPermissio
 
 export default function UserSelectModal() {
   const { currentUser, setCurrentUser } = useRole();
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
 
   const [email, setEmail]         = useState("");
   const [password, setPassword]   = useState("");
   const [showPw, setShowPw]       = useState(false);
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState("");
+
+  // Don't show the login modal on public routes (e.g. customer-facing invoice pay page)
+  if (location.startsWith("/pay/")) return null;
 
   if (currentUser) return null;
 

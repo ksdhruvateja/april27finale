@@ -27,6 +27,7 @@ import History from "@/pages/History";
 import WalkIn from "@/pages/WalkIn";
 import Documents from "@/pages/Documents";
 import NotFound from "@/pages/not-found";
+import PayInvoice from "@/pages/PayInvoice";
 
 interface MutationLogDef {
   entityType: AuditEntityType;
@@ -173,6 +174,8 @@ function AuditUserSync() {
 function Router() {
   return (
     <Switch>
+      {/* Public route — no auth required */}
+      <Route path="/pay/:token" component={PayInvoice} />
       <Route path="/"                component={() => <GuardedRoute component={Dashboard}      path="/" />} />
       <Route path="/customers"       component={() => <GuardedRoute component={Customers}      path="/customers" />} />
       <Route path="/vendors"         component={() => <GuardedRoute component={Vendors}        path="/vendors" />} />

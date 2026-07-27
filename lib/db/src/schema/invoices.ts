@@ -9,6 +9,7 @@ export const invoicesTable = pgTable("invoices", {
   quoteId: integer("quote_id"),
   invoiceNumber: text("invoice_number"),
   trackingNumber: text("tracking_number"),
+  paymentToken: text("payment_token"),
   status: text("status").notNull().default("draft"),
   lineItems: jsonb("line_items").notNull().default([]),
   subtotal: numeric("subtotal", { precision: 12, scale: 2 }).notNull().default("0"),

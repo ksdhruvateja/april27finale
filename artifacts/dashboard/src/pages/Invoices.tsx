@@ -127,6 +127,10 @@ export default function Invoices() {
   const [payLinkUrl, setPayLinkUrl] = useState<string | null>(null);
   const [payLinkLoading, setPayLinkLoading] = useState(false);
   const [payLinkCopied, setPayLinkCopied] = useState(false);
+  const [shareLinkDialog, setShareLinkDialog] = useState<{ id: number; invoiceNum: string } | null>(null);
+  const [shareLinkUrl, setShareLinkUrl] = useState<string | null>(null);
+  const [shareLinkLoading, setShareLinkLoading] = useState(false);
+  const [shareLinkCopied, setShareLinkCopied] = useState(false);
   const [stripeCollectInvoice, setStripeCollectInvoice] = useState<{ id: number; invoiceNumber: string; total: number; customerName: string } | null>(null);
   const BASE_URL = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -562,6 +566,35 @@ export default function Invoices() {
     await navigator.clipboard.writeText(payLinkUrl).catch(() => {});
     setPayLinkCopied(true);
     setTimeout(() => setPayLinkCopied(false), 2000);
+  };
+
+  const openShareLink = async (invoiceId: number, invoiceNum: string) => {
+    setShareLinkDialog({ id: invoiceId, invoiceNum });
+    setShareLinkUrl(null);
+    setShareLinkLoading(true);
+    try {
+      const res = await fetch(`${BASE_URL}/api/invoices/${invoiceId}/share-link`, { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert((err as any).error ?? "Failed to generate share link");
+        setShareLinkDialog(null);
+        return;
+      }
+      const { url } = await res.json();
+      setShareLinkUrl(url);
+    } catch {
+      alert("Failed to generate share link.");
+      setShareLinkDialog(null);
+    } finally {
+      setShareLinkLoading(false);
+    }
+  };
+
+  const copyShareLink = async () => {
+    if (!shareLinkUrl) return;
+    await navigator.clipboard.writeText(shareLinkUrl).catch(() => {});
+    setShareLinkCopied(true);
+    setTimeout(() => setShareLinkCopied(false), 2000);
   };
 
   const STATUS_TABS: { value: StatusFilter; label: string }[] = [
@@ -1011,6 +1044,9 @@ export default function Invoices() {
                                 <Link2 size={13} /> Send Payment Link
                               </DropdownMenuItem>
                             )}
+                            <DropdownMenuItem onClick={e => { e.stopPropagation(); openShareLink(inv.id, inv.invoiceNumber ?? `FRZI-${inv.id}`); }} className="gap-2 cursor-pointer text-sm text-blue-600 hover:bg-blue-50 focus:bg-blue-50 focus:text-blue-600">
+                              <ExternalLink size={13} /> Share Invoice Page
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={e => openPayDialog(inv.id, e)} className="gap-2 cursor-pointer text-sm text-emerald-600 hover:bg-emerald-50 focus:bg-emerald-50 focus:text-emerald-600">
                               <CheckCircle size={13} /> Mark Paid
                             </DropdownMenuItem>
@@ -1435,6 +1471,54 @@ export default function Invoices() {
               </>
             ) : (
               <p className="text-red-500 text-sm text-center py-4">Failed to generate link. Check Stripe secrets in your environment.</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Share Invoice Page Dialog */}
+      {shareLinkDialog && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4" onClick={() => { setShareLinkDialog(null); setShareLinkUrl(null); }}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div className="relative z-10 bg-white rounded-2xl border border-slate-200 shadow-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
+                <ExternalLink size={16} className="text-blue-600" />
+              </div>
+              <div>
+                <h3 className="text-slate-800 font-bold text-base leading-tight">Share Invoice Page</h3>
+                <p className="text-slate-400 text-xs">{shareLinkDialog.invoiceNum}</p>
+              </div>
+              <button onClick={() => { setShareLinkDialog(null); setShareLinkUrl(null); }} className="ml-auto p-1.5 rounded-lg hover:bg-slate-100 text-slate-400">
+                <X size={16} />
+              </button>
+            </div>
+
+            {shareLinkLoading ? (
+              <div className="flex flex-col items-center gap-3 py-6">
+                <Loader2 size={24} className="animate-spin text-blue-500" />
+                <p className="text-slate-500 text-sm">Generating shareable link…</p>
+              </div>
+            ) : shareLinkUrl ? (
+              <>
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-4">
+                  <p className="text-slate-400 text-[10px] uppercase tracking-wider font-semibold mb-1.5">Branded Invoice Page</p>
+                  <p className="text-slate-700 text-xs font-mono break-all leading-relaxed">{shareLinkUrl}</p>
+                </div>
+                <div className="flex gap-3 mb-3">
+                  <button onClick={copyShareLink}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors">
+                    {shareLinkCopied ? <><Check size={14} className="text-emerald-500" /> Copied!</> : <><Copy size={14} /> Copy Link</>}
+                  </button>
+                  <button onClick={() => window.open(shareLinkUrl, "_blank")}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors">
+                    <ExternalLink size={14} /> Preview Page
+                  </button>
+                </div>
+                <p className="text-slate-400 text-xs text-center">Customer sees their line items and a Pay Now button — no login required.</p>
+              </>
+            ) : (
+              <p className="text-red-500 text-sm text-center py-4">Failed to generate link. Please try again.</p>
             )}
           </div>
         </div>
