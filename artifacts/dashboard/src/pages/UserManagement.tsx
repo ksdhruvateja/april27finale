@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
 import { useRole, UserRole, CustomPermissions } from "@/context/RoleContext";
-import { Plus, Trash2, Pencil, X, Check, ShieldAlert, Settings2, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Trash2, Pencil, X, Check, ShieldAlert, Settings2, ChevronDown, ChevronUp, KeyRound, Eye, EyeOff } from "lucide-react";
 
 interface AppUser {
   id: number;
@@ -221,7 +221,7 @@ function TabPicker({
         })}
       </div>
 
-      {/* Restrictions — only for custom role */}
+      {/* Read/Write & Price access restrictions */}
       {showRestrictions && (
         <div
           className="flex flex-col gap-2 pt-3"
@@ -309,7 +309,7 @@ function UserTabEditor({ user, onSaved }: { user: AppUser; onSaved: () => void }
           <TabPicker
             value={perms}
             onChange={setPerms}
-            showRestrictions={user.role === "custom"}
+            showRestrictions={true}
           />
           <div className="flex items-center gap-2 mt-3">
             <button
@@ -359,6 +359,15 @@ export default function UserManagement() {
 
   const [error,  setError]  = useState("");
   const [saving, setSaving] = useState(false);
+
+  // ── Password reset state ──
+  const [resetId,        setResetId]        = useState<number | null>(null);
+  const [resetNew,       setResetNew]       = useState("");
+  const [resetConfirm,   setResetConfirm]   = useState("");
+  const [resetShow,      setResetShow]      = useState(false);
+  const [resetSaving,    setResetSaving]    = useState(false);
+  const [resetError,     setResetError]     = useState("");
+  const [resetOk,        setResetOk]        = useState(false);
 
   // Expanded tab-editor rows
   const [expandedTabEdit, setExpandedTabEdit] = useState<number | null>(null);
@@ -428,6 +437,31 @@ export default function UserManagement() {
     setEditingId(null);
     load();
     setSaving(false);
+  };
+
+  const openReset = (id: number) => {
+    setResetId(id); setResetNew(""); setResetConfirm("");
+    setResetShow(false); setResetError(""); setResetOk(false);
+    setEditingId(null); // close edit form if open
+  };
+
+  const handleReset = async () => {
+    if (!resetNew)                      { setResetError("Enter a new password."); return; }
+    if (resetNew.length < 4)            { setResetError("Password must be at least 4 characters."); return; }
+    if (resetNew !== resetConfirm)      { setResetError("Passwords do not match."); return; }
+    setResetSaving(true); setResetError("");
+    const res = await fetch(`/api/users/${resetId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: resetNew }),
+    });
+    setResetSaving(false);
+    if (res.ok) {
+      setResetOk(true);
+      setTimeout(() => { setResetId(null); setResetOk(false); }, 2000);
+    } else {
+      setResetError("Failed to update password.");
+    }
   };
 
   const handleDelete = async (id: number) => {
@@ -613,7 +647,7 @@ export default function UserManagement() {
               <TabPicker
                 value={formPerms}
                 onChange={setFormPerms}
-                showRestrictions={form.role === "custom"}
+                showRestrictions={true}
               />
 
               {error && <p className="mt-2 text-[12px] font-bold" style={{ color: "#f87171" }}>{error}</p>}
@@ -730,9 +764,19 @@ export default function UserManagement() {
                             style={{ background: "rgba(59,130,246,0.12)", color: "#60a5fa" }}
                             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(59,130,246,0.22)"; }}
                             onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "rgba(59,130,246,0.12)"; }}
-                            title="Edit name / role"
+                            title="Edit name / role / tabs"
                           >
                             <Pencil size={12} />
+                          </button>
+                          <button
+                            onClick={() => resetId === u.id ? setResetId(null) : openReset(u.id)}
+                            className="w-8 h-8 rounded-lg flex items-center justify-center transition-all"
+                            style={{ background: resetId === u.id ? "rgba(251,191,36,0.22)" : "rgba(251,191,36,0.12)", color: "#fbbf24" }}
+                            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(251,191,36,0.22)"; }}
+                            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = resetId === u.id ? "rgba(251,191,36,0.22)" : "rgba(251,191,36,0.12)"; }}
+                            title="Reset password"
+                          >
+                            <KeyRound size={12} />
                           </button>
                           <button
                             onClick={() => handleDelete(u.id)}
@@ -749,14 +793,85 @@ export default function UserManagement() {
                     </div>
                   </div>
 
-                  {/* Inline tab picker when editing name/role */}
+                  {/* Inline tab + access picker when editing name/role */}
                   {editingId === u.id && (
                     <div className="px-6 pb-5">
                       <TabPicker
                         value={editPerms}
                         onChange={setEditPerms}
-                        showRestrictions={editRole === "custom"}
+                        showRestrictions={true}
                       />
+                    </div>
+                  )}
+
+                  {/* Password reset form */}
+                  {resetId === u.id && editingId !== u.id && (
+                    <div
+                      className="mx-6 mb-4 rounded-xl p-4"
+                      style={{ background: "rgba(251,191,36,0.07)", border: "1px solid rgba(251,191,36,0.25)" }}
+                    >
+                      <p className="text-[11px] font-black uppercase tracking-wider mb-3" style={{ color: "#d97706" }}>
+                        Reset Password — {u.name ?? u.email}
+                      </p>
+                      {resetOk ? (
+                        <p className="text-[13px] font-bold" style={{ color: "#34d399" }}>✓ Password updated successfully!</p>
+                      ) : (
+                        <div className="flex flex-wrap gap-3 items-end">
+                          <div className="flex flex-col gap-1 min-w-[180px] flex-1">
+                            <label className="text-[10px] font-black uppercase tracking-wider" style={{ color: "rgba(71,85,105,0.75)" }}>New Password</label>
+                            <div className="relative">
+                              <input
+                                type={resetShow ? "text" : "password"}
+                                placeholder="Min. 4 characters"
+                                value={resetNew}
+                                onChange={e => { setResetNew(e.target.value); setResetError(""); }}
+                                className="input-light w-full pr-8"
+                                style={{ fontSize: 13 }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setResetShow(s => !s)}
+                                className="absolute right-2 top-1/2 -translate-y-1/2"
+                                style={{ color: "rgba(71,85,105,0.55)" }}
+                              >
+                                {resetShow ? <EyeOff size={13} /> : <Eye size={13} />}
+                              </button>
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-1 min-w-[180px] flex-1">
+                            <label className="text-[10px] font-black uppercase tracking-wider" style={{ color: "rgba(71,85,105,0.75)" }}>Confirm Password</label>
+                            <input
+                              type={resetShow ? "text" : "password"}
+                              placeholder="Repeat new password"
+                              value={resetConfirm}
+                              onChange={e => { setResetConfirm(e.target.value); setResetError(""); }}
+                              onKeyDown={e => { if (e.key === "Enter") handleReset(); }}
+                              className="input-light"
+                              style={{ fontSize: 13 }}
+                            />
+                          </div>
+                          <div className="flex items-center gap-2 pb-0.5">
+                            <button
+                              onClick={handleReset}
+                              disabled={resetSaving}
+                              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-bold text-white"
+                              style={{ background: "linear-gradient(135deg,#f59e0b,#d97706)" }}
+                            >
+                              <KeyRound size={13} /> {resetSaving ? "Saving…" : "Update Password"}
+                            </button>
+                            <button
+                              onClick={() => setResetId(null)}
+                              className="px-3 py-2 rounded-xl text-[13px] font-bold"
+                              style={{ background: "rgba(148,163,184,0.18)", color: "#475569" }}
+                            >
+                              <X size={13} />
+                            </button>
+                          </div>
+                          {resetError && (
+                            <p className="w-full text-[12px] font-bold mt-1" style={{ color: "#f87171" }}>{resetError}</p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
 

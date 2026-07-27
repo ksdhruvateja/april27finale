@@ -81,9 +81,10 @@ export function RoleProvider({ children }: { children: ReactNode }) {
   const hasAccess = (path: string) =>
     currentUser ? checkAccess(currentUser.role, path, currentUser.customPermissions) : false;
 
+  // readOnly flag in customPermissions overrides role for any role
   const canEdit = currentUser
-    ? currentUser.role === "custom"
-      ? !(currentUser.customPermissions?.readOnly ?? true)
+    ? (currentUser.customPermissions?.readOnly === true)
+      ? false
       : !["viewer"].includes(currentUser.role)
     : false;
 
@@ -92,8 +93,9 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     : false;
 
   const isShipper  = currentUser?.role === "shipper";
+  // hidePrices respects the customPermissions flag for any role, not just custom/shipper
   const hidePrices = currentUser?.role === "shipper"
-    || (currentUser?.role === "custom" && (currentUser.customPermissions?.hidePrices ?? false));
+    || (currentUser?.customPermissions?.hidePrices === true);
 
   return (
     <RoleContext.Provider value={{ currentUser, setCurrentUser, hasAccess, canEdit, canManageUsers, isShipper, hidePrices }}>
