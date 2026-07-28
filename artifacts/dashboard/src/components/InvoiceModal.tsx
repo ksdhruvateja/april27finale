@@ -76,10 +76,11 @@ export default function InvoiceModal({ onClose, initial }: Props) {
     const terms = (customer as any)?.accountType as string | null | undefined;
     setTermsBadge(terms ?? null);
     const base = baseDate ? new Date(baseDate + "T00:00:00") : new Date();
-    const daysMap: Record<string, number> = { net30: 30, net60: 60, net90: 90 };
     if (terms) {
-      const days = daysMap[terms];
-      if (days !== undefined) {
+      // Parse any "Net X" / "net30" / "net 45" format — extracts the number of days
+      const netMatch = terms.toLowerCase().replace(/\s/g, "").match(/^net(\d+)$/);
+      if (netMatch) {
+        const days = parseInt(netMatch[1], 10);
         const d = new Date(base); d.setDate(d.getDate() + days);
         return d.toISOString().split("T")[0];
       } else if (terms === "cash" || terms === "cod" || terms === "cash_advance") {
@@ -307,15 +308,13 @@ export default function InvoiceModal({ onClose, initial }: Props) {
                 {termsBadge && (
                   <p className="text-[11px] mt-1 flex items-center gap-1 text-indigo-600">
                     <span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                    {termsBadge === "net30" && "Net 30 — auto-set 30 days out"}
-                    {termsBadge === "net60" && "Net 60 — auto-set 60 days out"}
-                    {termsBadge === "net90" && "Net 90 — auto-set 90 days out"}
+                    {termsBadge && /^net\d+$/i.test(termsBadge.replace(/\s/g,"")) && `Net ${termsBadge.replace(/\D/g,"")} — due in ${termsBadge.replace(/\D/g,"")} days`}
                     {(termsBadge === "cash" || termsBadge === "cash_advance") && "Cash — due immediately"}
                     {termsBadge === "cod" && "COD — due on delivery (today)"}
                   </p>
                 )}
               </FormField>
-              <FormField label="Sales Lead">
+              <FormField label="Sales Person">
                 <div ref={salesLeadRef} className="relative">
                   <button
                     type="button"
@@ -346,7 +345,7 @@ export default function InvoiceModal({ onClose, initial }: Props) {
                           — None —
                         </button>
                         {(salesLeads ?? []).length === 0 && (
-                          <p className="px-3 py-3 text-xs text-slate-400 text-center">No sales leads yet</p>
+                          <p className="px-3 py-3 text-xs text-slate-400 text-center">No sales people yet</p>
                         )}
                         {(salesLeads ?? []).map(lead => {
                           const name = `${lead.firstName} ${lead.lastName}`.trim();
@@ -365,7 +364,7 @@ export default function InvoiceModal({ onClose, initial }: Props) {
                         })}
                         <button type="button" onMouseDown={() => { setSalesLeadOpen(false); setShowAddSalesLead(true); }}
                           className="w-full text-left px-3 py-2.5 text-sm text-indigo-600 font-semibold hover:bg-indigo-50 border-t border-slate-100 transition-colors flex items-center gap-2">
-                          <span className="text-base leading-none">+</span> Add New Sales Lead
+                          <span className="text-base leading-none">+</span> Add New Sales Person
                         </button>
                       </div>
                     </div>

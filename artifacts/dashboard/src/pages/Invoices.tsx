@@ -615,7 +615,7 @@ export default function Invoices() {
   return (
     <Layout>
       <Header title="Invoices" subtitle={`${invoices?.length ?? 0} total`} />
-      <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 gap-3 flex flex-col bg-[hsl(220_25%_97%)]">
+      <div className="flex-1 overflow-y-auto px-5 py-4 gap-3 flex flex-col bg-[hsl(220_25%_97%)]">
 
         {/* Search + Create */}
         <div className="flex items-center gap-3">

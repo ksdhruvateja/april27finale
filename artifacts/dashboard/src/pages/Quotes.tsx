@@ -342,7 +342,7 @@ export default function Quotes() {
   return (
     <Layout>
       <Header title="Quotes" subtitle={`${quotes?.length ?? 0} total`} />
-      <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 flex flex-col gap-4 bg-[hsl(220_25%_97%)]">
+      <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4 bg-[hsl(220_25%_97%)]">
         <div className="flex justify-between items-center gap-3">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />

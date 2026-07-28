@@ -258,7 +258,7 @@ export default function QuoteModal({ onClose, initial }: Props) {
               <FormField label="Expires At">
                 <FormInput type="date" value={expiresAt} onChange={e => setExpiresAt(e.target.value)} />
               </FormField>
-              <FormField label="Sales Lead">
+              <FormField label="Sales Person">
                 <div ref={salesLeadRef} className="relative">
                   <button
                     type="button"
@@ -289,7 +289,7 @@ export default function QuoteModal({ onClose, initial }: Props) {
                           — None —
                         </button>
                         {(salesLeads ?? []).length === 0 && (
-                          <p className="px-3 py-3 text-xs text-slate-400 text-center">No sales leads yet</p>
+                          <p className="px-3 py-3 text-xs text-slate-400 text-center">No sales people yet</p>
                         )}
                         {(salesLeads ?? []).map(lead => {
                           const name = `${lead.firstName} ${lead.lastName}`.trim();
@@ -308,7 +308,7 @@ export default function QuoteModal({ onClose, initial }: Props) {
                         })}
                         <button type="button" onMouseDown={() => { setSalesLeadOpen(false); setShowAddSalesLead(true); }}
                           className="w-full text-left px-3 py-2.5 text-sm text-indigo-600 font-semibold hover:bg-indigo-50 border-t border-slate-100 transition-colors flex items-center gap-2">
-                          <span className="text-base leading-none">+</span> Add New Sales Lead
+                          <span className="text-base leading-none">+</span> Add New Sales Person
                         </button>
                       </div>
                     </div>

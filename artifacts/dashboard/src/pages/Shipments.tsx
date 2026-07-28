@@ -2,8 +2,8 @@ import { useState, useMemo } from "react";
 import { useListAuctions } from "@/lib/auctions-api";
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
-import { useListShipments, useUpdateShipment, getListShipmentsQueryKey, useListCustomers, useListVendors } from "@workspace/api-client-react";
-import { Search, Plus, MoreHorizontal, Edit, Truck, FileText, BarChart2, ChevronDown, ChevronUp, ChevronRight, Package, StickyNote, MapPin, Phone, Mail, User } from "lucide-react";
+import { useListShipments, useCreateShipment, useUpdateShipment, getListShipmentsQueryKey, useListCustomers, useListVendors } from "@workspace/api-client-react";
+import { Search, Plus, MoreHorizontal, Edit, Truck, FileText, BarChart2, ChevronDown, ChevronUp, ChevronRight, Package, StickyNote, MapPin, Phone, Mail, User, Loader2, X } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend, LineChart, Line, CartesianGrid } from "recharts";
 import { useQueryClient } from "@tanstack/react-query";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -18,6 +18,182 @@ const STATUS_MAP: Record<string, string> = {
   pending:   "text-slate-500  bg-slate-50  border-slate-200",
 };
 
+const CARRIERS = ["UPS", "FedEx", "USPS", "DHL", "Amazon Logistics", "OnTrac", "LaserShip", "Other"];
+
+/* ── Create Shipment Modal ──────────────────────────────────────────────── */
+function CreateShipmentModal({
+  customers,
+  onClose,
+}: {
+  customers: any[];
+  onClose: () => void;
+}) {
+  const create       = useCreateShipment();
+  const queryClient  = useQueryClient();
+
+  const [customerId,      setCustomerId]      = useState("");
+  const [status,          setStatus]          = useState<"pending"|"shipped"|"delivered"|"returned">("pending");
+  const [carrier,         setCarrier]         = useState("");
+  const [carrierCustom,   setCarrierCustom]   = useState("");
+  const [trackingNumber,  setTrackingNumber]  = useState("");
+  const [shippedAt,       setShippedAt]       = useState("");
+  const [notes,           setNotes]           = useState("");
+  const [saving,          setSaving]          = useState(false);
+  const [errMsg,          setErrMsg]          = useState<string | null>(null);
+
+  const effectiveCarrier = carrier === "Other" ? carrierCustom : carrier;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customerId) { setErrMsg("Please select a customer."); return; }
+    setSaving(true);
+    setErrMsg(null);
+    try {
+      await create.mutateAsync({
+        data: {
+          customerId: Number(customerId),
+          status,
+          carrier:        effectiveCarrier.trim() || null,
+          trackingNumber: trackingNumber.trim()   || null,
+          shippedAt:      shippedAt               ? new Date(shippedAt) : null,
+          notes:          notes.trim()            || null,
+        },
+      });
+      await queryClient.invalidateQueries({ queryKey: getListShipmentsQueryKey() });
+      onClose();
+    } catch (err: any) {
+      setErrMsg(err?.message ?? "Could not create shipment. Please try again.");
+      setSaving(false);
+    }
+  };
+
+  const inp = "border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-400 transition-colors w-full";
+  const lbl = "text-[11px] font-semibold text-slate-500 uppercase tracking-wide block mb-1";
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 p-6 flex flex-col gap-5"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-[17px] font-black text-slate-800">Create Shipment</h2>
+            <p className="text-xs text-slate-400 mt-0.5">Fill in the details to record a new shipment</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {/* Customer */}
+          <div>
+            <label className={lbl}>Customer *</label>
+            <select
+              value={customerId} onChange={e => setCustomerId(e.target.value)} required
+              className={inp}
+            >
+              <option value="">Select customer…</option>
+              {[...customers].sort((a, b) => (a.company || a.name || "").localeCompare(b.company || b.name || "")).map((c: any) => (
+                <option key={c.id} value={c.id}>
+                  {c.company ? `${c.company} — ${c.name}` : c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Status */}
+          <div>
+            <label className={lbl}>Status</label>
+            <div className="flex gap-2 flex-wrap">
+              {(["pending", "shipped", "delivered", "returned"] as const).map(s => (
+                <button
+                  key={s} type="button"
+                  onClick={() => setStatus(s)}
+                  className={`px-3 py-1.5 rounded-lg border text-xs font-semibold capitalize transition-colors ${
+                    status === s
+                      ? `${STATUS_MAP[s]} border-current`
+                      : "border-slate-200 text-slate-500 hover:bg-slate-50"
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Carrier + Tracking */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={lbl}>Carrier</label>
+              <select value={carrier} onChange={e => setCarrier(e.target.value)} className={inp}>
+                <option value="">— Select —</option>
+                {CARRIERS.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              {carrier === "Other" && (
+                <input
+                  value={carrierCustom} onChange={e => setCarrierCustom(e.target.value)}
+                  placeholder="Carrier name" className={`${inp} mt-2`}
+                />
+              )}
+            </div>
+            <div>
+              <label className={lbl}>Tracking Number</label>
+              <input
+                value={trackingNumber} onChange={e => setTrackingNumber(e.target.value)}
+                placeholder="1Z9999W99999999999" className={inp}
+              />
+            </div>
+          </div>
+
+          {/* Shipped date */}
+          <div>
+            <label className={lbl}>Ship Date</label>
+            <input
+              type="date" value={shippedAt} onChange={e => setShippedAt(e.target.value)}
+              className={inp}
+            />
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className={lbl}>Notes</label>
+            <textarea
+              value={notes} onChange={e => setNotes(e.target.value)}
+              rows={2} placeholder="Fragile, leave at door, etc."
+              className={`${inp} resize-none`}
+            />
+          </div>
+
+          {errMsg && (
+            <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{errMsg}</p>
+          )}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              type="button" onClick={onClose}
+              className="px-4 py-2 rounded-lg border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit" disabled={saving}
+              className="px-5 py-2 rounded-lg bg-[hsl(224_50%_15%)] text-white text-sm font-semibold hover:bg-[hsl(224_50%_20%)] transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              {saving ? <><Loader2 size={13} className="animate-spin" /> Creating…</> : <><Truck size={13} /> Create Shipment</>}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function Shipments() {
   const { data: shipments, isLoading } = useListShipments();
   const { data: auctionList } = useListAuctions();
@@ -30,6 +206,7 @@ export default function Shipments() {
   const [showCharts, setShowCharts] = useState(false);
   const [chartView, setChartView]   = useState<"carrier"|"status"|"customer"|"trend">("carrier");
   const [expandedShipId, setExpandedShipId] = useState<number | null>(null);
+  const [showCreate,     setShowCreate]     = useState(false);
 
   const customerById = useMemo(() => {
     const m = new Map<number, any>();
@@ -167,7 +344,10 @@ export default function Shipments() {
               className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-semibold transition-colors ${showCharts?"bg-teal-600 text-white border-teal-600":"bg-white border-slate-200 text-slate-700 hover:bg-slate-50"}`}>
               <BarChart2 size={14} /> Analytics {showCharts ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}
             </button>
-            <button className="bg-[hsl(224_50%_15%)] text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 hover:bg-[hsl(224_50%_20%)] transition-colors">
+            <button
+              onClick={() => setShowCreate(true)}
+              className="bg-[hsl(224_50%_15%)] text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 hover:bg-[hsl(224_50%_20%)] transition-colors"
+            >
               <Plus size={14} /> Create Shipment
             </button>
           </div>
@@ -513,6 +693,13 @@ export default function Shipments() {
           )}
         </div>
       </div>
+
+      {showCreate && (
+        <CreateShipmentModal
+          customers={customers as any[]}
+          onClose={() => setShowCreate(false)}
+        />
+      )}
     </Layout>
   );
 }

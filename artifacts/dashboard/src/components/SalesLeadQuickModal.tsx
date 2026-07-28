@@ -56,7 +56,7 @@ export default function SalesLeadQuickModal({ onClose, onCreated }: Props) {
         className="bg-white/95 rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6 border border-slate-200 backdrop-blur-sm"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-[17px] font-black text-slate-800 mb-5">Add Sales Lead</h2>
+        <h2 className="text-[17px] font-black text-slate-800 mb-5">Add Sales Person</h2>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1">
@@ -114,7 +114,7 @@ export default function SalesLeadQuickModal({ onClose, onCreated }: Props) {
               disabled={create.isPending}
               className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50"
             >
-              {create.isPending ? "Saving..." : "Add Lead"}
+              {create.isPending ? "Saving..." : "Add Person"}
             </button>
           </div>
         </form>

@@ -1,7 +1,7 @@
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Truck, Save, CheckCircle2, Eye, EyeOff, Loader2, FileText, Tag, Pencil, Trash2, Plus, X, Check } from "lucide-react";
+import { Truck, Save, CheckCircle2, Eye, EyeOff, Loader2, FileText, Tag, Pencil, Trash2, Plus, X, Check, Hash, CreditCard } from "lucide-react";
 
 function ShippingSection() {
   const [apiKey, setApiKey] = useState("");
@@ -347,11 +347,255 @@ function QuoteDefaultsSection() {
   );
 }
 
+function StripeSection() {
+  const [secretKey, setSecretKey]         = useState("");
+  const [publishableKey, setPublishableKey] = useState("");
+  const [maskedSecret, setMaskedSecret]   = useState<string | null>(null);
+  const [showSecret, setShowSecret]       = useState(false);
+  const [saving, setSaving]               = useState(false);
+  const [saved, setSaved]                 = useState(false);
+  const [isConfigured, setIsConfigured]   = useState(false);
+
+  useEffect(() => {
+    fetch("/api/stripe/status")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setIsConfigured(d.configured); });
+    fetch("/api/app-settings/stripe_secret_key")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.value) setMaskedSecret(d.value); });
+    fetch("/api/app-settings/stripe_publishable_key")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.value) setPublishableKey(d.value); });
+  }, []);
+
+  const handleSave = async () => {
+    if (!secretKey.trim() && !publishableKey.trim()) return;
+    setSaving(true);
+    try {
+      const saves = [];
+      if (secretKey.trim()) {
+        saves.push(fetch("/api/app-settings/stripe_secret_key", {
+          method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ value: secretKey.trim() }),
+        }));
+      }
+      if (publishableKey.trim()) {
+        saves.push(fetch("/api/app-settings/stripe_publishable_key", {
+          method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ value: publishableKey.trim() }),
+        }));
+      }
+      await Promise.all(saves);
+      if (secretKey.trim()) {
+        const v = secretKey.trim();
+        setMaskedSecret(v.slice(0, 8) + "••••••••" + v.slice(-4));
+        setSecretKey("");
+      }
+      setIsConfigured(true);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+      // Re-check status
+      fetch("/api/stripe/status").then(r => r.ok ? r.json() : null).then(d => { if (d) setIsConfigured(d.configured); });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleClear = async () => {
+    if (!confirm("Remove Stripe keys? Payment collection will stop working.")) return;
+    await Promise.all([
+      fetch("/api/app-settings/stripe_secret_key",      { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value: "" }) }),
+      fetch("/api/app-settings/stripe_publishable_key", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value: "" }) }),
+    ]);
+    setMaskedSecret(null);
+    setPublishableKey("");
+    setSecretKey("");
+    setIsConfigured(false);
+  };
+
+  return (
+    <div className="glass-card p-6 max-w-2xl">
+      <div className="flex items-center gap-2 mb-1">
+        <CreditCard size={16} className="text-[hsl(224_50%_25%)]" />
+        <h2 className="text-slate-800 text-base font-bold">Stripe</h2>
+        <span className={`ml-auto inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+          isConfigured
+            ? "bg-green-50 text-green-700 border-green-200"
+            : "bg-slate-100 text-slate-500 border-slate-200"
+        }`}>
+          {isConfigured ? "● Active" : "○ Not connected"}
+        </span>
+      </div>
+      <p className="text-slate-500 text-sm mb-5">
+        Connect your Stripe account to collect invoice payments by card or bank transfer. Get your keys from the{" "}
+        <a href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">Stripe Dashboard</a>.
+      </p>
+
+      {/* Current status */}
+      {isConfigured && !secretKey && (
+        <div className="flex items-center justify-between p-3 mb-4 rounded-lg bg-green-50 border border-green-200">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={14} className="text-green-600" />
+            <div>
+              <p className="text-sm font-semibold text-green-800">Stripe Connected</p>
+              {maskedSecret && <p className="text-xs text-green-700 font-mono mt-0.5">sk ···{maskedSecret.slice(-12)}</p>}
+            </div>
+          </div>
+          <button onClick={handleClear} className="text-xs text-red-500 hover:text-red-700 font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors">
+            Remove
+          </button>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-4">
+        {/* Publishable Key */}
+        <div>
+          <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 block">
+            Publishable Key <span className="text-slate-300 normal-case font-normal">(pk_live_… or pk_test_…)</span>
+          </label>
+          <input
+            type="text"
+            value={publishableKey}
+            onChange={e => setPublishableKey(e.target.value)}
+            placeholder="pk_live_…"
+            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2.5 bg-white text-slate-800 focus:outline-none focus:border-blue-400 transition-colors font-mono"
+          />
+        </div>
+
+        {/* Secret Key */}
+        <div>
+          <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 block">
+            Secret Key <span className="text-slate-300 normal-case font-normal">(sk_live_… or sk_test_…)</span>
+          </label>
+          <div className="relative">
+            <input
+              type={showSecret ? "text" : "password"}
+              value={secretKey}
+              onChange={e => setSecretKey(e.target.value)}
+              placeholder={maskedSecret ? maskedSecret : "sk_live_…"}
+              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2.5 pr-10 bg-white text-slate-800 focus:outline-none focus:border-blue-400 transition-colors font-mono"
+            />
+            <button
+              type="button"
+              onClick={() => setShowSecret(s => !s)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              {showSecret ? <EyeOff size={15} /> : <Eye size={15} />}
+            </button>
+          </div>
+          <p className="text-[10px] text-slate-400 mt-1">Stored securely. Leave blank to keep the existing key.</p>
+        </div>
+      </div>
+
+      <div className="mt-5 flex items-center gap-3">
+        <button
+          onClick={handleSave}
+          disabled={saving || (!secretKey.trim() && !publishableKey.trim())}
+          className="flex items-center gap-2 px-5 py-2 bg-[hsl(224_50%_25%)] text-white rounded-xl text-sm font-semibold hover:bg-[hsl(224_50%_20%)] transition-colors disabled:opacity-50"
+        >
+          <Save size={14} />
+          {saving ? "Saving…" : "Save"}
+        </button>
+        {saved && (
+          <p className="text-xs text-emerald-600 flex items-center gap-1.5 font-medium">
+            <CheckCircle2 size={12} /> Stripe keys saved.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DocumentNumbersSection() {
+  const [invPrefix, setInvPrefix] = useState("FRZI-");
+  const [invStart, setInvStart]   = useState("5100");
+  const [qPrefix, setQPrefix]     = useState("FRZQ-");
+  const [qStart, setQStart]       = useState("5100");
+  const [saving, setSaving]       = useState(false);
+  const [saved, setSaved]         = useState(false);
+
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/app-settings/invoice_prefix").then(r => r.ok ? r.json() : null),
+      fetch("/api/app-settings/invoice_start").then(r => r.ok ? r.json() : null),
+      fetch("/api/app-settings/quote_prefix").then(r => r.ok ? r.json() : null),
+      fetch("/api/app-settings/quote_start").then(r => r.ok ? r.json() : null),
+    ]).then(([ip, is, qp, qs]) => {
+      if (ip?.value) setInvPrefix(ip.value);
+      if (is?.value) setInvStart(is.value);
+      if (qp?.value) setQPrefix(qp.value);
+      if (qs?.value) setQStart(qs.value);
+    });
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await Promise.all([
+        fetch("/api/app-settings/invoice_prefix", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value: invPrefix.trim() || "FRZI-" }) }),
+        fetch("/api/app-settings/invoice_start",  { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value: invStart.trim() || "5100" }) }),
+        fetch("/api/app-settings/quote_prefix",   { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value: qPrefix.trim() || "FRZQ-" }) }),
+        fetch("/api/app-settings/quote_start",    { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value: qStart.trim() || "5100" }) }),
+      ]);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="glass-card p-6 max-w-2xl">
+      <div className="flex items-center gap-2 mb-1">
+        <Hash size={16} className="text-[hsl(224_50%_25%)]" />
+        <h2 className="text-slate-800 text-base font-bold">Document Numbering</h2>
+      </div>
+      <p className="text-slate-500 text-sm mb-5">
+        Set the prefix and minimum starting number for new invoices and quotes. Changes apply to the next document created.
+      </p>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 block">Invoice Prefix</label>
+          <input type="text" value={invPrefix} onChange={e => setInvPrefix(e.target.value)} placeholder="FRZI-"
+            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2.5 bg-white text-slate-800 focus:outline-none focus:border-blue-400 transition-colors" />
+          <p className="text-[10px] text-slate-400 mt-1">e.g. FRZI- → FRZI-5100</p>
+        </div>
+        <div>
+          <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 block">Invoice Starting #</label>
+          <input type="number" value={invStart} onChange={e => setInvStart(e.target.value)} placeholder="5100" min="1"
+            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2.5 bg-white text-slate-800 focus:outline-none focus:border-blue-400 transition-colors" />
+          <p className="text-[10px] text-slate-400 mt-1">Next invoice will be ≥ this</p>
+        </div>
+        <div>
+          <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 block">Quote Prefix</label>
+          <input type="text" value={qPrefix} onChange={e => setQPrefix(e.target.value)} placeholder="FRZQ-"
+            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2.5 bg-white text-slate-800 focus:outline-none focus:border-blue-400 transition-colors" />
+          <p className="text-[10px] text-slate-400 mt-1">e.g. FRZQ- → FRZQ-5100</p>
+        </div>
+        <div>
+          <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 block">Quote Starting #</label>
+          <input type="number" value={qStart} onChange={e => setQStart(e.target.value)} placeholder="5100" min="1"
+            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2.5 bg-white text-slate-800 focus:outline-none focus:border-blue-400 transition-colors" />
+          <p className="text-[10px] text-slate-400 mt-1">Next quote will be ≥ this</p>
+        </div>
+      </div>
+      <div className="mt-5 flex items-center gap-3">
+        <button onClick={handleSave} disabled={saving}
+          className="flex items-center gap-2 px-5 py-2 bg-[hsl(224_50%_25%)] text-white rounded-xl text-sm font-semibold hover:bg-[hsl(224_50%_20%)] transition-colors disabled:opacity-50">
+          <Save size={14} />
+          {saving ? "Saving…" : "Save Changes"}
+        </button>
+        {saved && <p className="text-xs text-emerald-600 flex items-center gap-1.5 font-medium"><CheckCircle2 size={12} /> Saved — applies to new documents.</p>}
+      </div>
+    </div>
+  );
+}
+
 export default function Settings() {
   return (
     <Layout>
       <Header title="Settings" />
-      <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-6 bg-[hsl(220_25%_97%)] flex flex-col gap-6">
+      <div className="flex-1 overflow-y-auto px-5 py-6 bg-[hsl(220_25%_97%)] flex flex-col gap-6">
 
         {/* Company Settings */}
         <div className="glass-card p-6 max-w-2xl">
@@ -376,6 +620,12 @@ export default function Settings() {
           </div>
         </div>
 
+        {/* Document Numbering */}
+        <div className="max-w-2xl">
+          <h2 className="text-slate-600 text-xs font-bold uppercase tracking-wider mb-3 px-1">Document Numbering</h2>
+          <DocumentNumbersSection />
+        </div>
+
         {/* Quote & Payment Defaults */}
         <div className="max-w-2xl">
           <h2 className="text-slate-600 text-xs font-bold uppercase tracking-wider mb-3 px-1">Quote & Payment</h2>
@@ -383,8 +633,9 @@ export default function Settings() {
         </div>
 
         {/* Integrations */}
-        <div className="max-w-2xl">
-          <h2 className="text-slate-600 text-xs font-bold uppercase tracking-wider mb-3 px-1">Integrations</h2>
+        <div className="max-w-2xl flex flex-col gap-4">
+          <h2 className="text-slate-600 text-xs font-bold uppercase tracking-wider mb-1 px-1">Integrations</h2>
+          <StripeSection />
           <ShippingSection />
         </div>
 

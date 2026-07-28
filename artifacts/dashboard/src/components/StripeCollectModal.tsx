@@ -228,8 +228,7 @@ export default function StripeCollectModal({
               <AlertCircle size={24} className="text-red-400" />
               <p className="text-red-600 text-sm text-center">{initError}</p>
               <p className="text-slate-400 text-xs text-center">
-                Make sure <code className="bg-slate-100 px-1 rounded">STRIPE_SECRET_KEY</code> and{" "}
-                <code className="bg-slate-100 px-1 rounded">STRIPE_PUBLISHABLE_KEY</code> are set in Secrets.
+                Go to <strong>Settings → Integrations → Stripe</strong> and enter your Stripe Secret Key and Publishable Key.
               </p>
               <button onClick={onClose} className="mt-2 px-4 py-2 rounded-lg border border-slate-200 text-slate-600 text-sm hover:bg-slate-50">
                 Close

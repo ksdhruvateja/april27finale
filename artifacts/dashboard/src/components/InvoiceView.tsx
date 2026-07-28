@@ -135,37 +135,83 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
 
   const customer = customers?.find((c: any) => c.id === invoice.customerId) as any;
   const customerDisplayName = customer?.company || customer?.name || `Customer #${invoice.customerId}`;
-  const addr = customer?.shippingAddress ?? customer?.billingAddress;
 
   const effectiveInvoiceNum = invoice.invoiceNumber ?? `FRZI - ${Math.max(5100, 5099 + Number(invoice.id ?? 0))}`;
   const status = STATUS_CONFIG[invoice.status] ?? STATUS_CONFIG.draft;
-  const isOverdue = invoice.status === "sent" && invoice.dueDate && new Date(invoice.dueDate) < new Date();
+
+  // ── Net terms helpers ──────────────────────────────────────────────────────
+  function parseNetDays(accountType?: string | null): number | null {
+    if (!accountType) return null;
+    const m = accountType.replace(/\s/g, "").match(/^[Nn]et(\d+)$/i);
+    return m ? parseInt(m[1], 10) : null;
+  }
+  const netDays = parseNetDays(customer?.accountType);
+  const netTermsLabel = netDays != null ? `Net ${netDays}` : null;
+
+  // Effective due date: stored value OR auto-computed from customer net terms
+  const effectiveDueDate = (() => {
+    if (invoice.dueDate) return invoice.dueDate;
+    if (netDays != null) {
+      const base = new Date(invoice.createdAt);
+      base.setDate(base.getDate() + netDays);
+      return base.toISOString();
+    }
+    return null;
+  })();
+
+  const isOverdue = invoice.status === "sent" && effectiveDueDate && new Date(effectiveDueDate) < new Date();
+
+  // ── Address builder helpers ────────────────────────────────────────────────
+  function buildNameLines(cust: any, fallbackName?: string | null): string[] {
+    const parts: string[] = [];
+    if (cust?.company) {
+      parts.push(`<b>${escapeHtml(cust.company)}</b>`);
+      if (cust.name && cust.name !== cust.company) parts.push(escapeHtml(cust.name));
+    } else if (cust?.name) {
+      parts.push(`<b>${escapeHtml(cust.name)}</b>`);
+    } else if (fallbackName) {
+      parts.push(`<b>${escapeHtml(fallbackName)}</b>`);
+    }
+    return parts;
+  }
+
+  function buildAddrLines(addrJson: any, flatCust: any): string[] {
+    if (addrJson?.line1) {
+      const parts = [escapeHtml(addrJson.line1)];
+      if (addrJson.line2) parts.push(escapeHtml(addrJson.line2));
+      const city = [addrJson.city, addrJson.state].filter(Boolean).join(", ") + (addrJson.zip ? ` ${addrJson.zip}` : "");
+      if (city.trim()) parts.push(city);
+      return parts;
+    }
+    if (flatCust?.address) {
+      const parts = [escapeHtml(flatCust.address)];
+      const city = [flatCust.city, flatCust.state].filter(Boolean).join(", ") + (flatCust.zipCode ? ` ${flatCust.zipCode}` : "");
+      if (city.trim()) parts.push(city);
+      return parts;
+    }
+    return [];
+  }
 
   function buildPrintHTML() {
     const accent = "#1D4E89";
 
     const billingAddrHTML = (() => {
-      const parts: string[] = [];
-      if (invoice.customerName) parts.push(`<b>${escapeHtml(invoice.customerName)}</b>`);
-      if (addr?.line1) parts.push(escapeHtml(addr.line1));
-      if (addr?.line2) parts.push(escapeHtml(addr.line2));
-      const cityLine = [addr?.city, addr?.state].filter(Boolean).join(", ") + (addr?.zip ? ` ${addr.zip}` : "");
-      if (cityLine.trim()) parts.push(cityLine);
+      const parts: string[] = [
+        ...buildNameLines(customer, invoice.customerName),
+        ...buildAddrLines(customer?.billingAddress, customer),
+      ];
       if (customer?.email) parts.push(escapeHtml(customer.email));
       if (customer?.phone) parts.push(escapeHtml(customer.phone));
       return parts.join("<br/>") || "—";
     })();
 
     const shippingAddrHTML = (() => {
-      const sa = customer?.shippingAddress;
-      if (!sa?.line1) return invoice.customerName ? `<b>${escapeHtml(invoice.customerName)}</b>` : "—";
-      const parts: string[] = [];
-      if (invoice.customerName) parts.push(`<b>${escapeHtml(invoice.customerName)}</b>`);
-      parts.push(escapeHtml(sa.line1));
-      if (sa.line2) parts.push(escapeHtml(sa.line2));
-      const cityLine = [sa.city, sa.state].filter(Boolean).join(", ") + (sa.zip ? ` ${sa.zip}` : "");
-      if (cityLine.trim()) parts.push(cityLine);
-      return parts.join("<br/>");
+      const nameLines = buildNameLines(customer, invoice.customerName);
+      // prefer shippingAddress JSON, fall back to billingAddress JSON, then flat fields
+      const addrLines = buildAddrLines(customer?.shippingAddress, null).length > 0
+        ? buildAddrLines(customer?.shippingAddress, null)
+        : buildAddrLines(customer?.billingAddress, customer);
+      return [...nameLines, ...addrLines].join("<br/>") || "—";
     })();
 
     const lineItemsHTML = (invoice.lineItems as LineItem[]).map((item, idx) => {
@@ -281,7 +327,7 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
     <div class="doc-badge">
       <div class="doc-type-pill" contenteditable="true">INVOICE</div>
       <div class="doc-number" contenteditable="true">${escapeHtml(effectiveInvoiceNum)}</div>
-      <div class="doc-meta-right" contenteditable="true"><strong>Date:</strong> ${formatDate(invoice.createdAt)}${invoice.dueDate ? `<br/><strong>Due:</strong> ${formatDate(invoice.dueDate)}` : ""}${invoice.paidAt ? `<br/><strong>Paid:</strong> ${formatDate(invoice.paidAt)}` : ""}<br/><strong>Status:</strong> ${escapeHtml(status.label)}</div>
+      <div class="doc-meta-right" contenteditable="true"><strong>Date:</strong> ${formatDate(invoice.createdAt)}${effectiveDueDate ? `<br/><strong>Due:</strong> ${formatDate(effectiveDueDate)}` : ""}${netTermsLabel ? `<br/><strong>Terms:</strong> ${netTermsLabel}` : ""}${invoice.paidAt ? `<br/><strong>Paid:</strong> ${formatDate(invoice.paidAt)}` : ""}<br/><strong>Status:</strong> ${escapeHtml(status.label)}</div>
     </div>
   </div>
 
@@ -298,7 +344,7 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
     </div>
     <div>
       <div class="addr-title">Invoice Details</div>
-      <div class="addr-body" contenteditable="true"><b>Invoice #</b> ${escapeHtml(effectiveInvoiceNum)}<br/><b>Date:</b> ${formatDate(invoice.createdAt)}${invoice.dueDate ? `<br/><b>Due:</b> ${formatDate(invoice.dueDate)}` : ""}${invoice.paidAt ? `<br/><b>Paid:</b> ${formatDate(invoice.paidAt)}` : ""}<br/><b>Ref #:</b> ${escapeHtml(refNum)}<br/><b>Payment:</b> ${escapeHtml(pmtLabel)}</div>
+      <div class="addr-body" contenteditable="true"><b>Invoice #</b> ${escapeHtml(effectiveInvoiceNum)}<br/><b>Date:</b> ${formatDate(invoice.createdAt)}${effectiveDueDate ? `<br/><b>Due:</b> ${formatDate(effectiveDueDate)}` : ""}${netTermsLabel ? `<br/><b>Terms:</b> ${netTermsLabel}` : ""}${invoice.paidAt ? `<br/><b>Paid:</b> ${formatDate(invoice.paidAt)}` : ""}<br/><b>Ref #:</b> ${escapeHtml(refNum)}<br/><b>Payment:</b> ${escapeHtml(pmtLabel)}</div>
     </div>
   </div>
 
@@ -502,9 +548,17 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
 
           <div className="grid grid-cols-3 gap-3">
             <MetaChip label="Invoice Date" value={formatDate(invoice.createdAt)} />
-            <MetaChip label="Due Date" value={formatDate(invoice.dueDate)} alert={!!isOverdue} />
-            {invoice.paidAt && <MetaChip label="Paid On" value={formatDate(invoice.paidAt)} positive />}
+            <MetaChip label="Due Date" value={formatDate(effectiveDueDate)} alert={!!isOverdue} />
+            {netTermsLabel
+              ? <MetaChip label="Net Terms" value={netTermsLabel} />
+              : invoice.paidAt && <MetaChip label="Paid On" value={formatDate(invoice.paidAt)} positive />
+            }
           </div>
+          {netTermsLabel && invoice.paidAt && (
+            <div className="grid grid-cols-3 gap-3">
+              <MetaChip label="Paid On" value={formatDate(invoice.paidAt)} positive />
+            </div>
+          )}
 
           <div className="h-px bg-white/8" />
 

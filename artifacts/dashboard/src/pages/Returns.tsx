@@ -53,6 +53,13 @@ function printReturn(r: any) {
     .detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px}
     .detail-label{font-size:10px;font-weight:700;letter-spacing:1px;margin-bottom:4px}
     .detail-value{font-size:12px;line-height:1.6}
+    .items-section{margin-bottom:20px}
+    .items-label{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px}
+    .items-table{width:100%;border-collapse:collapse;font-size:12px}
+    .items-table th{text-align:left;font-size:10px;font-weight:700;letter-spacing:1px;border-bottom:2px solid #1a1a1a;padding:4px 8px 6px}
+    .items-table td{padding:6px 8px;border-bottom:1px solid #e5e7eb;vertical-align:top}
+    .items-table .right{text-align:right}
+    .items-table tfoot td{font-weight:700;border-top:2px solid #1a1a1a;border-bottom:none}
     .notes-block{font-size:12px;background:#f7f7f7;padding:12px 16px;margin-bottom:20px;line-height:1.65}
     .notes-label{font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:5px}
     .amount-box{display:flex;justify-content:flex-end;margin:20px 0}
@@ -117,6 +124,33 @@ function printReturn(r: any) {
       <div class="detail-value">${esc(r.refundMethod || "—")}</div>
     </div>
   </div>
+
+  ${r.lineItems && r.lineItems.length > 0 ? `
+  <div class="items-section">
+    <div class="items-label">Items Being Returned</div>
+    <table class="items-table">
+      <thead><tr>
+        <th>Description</th><th>SKU</th><th class="right">Qty</th><th class="right">Unit Price</th><th class="right">Line Total</th>
+      </tr></thead>
+      <tbody>
+        ${(r.lineItems as any[]).map((item: any) => {
+          const qty = Number(item.quantity ?? 1);
+          const price = Number(item.unitPrice ?? item.price ?? 0);
+          return `<tr>
+            <td>${esc(item.description ?? item.name ?? "—")}</td>
+            <td style="color:#94a3b8;font-size:11px">${esc(item.sku ?? "")}</td>
+            <td class="right">${qty}</td>
+            <td class="right">$${price.toFixed(2)}</td>
+            <td class="right">$${(qty * price).toFixed(2)}</td>
+          </tr>`;
+        }).join("")}
+      </tbody>
+      <tfoot><tr>
+        <td colspan="4" class="right">Total</td>
+        <td class="right">$${(r.lineItems as any[]).reduce((s: number, item: any) => s + Number(item.quantity ?? 1) * Number(item.unitPrice ?? item.price ?? 0), 0).toFixed(2)}</td>
+      </tr></tfoot>
+    </table>
+  </div>` : ""}
 
   ${r.notes ? `<div class="notes-block"><div class="notes-label">Notes</div>${esc(r.notes)}</div>` : ""}
 
@@ -269,16 +303,40 @@ function ReturnModal({
   const [refundedAt, setRefundedAt]   = useState(record?.refundedAt ? record.refundedAt.slice(0, 10) : "");
   const [notes, setNotes]             = useState(record?.notes ?? "");
   const [internalNote, setInternalNote] = useState(record?.internalNote ?? "");
+  const [selectedItemIdxs, setSelectedItemIdxs] = useState<number[]>(
+    record?.lineItems?.length ? record.lineItems.map((_: any, i: number) => i) : []
+  );
   const [saving, setSaving]           = useState(false);
   const [error, setError]             = useState<string | null>(null);
 
-  const filteredInvoices = invoices.filter(inv =>
+  const filteredInvoices = invoices.filter((inv: any) =>
     !customerId || Number(inv.customerId) === Number(customerId)
   );
+
+  // Get line items from the currently selected invoice
+  const selectedInvoice = invoices.find((inv: any) => invoiceId && String(inv.id) === String(invoiceId));
+  const invoiceLineItems: any[] = (selectedInvoice?.lineItems ?? []).filter((li: any) =>
+    li.description && li.description !== "Freight" && li.description !== "Discount"
+  );
+
+  const handleInvoiceChange = (id: string) => {
+    setInvoiceId(id);
+    // Default: select all items
+    const inv = invoices.find((i: any) => String(i.id) === id);
+    const items = (inv?.lineItems ?? []).filter((li: any) => li.description && li.description !== "Freight" && li.description !== "Discount");
+    setSelectedItemIdxs(items.map((_: any, i: number) => i));
+  };
+
+  const toggleItem = (idx: number) => {
+    setSelectedItemIdxs(prev =>
+      prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx]
+    );
+  };
 
   const handleSave = async () => {
     if (!customerId) { setError("Please select a customer."); return; }
     setSaving(true); setError(null);
+    const chosenItems = invoiceLineItems.filter((_: any, i: number) => selectedItemIdxs.includes(i));
     try {
       const body = {
         type,
@@ -286,7 +344,7 @@ function ReturnModal({
         invoiceId: invoiceId ? Number(invoiceId) : null,
         status,
         reason: reason || null,
-        lineItems: [],
+        lineItems: chosenItems,
         refundAmount: refundAmount ? Number(refundAmount) : null,
         refundMethod: refundMethod || null,
         refundedAt: refundedAt || null,
@@ -346,7 +404,7 @@ function ReturnModal({
           {/* Invoice */}
           <div>
             <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 block">Linked Invoice (optional)</label>
-            <select value={invoiceId} onChange={e => setInvoiceId(e.target.value)}
+            <select value={invoiceId} onChange={e => handleInvoiceChange(e.target.value)}
               className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2.5 bg-white text-slate-700 focus:outline-none focus:border-indigo-400">
               <option value="">None</option>
               {filteredInvoices.map((inv: any) => (
@@ -356,6 +414,38 @@ function ReturnModal({
               ))}
             </select>
           </div>
+
+          {/* Line Items Selection */}
+          {invoiceLineItems.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Items Being Returned</label>
+                <div className="flex gap-2 text-xs">
+                  <button type="button" onClick={() => setSelectedItemIdxs(invoiceLineItems.map((_: any, i: number) => i))}
+                    className="text-indigo-600 hover:underline">All</button>
+                  <span className="text-slate-300">|</span>
+                  <button type="button" onClick={() => setSelectedItemIdxs([])}
+                    className="text-slate-400 hover:underline">None</button>
+                </div>
+              </div>
+              <div className="border border-slate-200 rounded-lg overflow-hidden divide-y divide-slate-100">
+                {invoiceLineItems.map((item: any, idx: number) => (
+                  <label key={idx} className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 cursor-pointer transition-colors">
+                    <input type="checkbox" checked={selectedItemIdxs.includes(idx)} onChange={() => toggleItem(idx)}
+                      className="w-4 h-4 accent-indigo-600 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm text-slate-800 font-medium truncate block">{item.description || item.name || "Item"}</span>
+                      {item.sku && <span className="text-[10px] text-slate-400">{item.sku}</span>}
+                    </div>
+                    <span className="text-xs text-slate-500 flex-shrink-0">
+                      Qty {item.quantity ?? 1} × ${Number(item.unitPrice ?? 0).toFixed(2)}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <p className="text-[10px] text-slate-400 mt-1">{selectedItemIdxs.length} of {invoiceLineItems.length} item(s) selected</p>
+            </div>
+          )}
 
           {/* Reason */}
           <div>
@@ -529,7 +619,7 @@ export default function Returns() {
   return (
     <Layout>
       <Header title="Returns & Refunds" subtitle="Track product returns and customer refund requests" />
-      <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 flex flex-col gap-4 bg-[hsl(220_25%_97%)]">
+      <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4 bg-[hsl(220_25%_97%)]">
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

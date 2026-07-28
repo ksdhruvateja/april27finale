@@ -14,6 +14,7 @@ import {
   Users, Store, Package, AlertCircle, Receipt, CreditCard,
   Activity, ChevronRight, X, FileText, ShoppingCart, Truck,
   Link2, CheckCircle2, Clock, Circle, ArrowLeftRight,
+  Search, SlidersHorizontal, ArrowUpDown,
 } from "lucide-react";
 
 function matchAny(term: string, ...fields: (string | number | null | undefined)[]): boolean {

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { eq, inArray } from "drizzle-orm";
 import { db, quotesTable, customersTable, invoicesTable } from "@workspace/db";
-import { getNextDocNumber } from "../lib/doc-numbers";
+import { getNextDocNumberWithPrefix } from "../lib/doc-numbers";
 import {
   CreateQuoteBody,
   UpdateQuoteBody,
@@ -30,6 +30,7 @@ function calcTotals(lineItems: Array<{ quantity: number; unitPrice: number; taxP
 async function withCustomerName(quote: typeof quotesTable.$inferSelect) {
   const [customer] = await db.select({
     name: customersTable.name,
+    company: customersTable.company,
     email: customersTable.email,
     phone: customersTable.phone,
     address: customersTable.address,
@@ -37,10 +38,14 @@ async function withCustomerName(quote: typeof quotesTable.$inferSelect) {
     state: customersTable.state,
     zipCode: customersTable.zipCode,
     country: customersTable.country,
+    accountType: customersTable.accountType,
+    billingAddress: customersTable.billingAddress,
+    shippingAddress: customersTable.shippingAddress,
   }).from(customersTable).where(eq(customersTable.id, quote.customerId));
   return {
     ...quote,
     customerName: customer?.name ?? "Unknown",
+    customerCompany: customer?.company ?? null,
     customerEmail: customer?.email ?? null,
     customerPhone: customer?.phone ?? null,
     customerAddress: customer?.address ?? null,
@@ -48,6 +53,9 @@ async function withCustomerName(quote: typeof quotesTable.$inferSelect) {
     customerState: customer?.state ?? null,
     customerZip: customer?.zipCode ?? null,
     customerCountry: customer?.country ?? null,
+    customerAccountType: customer?.accountType ?? null,
+    customerBillingAddress: customer?.billingAddress ?? null,
+    customerShippingAddress: customer?.shippingAddress ?? null,
     lineItems: quote.lineItems as object[],
     subtotal: Number(quote.subtotal),
     taxTotal: Number(quote.taxTotal),
@@ -62,11 +70,46 @@ router.get("/quotes", async (_req, res): Promise<void> => {
   const quotes = await db.select().from(quotesTable).orderBy(quotesTable.createdAt);
   if (quotes.length === 0) { res.json([]); return; }
   const ids = [...new Set(quotes.map(q => q.customerId))];
-  const customers = await db.select({ id: customersTable.id, name: customersTable.name, email: customersTable.email, phone: customersTable.phone, address: customersTable.address, city: customersTable.city, state: customersTable.state, zipCode: customersTable.zipCode, country: customersTable.country }).from(customersTable).where(inArray(customersTable.id, ids));
+  const customers = await db.select({
+    id: customersTable.id,
+    name: customersTable.name,
+    company: customersTable.company,
+    email: customersTable.email,
+    phone: customersTable.phone,
+    address: customersTable.address,
+    city: customersTable.city,
+    state: customersTable.state,
+    zipCode: customersTable.zipCode,
+    country: customersTable.country,
+    accountType: customersTable.accountType,
+    billingAddress: customersTable.billingAddress,
+    shippingAddress: customersTable.shippingAddress,
+  }).from(customersTable).where(inArray(customersTable.id, ids));
   const cmap = new Map(customers.map(c => [c.id, c]));
   res.json(quotes.map(q => {
     const c = cmap.get(q.customerId);
-    return { ...q, customerName: c?.name ?? "Unknown", customerEmail: c?.email ?? null, customerPhone: c?.phone ?? null, customerAddress: c?.address ?? null, customerCity: c?.city ?? null, customerState: c?.state ?? null, customerZip: c?.zipCode ?? null, customerCountry: c?.country ?? null, lineItems: q.lineItems as object[], subtotal: Number(q.subtotal), taxTotal: Number(q.taxTotal), discountTotal: Number(q.discountTotal), total: Number(q.total), quoteNumber: q.quoteNumber ?? null, trackingNumber: q.trackingNumber ?? null };
+    return {
+      ...q,
+      customerName: c?.name ?? "Unknown",
+      customerCompany: c?.company ?? null,
+      customerEmail: c?.email ?? null,
+      customerPhone: c?.phone ?? null,
+      customerAddress: c?.address ?? null,
+      customerCity: c?.city ?? null,
+      customerState: c?.state ?? null,
+      customerZip: c?.zipCode ?? null,
+      customerCountry: c?.country ?? null,
+      customerAccountType: c?.accountType ?? null,
+      customerBillingAddress: c?.billingAddress ?? null,
+      customerShippingAddress: c?.shippingAddress ?? null,
+      lineItems: q.lineItems as object[],
+      subtotal: Number(q.subtotal),
+      taxTotal: Number(q.taxTotal),
+      discountTotal: Number(q.discountTotal),
+      total: Number(q.total),
+      quoteNumber: q.quoteNumber ?? null,
+      trackingNumber: q.trackingNumber ?? null,
+    };
   }));
 });
 
@@ -79,7 +122,7 @@ router.post("/quotes", async (req, res): Promise<void> => {
   const rawLineItems = Array.isArray(req.body.lineItems) ? req.body.lineItems : parsed.data.lineItems;
   const totals = calcTotals(parsed.data.lineItems as Array<{ quantity: number; unitPrice: number; taxPercent: number; discountPercent: number }>);
   const providedQNumber = (parsed.data as any).quoteNumber as string | null | undefined;
-  const quoteNumber = providedQNumber ?? `FRZQ-${await getNextDocNumber()}`;
+  const quoteNumber = providedQNumber ?? await getNextDocNumberWithPrefix("quote");
   const [quote] = await db.insert(quotesTable).values({
     customerId: parsed.data.customerId,
     status: parsed.data.status ?? "draft",

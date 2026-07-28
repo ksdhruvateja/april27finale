@@ -285,7 +285,7 @@ export default function Auctions() {
   return (
     <Layout>
       <Header title="Auctions" subtitle={`${items.length} total`} />
-      <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 flex flex-col gap-4 bg-[hsl(220_25%_97%)]">
+      <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4 bg-[hsl(220_25%_97%)]">
         <div className="flex items-center justify-between">
           <p className="text-sm text-slate-500">
             Strict auction flow: new invoice → purchase order → shipping → billing.

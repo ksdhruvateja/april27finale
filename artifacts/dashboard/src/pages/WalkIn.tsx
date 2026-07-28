@@ -16,11 +16,14 @@ import {
   Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle2,
   User, CreditCard, Banknote, Building2, FileCheck2, Tag,
   X, Package, Zap, Receipt, AlertCircle, Percent, StickyNote,
-  UserPlus, ChevronDown, Truck,
+  UserPlus, ChevronDown, Truck, Clock, Paperclip, MapPin,
+  Hash, CalendarClock,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import StripeCollectModal from "@/components/StripeCollectModal";
 
-type PaymentMethod = "cash" | "card" | "bank_transfer" | "check";
+type PaymentMethod = "cash" | "card" | "bank_transfer" | "check" | "net";
+
 type CartItem = {
   productId?: number;
   description: string;
@@ -31,11 +34,17 @@ type CartItem = {
   sku?: string;
 };
 
-const PAYMENT_OPTIONS: { value: PaymentMethod; label: string; icon: React.ComponentType<any>; color: string }[] = [
-  { value: "cash",          label: "Cash",          icon: Banknote,   color: "emerald" },
-  { value: "card",          label: "Credit Card",   icon: CreditCard, color: "blue"    },
-  { value: "bank_transfer", label: "Bank Transfer", icon: Building2,  color: "indigo"  },
-  { value: "check",         label: "Check",         icon: FileCheck2, color: "amber"   },
+const PAYMENT_OPTIONS: {
+  value: PaymentMethod;
+  label: string;
+  icon: React.ComponentType<any>;
+  color: string;
+}[] = [
+  { value: "cash",          label: "Cash",          icon: Banknote,      color: "emerald" },
+  { value: "card",          label: "Credit Card",   icon: CreditCard,    color: "blue"    },
+  { value: "bank_transfer", label: "Bank Transfer", icon: Building2,     color: "indigo"  },
+  { value: "check",         label: "Check",         icon: FileCheck2,    color: "amber"   },
+  { value: "net",           label: "Net Terms",     icon: CalendarClock, color: "violet"  },
 ];
 
 type OrderDiscountWalkin = { type: "percent" | "fixed"; value: number };
@@ -67,6 +76,23 @@ function calcTotals(
   return { subtotal: itemSubtotal, taxTotal, itemDiscTotal, orderDiscAmt, freight, beforeDiscount, total };
 }
 
+/** Parse "net30", "Net 30", etc. → number of days, or null */
+function parseNetDays(accountType: string | null | undefined): number | null {
+  if (!accountType) return null;
+  const m = accountType.replace(/\s/g, "").match(/^net(\d+)$/i);
+  return m ? parseInt(m[1]) : null;
+}
+
+function addDays(d: Date, n: number): Date {
+  const r = new Date(d);
+  r.setDate(r.getDate() + n);
+  return r;
+}
+
+function fmtDate(d: Date): string {
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
 export default function WalkIn() {
   const { data: products }  = useListProducts();
   const { data: customers } = useListCustomers();
@@ -80,40 +106,58 @@ export default function WalkIn() {
     return Number((taxRates as any[])[0]?.rate ?? 0);
   }, [taxRates]);
 
-  const [search,         setSearch]         = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [cart,           setCart]           = useState<CartItem[]>([]);
-  const [payMethod,      setPayMethod]      = useState<PaymentMethod>("cash");
-  const [selectedCustId, setSelectedCustId] = useState<number | null>(null);
-  const [custSearch,     setCustSearch]     = useState("");
-  const [custOpen,       setCustOpen]       = useState(false);
-  const [internalNote,   setInternalNote]   = useState("");
-  const [success,        setSuccess]        = useState<{ invoiceId: number; total: number } | null>(null);
-  const [saving,         setSaving]         = useState(false);
-  const [error,          setError]          = useState<string | null>(null);
-  const [orderDiscount,  setOrderDiscount]  = useState<OrderDiscountWalkin | null>(null);
-  const [freight,        setFreight]        = useState(0);
-  const [showFreight,    setShowFreight]    = useState(false);
-  const [taxExempt,      setTaxExempt]      = useState(false);
+  // Product browser
+  const [search,          setSearch]          = useState("");
+  const [categoryFilter,  setCategoryFilter]  = useState<string>("all");
 
-  /* New Customer inline form */
-  const [showNewCust,    setShowNewCust]    = useState(false);
-  const [newCustName,    setNewCustName]    = useState("");
-  const [newCustCompany, setNewCustCompany] = useState("");
-  const [newCustEmail,   setNewCustEmail]   = useState("");
-  const [newCustPhone,   setNewCustPhone]   = useState("");
-  const [savingCust,     setSavingCust]     = useState(false);
-  const [custError,      setCustError]      = useState<string | null>(null);
+  // Cart
+  const [cart,            setCart]            = useState<CartItem[]>([]);
+  const [orderDiscount,   setOrderDiscount]   = useState<OrderDiscountWalkin | null>(null);
+  const [freight,         setFreight]         = useState(0);
+  const [showFreight,     setShowFreight]     = useState(false);
+  const [taxExempt,       setTaxExempt]       = useState(false);
 
-  const custRef       = useRef<HTMLDivElement>(null);
+  // Customer
+  const [selectedCustId,  setSelectedCustId]  = useState<number | null>(null);
+  const [custSearch,      setCustSearch]      = useState("");
+  const [custOpen,        setCustOpen]        = useState(false);
+  const [showNewCust,     setShowNewCust]     = useState(false);
+  const [newCustName,     setNewCustName]     = useState("");
+  const [newCustCompany,  setNewCustCompany]  = useState("");
+  const [newCustEmail,    setNewCustEmail]    = useState("");
+  const [newCustPhone,    setNewCustPhone]    = useState("");
+  const [savingCust,      setSavingCust]      = useState(false);
+  const [custError,       setCustError]       = useState<string | null>(null);
+
+  // Payment method
+  const [payMethod,       setPayMethod]       = useState<PaymentMethod>("cash");
+
+  // Per-method detail fields
+  const [cashReceivedBy,  setCashReceivedBy]  = useState("");
+  const [cashNotes,       setCashNotes]       = useState("");
+  const [bankRefNum,      setBankRefNum]      = useState("");
+  const [bankAttachName,  setBankAttachName]  = useState("");
+  const [checkNumber,     setCheckNumber]     = useState("");
+  const bankFileRef = useRef<HTMLInputElement>(null);
+
+  // Internal note
+  const [internalNote,    setInternalNote]    = useState("");
+
+  // Stripe card flow
+  const [showStripeModal, setShowStripeModal] = useState(false);
+  const [pendingInvoice,  setPendingInvoice]  = useState<{ id: number; total: number; invoiceNumber: string } | null>(null);
+
+  // UI state
+  const [success,  setSuccess]  = useState<{ invoiceId: number; total: number; method: PaymentMethod } | null>(null);
+  const [saving,   setSaving]   = useState(false);
+  const [error,    setError]    = useState<string | null>(null);
+
+  // Customer dropdown portal rect
+  const custRef = useRef<HTMLDivElement>(null);
   const [custDropRect, setCustDropRect] = useState<DOMRect | null>(null);
-
   useEffect(() => {
-    if (custOpen && custRef.current) {
-      setCustDropRect(custRef.current.getBoundingClientRect());
-    } else {
-      setCustDropRect(null);
-    }
+    if (custOpen && custRef.current) setCustDropRect(custRef.current.getBoundingClientRect());
+    else setCustDropRect(null);
   }, [custOpen]);
 
   const productList  = (products  ?? []) as any[];
@@ -147,6 +191,32 @@ export default function WalkIn() {
     [customerList, selectedCustId]
   );
 
+  /** Net terms days for the selected customer */
+  const netDays = useMemo(
+    () => parseNetDays(selectedCustomer?.accountType),
+    [selectedCustomer]
+  );
+
+  /** Due date when paying on net terms */
+  const netDueDate = useMemo(
+    () => netDays != null ? addDays(new Date(), netDays) : null,
+    [netDays]
+  );
+
+  /** Auto-populate payment method when customer is selected */
+  useEffect(() => {
+    if (!selectedCustomer) return;
+    const days = parseNetDays(selectedCustomer.accountType);
+    if (days != null) {
+      setPayMethod("net");
+    } else {
+      const t = (selectedCustomer.accountType ?? "").toLowerCase();
+      if (t === "cash" || t === "cod" || t === "cash_advance") setPayMethod("cash");
+      // card / bank_transfer / check → leave current selection
+    }
+  }, [selectedCustId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ─── Cart helpers ─────────────────────────────────────── */
   function addToCart(product: any) {
     setCart(prev => {
       const idx = prev.findIndex(i => i.productId === product.id);
@@ -171,15 +241,12 @@ export default function WalkIn() {
     if (qty <= 0) { removeFromCart(idx); return; }
     setCart(prev => prev.map((it, i) => i === idx ? { ...it, quantity: qty } : it));
   }
-
   function updateCartPrice(idx: number, price: number) {
     setCart(prev => prev.map((it, i) => i === idx ? { ...it, unitPrice: price } : it));
   }
-
   function updateCartDisc(idx: number, disc: number) {
     setCart(prev => prev.map((it, i) => i === idx ? { ...it, discountPercent: Math.min(100, Math.max(0, disc)) } : it));
   }
-
   function removeFromCart(idx: number) {
     setCart(prev => prev.filter((_, i) => i !== idx));
   }
@@ -198,6 +265,9 @@ export default function WalkIn() {
     setShowNewCust(false);
     setNewCustName(""); setNewCustCompany(""); setNewCustEmail(""); setNewCustPhone("");
     setCustError(null);
+    setCashNotes(""); setCashReceivedBy("");
+    setBankRefNum(""); setBankAttachName("");
+    setCheckNumber("");
   }
 
   async function saveNewCustomer() {
@@ -223,17 +293,27 @@ export default function WalkIn() {
     }
   }
 
-  const { subtotal, taxTotal, itemDiscTotal, orderDiscAmt, freight: freightCalc, beforeDiscount, total } = calcTotals(cart, orderDiscount, showFreight ? freight : 0, taxExempt);
+  const { subtotal, taxTotal, itemDiscTotal, orderDiscAmt, freight: freightCalc, beforeDiscount, total }
+    = calcTotals(cart, orderDiscount, showFreight ? freight : 0, taxExempt);
 
-  const customerName =
-    selectedCustomer
-      ? (selectedCustomer.company || selectedCustomer.name)
-      : "Walk-in Customer";
+  const customerName = selectedCustomer
+    ? (selectedCustomer.company || selectedCustomer.name)
+    : "Walk-in Customer";
 
   const customerId = selectedCustId ?? null;
 
+  /* ─── Complete Sale ─────────────────────────────────────── */
   async function completeSale() {
     if (cart.length === 0) { setError("Add at least one item to complete a sale."); return; }
+    if (payMethod === "card" && !selectedCustId) {
+      setError("Please select a customer to process a card payment via Stripe."); return;
+    }
+    if (payMethod === "net" && !selectedCustId) {
+      setError("Please select a customer to bill on net terms."); return;
+    }
+    if (payMethod === "net" && netDays == null) {
+      setError("This customer has no net terms configured. Edit their account type first."); return;
+    }
     setError(null);
     setSaving(true);
     try {
@@ -246,6 +326,29 @@ export default function WalkIn() {
       }));
       if (freightCalc > 0)  lineItems = [...lineItems, { description: "Freight / Shipping", quantity: 1, unitPrice: freightCalc,   taxPercent: 0, discountPercent: 0 }];
       if (orderDiscAmt > 0) lineItems = [...lineItems, { description: "Order Discount",      quantity: 1, unitPrice: -orderDiscAmt, taxPercent: 0, discountPercent: 0 }];
+
+      // Build payment note per method
+      let paymentNote: string | undefined;
+      if (payMethod === "cash") {
+        const parts = [
+          cashReceivedBy.trim() && `Received by: ${cashReceivedBy.trim()}`,
+          cashNotes.trim(),
+        ].filter(Boolean);
+        paymentNote = parts.length ? parts.join(" — ") : undefined;
+      } else if (payMethod === "bank_transfer") {
+        const parts = [
+          bankRefNum.trim()    && `Ref #${bankRefNum.trim()}`,
+          bankAttachName.trim() && `Attachment: ${bankAttachName.trim()}`,
+        ].filter(Boolean);
+        paymentNote = parts.length ? parts.join(" | ") : undefined;
+      } else if (payMethod === "check") {
+        paymentNote = checkNumber.trim() ? `Check #${checkNumber.trim()}` : undefined;
+      }
+
+      const isNetBillLater = payMethod === "net";
+      const isCardStripe   = payMethod === "card";
+      const status = isNetBillLater ? "sent" : isCardStripe ? "draft" : "paid";
+
       const payload: any = {
         customerName,
         customerId:     customerId ?? undefined,
@@ -254,18 +357,30 @@ export default function WalkIn() {
         taxTotal,
         discountTotal:  itemDiscTotal,
         total,
-        status:         "paid",
-        paymentMethod:  payMethod,
-        paidAt:         new Date().toISOString(),
+        status,
+        paymentMethod:  isNetBillLater || isCardStripe ? undefined : payMethod,
+        paidAt:         status === "paid" ? new Date().toISOString() : undefined,
+        dueDate:        isNetBillLater && netDueDate ? netDueDate.toISOString() : undefined,
         notes:          internalNote.trim() || undefined,
+        paymentNote,
         isQuickInvoice: true,
       };
+
       const result: any = await createInvoice.mutateAsync({ data: payload });
       await queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
       queryClient.invalidateQueries({ queryKey: ["accounting-pnl"] });
       queryClient.invalidateQueries({ queryKey: ["accounting-ar"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
-      setSuccess({ invoiceId: result?.id ?? 0, total });
+
+      if (isCardStripe) {
+        const invoiceNum = result?.invoiceNumber ?? `INV-${result?.id ?? 0}`;
+        setPendingInvoice({ id: result?.id ?? 0, total, invoiceNumber: invoiceNum });
+        setShowStripeModal(true);
+        setSaving(false);
+        return; // success handled in Stripe modal callback
+      }
+
+      setSuccess({ invoiceId: result?.id ?? 0, total, method: payMethod });
       clearSale();
     } catch (e: any) {
       setError(e?.message ?? "Failed to complete sale. Please try again.");
@@ -274,6 +389,27 @@ export default function WalkIn() {
     }
   }
 
+  /* ─── Button label ──────────────────────────────────────── */
+  function buttonLabel() {
+    if (saving) return <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Processing…</>;
+    const amt = cart.length > 0 ? ` ${formatCurrency(total)}` : "";
+    if (payMethod === "card")          return <><CreditCard size={16} /> Charge{amt} via Stripe</>;
+    if (payMethod === "net")           return <><CalendarClock size={16} /> Bill Later{amt} — Net {netDays ?? "??"} Terms</>;
+    return <><Zap size={16} /> Charge{amt} &amp; Generate Invoice</>;
+  }
+
+  /* ─── Customer address helper ───────────────────────────── */
+  function custAddressLine(c: any): string | null {
+    const parts = [
+      c.address || c.billingAddress,
+      [c.city, c.state, c.zipCode].filter(Boolean).join(", "),
+    ].filter(Boolean);
+    return parts.length ? parts.join(", ") : null;
+  }
+
+  /* ──────────────────────────────────────────────────────────
+     RENDER
+  ────────────────────────────────────────────────────────── */
   return (
     <Layout>
       <div className="flex flex-col h-full min-h-0">
@@ -281,7 +417,7 @@ export default function WalkIn() {
 
         <div className="flex flex-1 min-h-0 gap-4 p-4 overflow-hidden">
 
-          {/* ── LEFT: Product browser ───────────────────────── */}
+          {/* ── LEFT: Product browser ─────────────────────── */}
           <div className="flex flex-col flex-1 min-w-0 min-h-0 gap-3">
 
             {/* Search + category filter */}
@@ -367,7 +503,7 @@ export default function WalkIn() {
             </div>
           </div>
 
-          {/* ── RIGHT: Order panel ──────────────────────────── */}
+          {/* ── RIGHT: Order panel ────────────────────────── */}
           <div className="w-[500px] flex-shrink-0 flex flex-col min-h-0 gap-3 overflow-y-auto">
 
             {/* ── Cart ── */}
@@ -380,9 +516,7 @@ export default function WalkIn() {
                   </span>
                 </div>
                 {cart.length > 0 && (
-                  <button onClick={clearSale} className="text-xs text-red-400 hover:text-red-600 font-semibold transition-colors">
-                    Clear All
-                  </button>
+                  <button onClick={clearSale} className="text-xs text-red-400 hover:text-red-600 font-semibold transition-colors">Clear All</button>
                 )}
               </div>
 
@@ -458,13 +592,11 @@ export default function WalkIn() {
               {cart.length > 0 && (
                 <div className="border-t border-slate-200 px-4 py-4 bg-slate-50/60 flex flex-col gap-2">
 
-                  {/* Subtotal row */}
                   <div className="flex justify-between text-sm text-slate-600">
                     <span>Subtotal</span>
                     <span className="font-semibold text-slate-800">{formatCurrency(subtotal)}</span>
                   </div>
 
-                  {/* Per-item discounts */}
                   {itemDiscTotal > 0 && (
                     <div className="flex justify-between text-sm text-red-500">
                       <span>Item Discounts</span>
@@ -472,7 +604,7 @@ export default function WalkIn() {
                     </div>
                   )}
 
-                  {/* Tax row + Tax Exempt toggle */}
+                  {/* Tax row */}
                   <div className="flex items-center gap-2 rounded-xl bg-white border border-slate-200 px-3 py-2">
                     <Percent size={12} className="text-slate-400 flex-shrink-0" />
                     <span className="text-sm text-slate-600 flex-1">Tax</span>
@@ -491,7 +623,7 @@ export default function WalkIn() {
                     </button>
                   </div>
 
-                  {/* Freight toggle */}
+                  {/* Freight / Shipping */}
                   {!showFreight ? (
                     <button
                       onClick={() => setShowFreight(true)}
@@ -500,8 +632,8 @@ export default function WalkIn() {
                       <Truck size={11} /> Add freight / shipping charge
                     </button>
                   ) : (
-                    <div className="flex items-center gap-2 rounded-xl bg-white border border-slate-200 px-3 py-2">
-                      <Truck size={12} className="text-slate-400 flex-shrink-0" />
+                    <div className="flex items-center gap-2 rounded-xl bg-white border border-blue-200 px-3 py-2">
+                      <Truck size={12} className="text-blue-500 flex-shrink-0" />
                       <span className="text-sm text-slate-600 flex-1">Freight / Shipping</span>
                       <span className="text-slate-400 text-sm">$</span>
                       <input
@@ -514,16 +646,14 @@ export default function WalkIn() {
                       {freightCalc > 0 && (
                         <span className="text-sm font-semibold text-slate-700 min-w-[60px] text-right">+{formatCurrency(freightCalc)}</span>
                       )}
-                      <button
-                        onClick={() => { setShowFreight(false); setFreight(0); }}
-                        className="text-slate-300 hover:text-red-400 transition-colors"
-                      >
+                      <button onClick={() => { setShowFreight(false); setFreight(0); }}
+                        className="text-slate-300 hover:text-red-400 transition-colors">
                         <X size={12} />
                       </button>
                     </div>
                   )}
 
-                  {/* Pre-discount total line (visible only when discount is being added) */}
+                  {/* Pre-discount total */}
                   {orderDiscount && beforeDiscount > 0 && (
                     <div className="flex justify-between text-sm text-slate-500 pt-1 border-t border-slate-200 mt-0.5">
                       <span>Total before discount</span>
@@ -531,7 +661,6 @@ export default function WalkIn() {
                     </div>
                   )}
 
-                  {/* ─── TOTAL line ─────────────────────────────────── */}
                   {!orderDiscount && (
                     <div className="flex justify-between items-center pt-2 border-t-2 border-slate-300 mt-1">
                       <span className="text-base font-black text-slate-800">Total</span>
@@ -545,7 +674,7 @@ export default function WalkIn() {
                     </div>
                   )}
 
-                  {/* Order discount — after-total */}
+                  {/* Order discount */}
                   {!orderDiscount ? (
                     <button
                       onClick={() => setOrderDiscount({ type: "percent", value: 0 })}
@@ -579,7 +708,6 @@ export default function WalkIn() {
                     </div>
                   )}
 
-                  {/* Amount Due (final total when discount applied) */}
                   {orderDiscount && (
                     <div className="flex justify-between items-center pt-2 border-t-2 border-green-300 mt-1">
                       <span className="text-base font-black text-slate-800">Amount Due</span>
@@ -590,39 +718,8 @@ export default function WalkIn() {
               )}
             </div>
 
-            {/* ── Payment method ── */}
+            {/* ── Customer ── (above payment method so method can auto-populate) */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex-shrink-0">
-              <div className="flex items-center gap-2 mb-3">
-                <CreditCard size={14} className="text-indigo-500" />
-                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Payment Method</span>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {PAYMENT_OPTIONS.map(opt => {
-                  const Icon   = opt.icon;
-                  const active = payMethod === opt.value;
-                  return (
-                    <button key={opt.value} onClick={() => setPayMethod(opt.value)}
-                      className={`flex items-center gap-2.5 px-3 py-3 rounded-xl border text-left transition-all ${
-                        active
-                          ? opt.value === "cash"          ? "bg-emerald-50 border-emerald-300 text-emerald-700 shadow-sm"
-                          : opt.value === "card"          ? "bg-blue-50 border-blue-300 text-blue-700 shadow-sm"
-                          : opt.value === "bank_transfer" ? "bg-indigo-50 border-indigo-300 text-indigo-700 shadow-sm"
-                                                          : "bg-amber-50 border-amber-300 text-amber-700 shadow-sm"
-                          : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
-                      }`}
-                    >
-                      <Icon size={15} className="flex-shrink-0" />
-                      <span className="text-sm font-semibold">{opt.label}</span>
-                      {active && <CheckCircle2 size={13} className="ml-auto flex-shrink-0" />}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* ── Customer ── */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex-shrink-0">
-              {/* Header row */}
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <User size={14} className="text-indigo-500" />
@@ -633,8 +730,7 @@ export default function WalkIn() {
                     onClick={() => { setShowNewCust(true); setCustError(null); }}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-semibold hover:bg-indigo-100 transition-colors"
                   >
-                    <UserPlus size={12} />
-                    Add New Customer
+                    <UserPlus size={12} /> Add New Customer
                   </button>
                 )}
                 {showNewCust && (
@@ -645,7 +741,6 @@ export default function WalkIn() {
                 )}
               </div>
 
-              {/* Existing customer search */}
               {!showNewCust && (
                 <div className="relative" ref={custRef}>
                   <div className="relative">
@@ -671,24 +766,77 @@ export default function WalkIn() {
                     )}
                   </div>
 
-                  {selectedCustomer && (
-                    <div className="mt-2 px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-xl flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-black flex-shrink-0">
-                        {(selectedCustomer.company || selectedCustomer.name || "?")[0].toUpperCase()}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-indigo-800 truncate">
-                          {selectedCustomer.company || selectedCustomer.name}
-                        </p>
-                        {selectedCustomer.company && (
-                          <p className="text-xs text-indigo-600 truncate">{selectedCustomer.name}</p>
+                  {/* Selected customer card with billing info */}
+                  {selectedCustomer && (() => {
+                    const addrLine = custAddressLine(selectedCustomer);
+                    const shipAddr = selectedCustomer.shippingAddress
+                      ? [
+                          selectedCustomer.shippingAddress,
+                          [selectedCustomer.city, selectedCustomer.state, selectedCustomer.zipCode].filter(Boolean).join(", "),
+                        ].filter(Boolean).join(", ")
+                      : null;
+                    return (
+                      <div className="mt-2 px-3 py-3 bg-indigo-50 border border-indigo-200 rounded-xl flex flex-col gap-2">
+                        {/* Name row */}
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-black flex-shrink-0">
+                            {(selectedCustomer.company || selectedCustomer.name || "?")[0].toUpperCase()}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-indigo-800 truncate">
+                              {selectedCustomer.company || selectedCustomer.name}
+                            </p>
+                            {selectedCustomer.company && (
+                              <p className="text-xs text-indigo-600 truncate">{selectedCustomer.name}</p>
+                            )}
+                            {selectedCustomer.email && (
+                              <p className="text-xs text-indigo-500 truncate">{selectedCustomer.email}</p>
+                            )}
+                          </div>
+                          {/* Account type badge */}
+                          {selectedCustomer.accountType && (
+                            <span className={`flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                              netDays != null
+                                ? "bg-violet-100 text-violet-700 border-violet-200"
+                                : "bg-indigo-100 text-indigo-600 border-indigo-200"
+                            }`}>
+                              {selectedCustomer.accountType}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Billing address */}
+                        {addrLine && (
+                          <div className="pt-2 border-t border-indigo-200">
+                            <p className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider mb-0.5">Billing Address</p>
+                            <p className="text-xs text-indigo-700 flex items-start gap-1">
+                              <MapPin size={10} className="flex-shrink-0 mt-0.5" />{addrLine}
+                            </p>
+                          </div>
                         )}
-                        {selectedCustomer.email && (
-                          <p className="text-xs text-indigo-500 truncate">{selectedCustomer.email}</p>
+
+                        {/* Shipping address (if different) */}
+                        {shipAddr && shipAddr !== addrLine && (
+                          <div>
+                            <p className="text-[10px] font-semibold text-indigo-400 uppercase tracking-wider mb-0.5">Shipping Address</p>
+                            <p className="text-xs text-indigo-700 flex items-start gap-1">
+                              <Truck size={10} className="flex-shrink-0 mt-0.5" />{shipAddr}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Net terms auto-populated notice */}
+                        {netDays != null && (
+                          <div className="flex items-center gap-1.5 pt-1 border-t border-violet-200">
+                            <CalendarClock size={11} className="text-violet-500 flex-shrink-0" />
+                            <p className="text-xs text-violet-700 font-medium">
+                              Net {netDays} terms detected — payment method set to <strong>Bill Later</strong>
+                            </p>
+                          </div>
                         )}
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {!selectedCustomer && (
                     <p className="mt-1.5 text-xs text-slate-400 pl-1">Leave empty to record as a walk-in customer</p>
@@ -706,14 +854,20 @@ export default function WalkIn() {
                           <button key={c.id}
                             onMouseDown={() => { setSelectedCustId(c.id); setCustSearch(""); setCustOpen(false); }}
                             className="w-full text-left px-3 py-2.5 flex flex-col hover:bg-indigo-50 border-b border-slate-50 last:border-0 transition-colors">
-                            {c.company
-                              ? <>
-                                  <span className="text-sm font-semibold text-slate-800">{c.company}</span>
-                                  <span className="text-xs text-slate-500">{c.name}</span>
-                                </>
-                              : <span className="text-sm font-semibold text-slate-800">{c.name}</span>
-                            }
-                            {c.email && <span className="text-xs text-slate-400">{c.email}</span>}
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                {c.company
+                                  ? <><span className="text-sm font-semibold text-slate-800">{c.company}</span><span className="block text-xs text-slate-500">{c.name}</span></>
+                                  : <span className="text-sm font-semibold text-slate-800">{c.name}</span>
+                                }
+                                {c.email && <span className="text-xs text-slate-400">{c.email}</span>}
+                              </div>
+                              {c.accountType && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 flex-shrink-0">
+                                  {c.accountType}
+                                </span>
+                              )}
+                            </div>
                           </button>
                         ))}
                       </div>
@@ -730,57 +884,244 @@ export default function WalkIn() {
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="text-xs font-semibold text-slate-600 mb-1 block">Full Name <span className="text-red-500">*</span></label>
-                      <input
-                        value={newCustName}
-                        onChange={e => setNewCustName(e.target.value)}
-                        placeholder="John Doe"
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-300 bg-white"
-                      />
+                      <input value={newCustName} onChange={e => setNewCustName(e.target.value)} placeholder="John Doe"
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-300 bg-white" />
                     </div>
                     <div>
                       <label className="text-xs font-semibold text-slate-600 mb-1 block">Company (optional)</label>
-                      <input
-                        value={newCustCompany}
-                        onChange={e => setNewCustCompany(e.target.value)}
-                        placeholder="Acme Corp"
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-300 bg-white"
-                      />
+                      <input value={newCustCompany} onChange={e => setNewCustCompany(e.target.value)} placeholder="Acme Corp"
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-300 bg-white" />
                     </div>
                     <div>
                       <label className="text-xs font-semibold text-slate-600 mb-1 block">Email (optional)</label>
-                      <input
-                        type="email"
-                        value={newCustEmail}
-                        onChange={e => setNewCustEmail(e.target.value)}
-                        placeholder="john@example.com"
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-300 bg-white"
-                      />
+                      <input type="email" value={newCustEmail} onChange={e => setNewCustEmail(e.target.value)} placeholder="john@example.com"
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-300 bg-white" />
                     </div>
                     <div>
                       <label className="text-xs font-semibold text-slate-600 mb-1 block">Phone (optional)</label>
-                      <input
-                        value={newCustPhone}
-                        onChange={e => setNewCustPhone(e.target.value)}
-                        placeholder="(555) 000-0000"
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-300 bg-white"
-                      />
+                      <input value={newCustPhone} onChange={e => setNewCustPhone(e.target.value)} placeholder="(555) 000-0000"
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-300 bg-white" />
                     </div>
                   </div>
                   {custError && (
                     <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{custError}</p>
                   )}
-                  <button
-                    onClick={saveNewCustomer}
-                    disabled={savingCust || !newCustName.trim()}
-                    className="w-full py-2 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
-                  >
+                  <button onClick={saveNewCustomer} disabled={savingCust || !newCustName.trim()}
+                    className="w-full py-2 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2">
                     {savingCust
                       ? <><div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Saving…</>
-                      : <><UserPlus size={13} /> Save &amp; Select Customer</>
-                    }
+                      : <><UserPlus size={13} /> Save &amp; Select Customer</>}
                   </button>
                 </div>
               )}
+            </div>
+
+            {/* ── Payment Method ── */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex-shrink-0">
+              <div className="flex items-center gap-2 mb-3">
+                <CreditCard size={14} className="text-indigo-500" />
+                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Payment Method</span>
+              </div>
+
+              {/* 2×2 grid + full-width net option */}
+              <div className="grid grid-cols-2 gap-2">
+                {PAYMENT_OPTIONS.filter(o => o.value !== "net").map(opt => {
+                  const Icon   = opt.icon;
+                  const active = payMethod === opt.value;
+                  const colors: Record<string, string> = {
+                    emerald: active ? "bg-emerald-50 border-emerald-300 text-emerald-700 shadow-sm" : "bg-white border-slate-200 text-slate-600 hover:border-slate-300",
+                    blue:    active ? "bg-blue-50 border-blue-300 text-blue-700 shadow-sm"          : "bg-white border-slate-200 text-slate-600 hover:border-slate-300",
+                    indigo:  active ? "bg-indigo-50 border-indigo-300 text-indigo-700 shadow-sm"    : "bg-white border-slate-200 text-slate-600 hover:border-slate-300",
+                    amber:   active ? "bg-amber-50 border-amber-300 text-amber-700 shadow-sm"       : "bg-white border-slate-200 text-slate-600 hover:border-slate-300",
+                  };
+                  return (
+                    <button key={opt.value} onClick={() => setPayMethod(opt.value)}
+                      className={`flex items-center gap-2.5 px-3 py-3 rounded-xl border text-left transition-all ${colors[opt.color]}`}>
+                      <Icon size={15} className="flex-shrink-0" />
+                      <span className="text-sm font-semibold">{opt.label}</span>
+                      {active && <CheckCircle2 size={13} className="ml-auto flex-shrink-0" />}
+                    </button>
+                  );
+                })}
+                {/* Net Terms — full width */}
+                {(() => {
+                  const opt = PAYMENT_OPTIONS.find(o => o.value === "net")!;
+                  const Icon   = opt.icon;
+                  const active = payMethod === "net";
+                  return (
+                    <button onClick={() => setPayMethod("net")}
+                      className={`col-span-2 flex items-center gap-2.5 px-3 py-3 rounded-xl border text-left transition-all ${
+                        active
+                          ? "bg-violet-50 border-violet-300 text-violet-700 shadow-sm"
+                          : "bg-white border-slate-200 text-slate-600 hover:border-violet-200 hover:text-violet-700"
+                      }`}>
+                      <Icon size={15} className="flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-semibold">{opt.label}</span>
+                        {netDays != null ? (
+                          <span className="ml-2 text-xs font-normal opacity-70">— Bill later on Net {netDays}</span>
+                        ) : (
+                          <span className="ml-2 text-xs font-normal opacity-60">— Bill later, due by net date</span>
+                        )}
+                      </div>
+                      {active && <CheckCircle2 size={13} className="flex-shrink-0" />}
+                    </button>
+                  );
+                })()}
+              </div>
+
+              {/* ── Per-method detail fields ── */}
+              <div className="mt-3">
+                {/* CASH */}
+                {payMethod === "cash" && (
+                  <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 flex flex-col gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-emerald-800 block mb-1">Received by <span className="font-normal opacity-60">(optional)</span></label>
+                      <input
+                        value={cashReceivedBy}
+                        onChange={e => setCashReceivedBy(e.target.value)}
+                        placeholder="Staff member name…"
+                        className="w-full border border-emerald-200 rounded-lg px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-emerald-400 bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-emerald-800 block mb-1">Notes <span className="font-normal opacity-60">(optional)</span></label>
+                      <textarea
+                        value={cashNotes}
+                        onChange={e => setCashNotes(e.target.value)}
+                        placeholder="Any notes about this cash payment…"
+                        rows={2}
+                        className="w-full border border-emerald-200 rounded-lg px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:border-emerald-400 bg-white resize-none"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* CREDIT CARD — Stripe */}
+                {payMethod === "card" && (
+                  <div className="rounded-xl bg-blue-50 border border-blue-200 p-3 flex items-start gap-2.5">
+                    <CreditCard size={16} className="text-blue-500 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-semibold text-blue-800">Stripe Card Payment</p>
+                      <p className="text-xs text-blue-600 mt-0.5">
+                        After clicking <strong>Charge via Stripe</strong>, a Stripe payment form will open. The invoice is created first, then the card is charged.
+                      </p>
+                      {!selectedCustId && (
+                        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 mt-2 font-medium">
+                          ⚠ Select a customer above before charging a card.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* BANK TRANSFER */}
+                {payMethod === "bank_transfer" && (
+                  <div className="rounded-xl bg-indigo-50 border border-indigo-200 p-3 flex flex-col gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-indigo-800 block mb-1">
+                        <Hash size={11} className="inline mr-1" />
+                        Reference / Transaction Number <span className="font-normal opacity-60">(optional)</span>
+                      </label>
+                      <input
+                        value={bankRefNum}
+                        onChange={e => setBankRefNum(e.target.value)}
+                        placeholder="e.g. TXN-20240728-001"
+                        className="w-full border border-indigo-200 rounded-lg px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-400 bg-white font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-indigo-800 block mb-1">
+                        <Paperclip size={11} className="inline mr-1" />
+                        Attach Document <span className="font-normal opacity-60">(optional — proof of transfer)</span>
+                      </label>
+                      <div
+                        className="flex items-center gap-2 border border-dashed border-indigo-300 rounded-lg px-3 py-2 bg-white cursor-pointer hover:bg-indigo-50 transition-colors"
+                        onClick={() => bankFileRef.current?.click()}
+                      >
+                        <Paperclip size={13} className="text-indigo-400 flex-shrink-0" />
+                        {bankAttachName
+                          ? <span className="text-sm text-indigo-700 font-medium truncate">{bankAttachName}</span>
+                          : <span className="text-sm text-slate-400">Click to attach bank receipt or wire confirmation…</span>
+                        }
+                        {bankAttachName && (
+                          <button type="button" onClick={e => { e.stopPropagation(); setBankAttachName(""); }}
+                            className="ml-auto text-slate-400 hover:text-red-400 transition-colors flex-shrink-0">
+                            <X size={12} />
+                          </button>
+                        )}
+                      </div>
+                      <input
+                        ref={bankFileRef}
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx"
+                        className="hidden"
+                        onChange={e => {
+                          const f = e.target.files?.[0];
+                          if (f) setBankAttachName(f.name);
+                          e.target.value = "";
+                        }}
+                      />
+                      {bankAttachName && (
+                        <p className="text-[10px] text-indigo-500 mt-1">File name will be recorded in the payment note.</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* CHECK */}
+                {payMethod === "check" && (
+                  <div className="rounded-xl bg-amber-50 border border-amber-200 p-3">
+                    <label className="text-xs font-semibold text-amber-800 block mb-1">
+                      <Hash size={11} className="inline mr-1" />
+                      Check Number <span className="font-normal opacity-60">(optional)</span>
+                    </label>
+                    <input
+                      value={checkNumber}
+                      onChange={e => setCheckNumber(e.target.value)}
+                      placeholder="e.g. 1042"
+                      className="w-full border border-amber-200 rounded-lg px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-amber-400 bg-white font-mono"
+                    />
+                  </div>
+                )}
+
+                {/* NET TERMS */}
+                {payMethod === "net" && (
+                  <div className="rounded-xl bg-violet-50 border border-violet-200 p-3 flex flex-col gap-2">
+                    {netDays != null ? (
+                      <>
+                        <div className="flex items-center gap-2.5">
+                          <Clock size={16} className="text-violet-500 flex-shrink-0" />
+                          <div>
+                            <p className="text-sm font-bold text-violet-800">Bill Later — Net {netDays}</p>
+                            <p className="text-xs text-violet-600 mt-0.5">
+                              Invoice will be created with status <strong>Sent</strong>. Payment due by{" "}
+                              <strong>{netDueDate ? fmtDate(netDueDate) : "—"}</strong>.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 bg-white border border-violet-200 rounded-lg px-3 py-2 mt-1">
+                          <CalendarClock size={13} className="text-violet-400 flex-shrink-0" />
+                          <span className="text-xs text-slate-600 flex-1">Due date</span>
+                          <span className="text-sm font-bold text-violet-700">{netDueDate ? fmtDate(netDueDate) : "—"}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex items-start gap-2">
+                        <AlertCircle size={15} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-sm font-semibold text-amber-800">No net terms on this customer</p>
+                          <p className="text-xs text-amber-700 mt-0.5">
+                            {selectedCustomer
+                              ? `${selectedCustomer.company || selectedCustomer.name} has account type "${selectedCustomer.accountType || "not set"}". Edit the customer to add Net 30/60/90 terms.`
+                              : "Select a customer with net terms to use this option."}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* ── Internal Note ── */}
@@ -794,7 +1135,7 @@ export default function WalkIn() {
                 value={internalNote}
                 onChange={e => setInternalNote(e.target.value)}
                 placeholder="Add an internal note for this sale — visible only to staff…"
-                rows={3}
+                rows={2}
                 className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:border-indigo-300 focus:ring-1 focus:ring-indigo-100 bg-white resize-none"
               />
             </div>
@@ -807,21 +1148,44 @@ export default function WalkIn() {
               </div>
             )}
 
-            {/* Complete sale button */}
+            {/* Complete Sale button */}
             <button
               onClick={completeSale}
               disabled={saving || cart.length === 0}
-              className="w-full py-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 text-white font-black text-base tracking-wide shadow-lg hover:from-indigo-700 hover:to-blue-700 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+              className={`w-full py-4 rounded-2xl text-white font-black text-base tracking-wide shadow-lg active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 ${
+                payMethod === "net"
+                  ? "bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700"
+                  : payMethod === "card"
+                  ? "bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700"
+                  : "bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700"
+              }`}
             >
-              {saving ? (
-                <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Processing…</>
-              ) : (
-                <><Zap size={16} /> Charge {cart.length > 0 ? formatCurrency(total) : ""} &amp; Generate Invoice</>
-              )}
+              {buttonLabel()}
             </button>
           </div>
         </div>
       </div>
+
+      {/* Stripe collect modal (for card payments) */}
+      {showStripeModal && pendingInvoice && (
+        <StripeCollectModal
+          invoiceId={pendingInvoice.id}
+          invoiceNumber={pendingInvoice.invoiceNumber}
+          total={pendingInvoice.total}
+          customerName={customerName}
+          onClose={() => {
+            // Invoice was created as "draft" — leave it so staff can follow up
+            setShowStripeModal(false);
+            setPendingInvoice(null);
+          }}
+          onSuccess={() => {
+            setShowStripeModal(false);
+            setSuccess({ invoiceId: pendingInvoice.id, total: pendingInvoice.total, method: "card" });
+            setPendingInvoice(null);
+            clearSale();
+          }}
+        />
+      )}
 
       {/* Success overlay */}
       {success && (
@@ -831,8 +1195,14 @@ export default function WalkIn() {
             <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
               <CheckCircle2 size={32} className="text-emerald-500" />
             </div>
-            <h2 className="text-xl font-black text-slate-800 mb-1">Sale Complete!</h2>
-            <p className="text-slate-500 text-sm mb-1">Invoice #{success.invoiceId > 0 ? success.invoiceId : "—"} created &amp; marked paid</p>
+            <h2 className="text-xl font-black text-slate-800 mb-1">
+              {success.method === "net" ? "Invoice Sent!" : "Sale Complete!"}
+            </h2>
+            <p className="text-slate-500 text-sm mb-1">
+              {success.method === "net"
+                ? `Invoice #${success.invoiceId > 0 ? success.invoiceId : "—"} created — bill sent on net terms`
+                : `Invoice #${success.invoiceId > 0 ? success.invoiceId : "—"} created & marked paid`}
+            </p>
             <p className="text-3xl font-black text-emerald-600 my-4">{formatCurrency(success.total)}</p>
             <div className="flex gap-3">
               <button

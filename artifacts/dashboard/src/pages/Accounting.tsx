@@ -589,11 +589,18 @@ function PaymentHistorySection() {
 function ARTab() {
   const { data, isLoading } = useQuery({ queryKey: ["accounting-ar"], queryFn: () => apiFetch("/api/accounting/ar-aging") });
   const [bucketFilter, setBucketFilter] = useState<string>("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const rows: any[] = data ?? [];
   const buckets = ["current","1-30","31-60","61-90","90+"];
   const bucketTotals = buckets.map(b => ({ bucket: b, total: rows.filter(r => r.bucket === b).reduce((s, r) => s + r.total, 0), count: rows.filter(r => r.bucket === b).length }));
   const bucketColors: Record<string, string> = { current: "#10b981", "1-30": "#f59e0b", "31-60": "#f97316", "61-90": "#ef4444", "90+": "#b91c1c" };
-  const filteredRows = bucketFilter === "all" ? rows : rows.filter(r => r.bucket === bucketFilter);
+  const filteredRows = useMemo(() => {
+    let result = bucketFilter === "all" ? rows : rows.filter((r: any) => r.bucket === bucketFilter);
+    if (dateFrom) result = result.filter((r: any) => r.dueDate && r.dueDate.slice(0,10) >= dateFrom);
+    if (dateTo)   result = result.filter((r: any) => r.dueDate && r.dueDate.slice(0,10) <= dateTo);
+    return result;
+  }, [rows, bucketFilter, dateFrom, dateTo]);
   const total = rows.reduce((s: number, r: any) => s + r.total, 0);
 
   return (
@@ -628,13 +635,27 @@ function ARTab() {
           ))}
         </div>
       </div>
+      {/* AR Date Range Filter */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Due Date:</span>
+        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-700 bg-white focus:outline-none focus:border-blue-400" />
+        <span className="text-slate-400 text-xs">→</span>
+        <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-700 bg-white focus:outline-none focus:border-blue-400" />
+        {(dateFrom || dateTo) && (
+          <button onClick={() => { setDateFrom(""); setDateTo(""); }}
+            className="text-xs text-slate-400 hover:text-slate-600 px-2 py-1 rounded-lg hover:bg-slate-100 transition-colors">✕ Clear</button>
+        )}
+      </div>
+
       <div className="glass-card overflow-hidden">
         {isLoading ? (
           <div className="p-10 flex justify-center"><div className="animate-spin w-6 h-6 border-2 border-slate-800 border-t-transparent rounded-full" /></div>
         ) : filteredRows.length === 0 ? (
           <div className="p-10 text-center text-slate-400 text-sm">No outstanding receivables</div>
         ) : (
-          <div className="overflow-x-auto overflow-y-auto max-h-[68vh] scrollbar-hide">
+          <div className="overflow-x-auto overflow-y-auto max-h-[68vh]">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/70">
@@ -677,11 +698,18 @@ function ARTab() {
 function APTab() {
   const { data, isLoading } = useQuery({ queryKey: ["accounting-ap"], queryFn: () => apiFetch("/api/accounting/ap-aging") });
   const [bucketFilter, setBucketFilter] = useState<string>("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const rows: any[] = data ?? [];
   const buckets = ["current","1-30","31-60","61-90","90+"];
   const bucketTotals = buckets.map(b => ({ bucket: b, total: rows.filter(r => r.bucket === b).reduce((s, r) => s + r.total, 0), count: rows.filter(r => r.bucket === b).length }));
   const bucketColors: Record<string, string> = { current: "#10b981", "1-30": "#f59e0b", "31-60": "#f97316", "61-90": "#ef4444", "90+": "#b91c1c" };
-  const filteredRows = bucketFilter === "all" ? rows : rows.filter(r => r.bucket === bucketFilter);
+  const filteredRows = useMemo(() => {
+    let result = bucketFilter === "all" ? rows : rows.filter((r: any) => r.bucket === bucketFilter);
+    if (dateFrom) result = result.filter((r: any) => r.dueDate && r.dueDate.slice(0,10) >= dateFrom);
+    if (dateTo)   result = result.filter((r: any) => r.dueDate && r.dueDate.slice(0,10) <= dateTo);
+    return result;
+  }, [rows, bucketFilter, dateFrom, dateTo]);
   const total = rows.reduce((s: number, r: any) => s + r.total, 0);
 
   return (
@@ -716,13 +744,27 @@ function APTab() {
           ))}
         </div>
       </div>
+      {/* AP Date Range Filter */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Due Date:</span>
+        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-700 bg-white focus:outline-none focus:border-blue-400" />
+        <span className="text-slate-400 text-xs">→</span>
+        <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-700 bg-white focus:outline-none focus:border-blue-400" />
+        {(dateFrom || dateTo) && (
+          <button onClick={() => { setDateFrom(""); setDateTo(""); }}
+            className="text-xs text-slate-400 hover:text-slate-600 px-2 py-1 rounded-lg hover:bg-slate-100 transition-colors">✕ Clear</button>
+        )}
+      </div>
+
       <div className="glass-card overflow-hidden">
         {isLoading ? (
           <div className="p-10 flex justify-center"><div className="animate-spin w-6 h-6 border-2 border-slate-800 border-t-transparent rounded-full" /></div>
         ) : filteredRows.length === 0 ? (
           <div className="p-10 text-center text-slate-400 text-sm">No outstanding payables</div>
         ) : (
-          <div className="overflow-x-auto overflow-y-auto max-h-[68vh] scrollbar-hide">
+          <div className="overflow-x-auto overflow-y-auto max-h-[68vh]">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/70">

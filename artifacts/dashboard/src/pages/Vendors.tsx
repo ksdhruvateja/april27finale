@@ -68,7 +68,7 @@ export default function Vendors() {
 
   const filtered = useMemo(() => {
     const s = debouncedSearch.toLowerCase();
-    return (vendors ?? []).filter((v: any) => {
+    const base = (vendors ?? []).filter((v: any) => {
       if (companyFilter !== "__all__" && (v.company?.trim() ?? "") !== companyFilter) return false;
       if (!s) return true;
       return (
@@ -78,6 +78,9 @@ export default function Vendors() {
         v.phone?.toLowerCase().includes(s)
       );
     });
+    return [...base].sort((a: any, b: any) =>
+      (a.company || a.name || "").localeCompare(b.company || b.name || "")
+    );
   }, [vendors, debouncedSearch, companyFilter]);
 
   const vendorPOs = useMemo(() => {

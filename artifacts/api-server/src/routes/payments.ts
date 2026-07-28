@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { eq, desc, and } from "drizzle-orm";
 import { db, paymentsTable, invoicesTable, customersTable } from "@workspace/db";
+import { getStripeKeys } from "../lib/stripe-config";
 
 const router = Router();
 
@@ -42,11 +43,24 @@ router.get("/payments", async (req, res): Promise<void> => {
   })));
 });
 
+/* GET /api/stripe/status — check if Stripe is configured */
+router.get("/stripe/status", async (_req, res): Promise<void> => {
+  const { secretKey, publishableKey } = await getStripeKeys();
+  res.json({
+    configured: !!(secretKey && publishableKey),
+    hasSecretKey: !!secretKey,
+    hasPublishableKey: !!publishableKey,
+    // Indicate source for UI display
+    source: process.env.STRIPE_SECRET_KEY ? "env" : "settings",
+  });
+});
+
 /* POST /api/invoices/:id/payment-link — create Stripe Checkout Session */
 router.post("/invoices/:id/payment-link", async (req, res): Promise<void> => {
   const invoiceId = Number(req.params.id);
-  if (!process.env.STRIPE_SECRET_KEY) {
-    res.status(503).json({ error: "Stripe is not configured. Add STRIPE_SECRET_KEY to environment secrets." });
+  const { secretKey } = await getStripeKeys();
+  if (!secretKey) {
+    res.status(503).json({ error: "Stripe is not configured. Add your keys in Settings → Integrations → Stripe." });
     return;
   }
 
@@ -54,7 +68,7 @@ router.post("/invoices/:id/payment-link", async (req, res): Promise<void> => {
   if (!inv) { res.status(404).json({ error: "Invoice not found" }); return; }
 
   const Stripe = (await import("stripe")).default;
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+  const stripe = new Stripe(secretKey);
 
   const amountCents = Math.round(Number(inv.total) * 100);
   const invoiceNum = inv.invoiceNumber ?? `INV-${invoiceId}`;
@@ -91,8 +105,9 @@ router.post("/invoices/:id/payment-link", async (req, res): Promise<void> => {
 /* POST /api/invoices/:id/payment-intent — create Payment Intent for Stripe Elements */
 router.post("/invoices/:id/payment-intent", async (req, res): Promise<void> => {
   const invoiceId = Number(req.params.id);
-  if (!process.env.STRIPE_SECRET_KEY) {
-    res.status(503).json({ error: "Stripe is not configured. Add STRIPE_SECRET_KEY to environment secrets." });
+  const { secretKey, publishableKey } = await getStripeKeys();
+  if (!secretKey) {
+    res.status(503).json({ error: "Stripe is not configured. Add your keys in Settings → Integrations → Stripe." });
     return;
   }
 
@@ -100,7 +115,7 @@ router.post("/invoices/:id/payment-intent", async (req, res): Promise<void> => {
   if (!inv) { res.status(404).json({ error: "Invoice not found" }); return; }
 
   const Stripe = (await import("stripe")).default;
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+  const stripe = new Stripe(secretKey);
 
   const amountCents = Math.round(Number(inv.total) * 100);
 
@@ -117,14 +132,15 @@ router.post("/invoices/:id/payment-intent", async (req, res): Promise<void> => {
 
   res.json({
     clientSecret: intent.client_secret,
-    publishableKey: process.env.STRIPE_PUBLISHABLE_KEY ?? "",
+    publishableKey: publishableKey ?? "",
     amountCents,
   });
 });
 
 /* POST /api/stripe/webhook — handle Stripe webhook events */
 router.post("/stripe/webhook", async (req, res): Promise<void> => {
-  if (!process.env.STRIPE_SECRET_KEY) {
+  const { secretKey } = await getStripeKeys();
+  if (!secretKey) {
     res.status(503).json({ error: "Stripe not configured" });
     return;
   }
@@ -133,7 +149,7 @@ router.post("/stripe/webhook", async (req, res): Promise<void> => {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
   const Stripe = (await import("stripe")).default;
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+  const stripe = new Stripe(secretKey);
 
   let event: import("stripe").Stripe.Event;
   try {

@@ -24,7 +24,7 @@ const navGroups = [
       { icon: FileText,        label: "Quotes",           href: "/quotes"          },
       { icon: Receipt,         label: "Invoices",         href: "/invoices"        },
       { icon: Zap,             label: "Walk-in Sale",     href: "/walk-in"         },
-      { icon: UserCheck,       label: "Sales Leads",      href: "/sales-leads"     },
+      { icon: UserCheck,       label: "Sales People",     href: "/sales-leads"     },
       { icon: ArrowLeftRight,  label: "Returns & Refunds",href: "/returns-refunds" },
     ],
   },

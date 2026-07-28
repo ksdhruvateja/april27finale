@@ -2,6 +2,7 @@ import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import { db, invoicesTable, customersTable } from "@workspace/db";
+import { getStripeSecretKey } from "../lib/stripe-config";
 
 const router = Router();
 
@@ -78,13 +79,14 @@ router.post("/pay/:token/checkout", async (req, res): Promise<void> => {
     return;
   }
 
-  if (!process.env.STRIPE_SECRET_KEY) {
+  const secretKey = await getStripeSecretKey();
+  if (!secretKey) {
     res.status(503).json({ error: "Online payment is not configured. Please contact us to arrange payment." });
     return;
   }
 
   const Stripe = (await import("stripe")).default;
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+  const stripe = new Stripe(secretKey);
 
   const amountCents = Math.round(Number(inv.total) * 100);
   const invoiceNum = inv.invoiceNumber ?? `INV-${inv.id}`;

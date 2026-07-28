@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { eq, inArray } from "drizzle-orm";
 import { db, invoicesTable, customersTable, quotesTable, purchaseOrdersTable, shipmentsTable, paymentsTable } from "@workspace/db";
-import { getNextDocNumber } from "../lib/doc-numbers";
+import { getNextDocNumberWithPrefix } from "../lib/doc-numbers";
 import {
   CreateInvoiceBody,
   UpdateInvoiceBody,
@@ -47,7 +47,7 @@ router.post("/invoices", async (req, res): Promise<void> => {
   const rawLineItems = Array.isArray(req.body.lineItems) ? req.body.lineItems : parsed.data.lineItems;
   const totals = calcTotals(parsed.data.lineItems as Array<{ quantity: number; unitPrice: number; taxPercent: number; discountPercent: number }>);
   const providedNumber = (parsed.data as any).invoiceNumber as string | null | undefined;
-  const invoiceNumber = providedNumber ?? `FRZI-${await getNextDocNumber()}`;
+  const invoiceNumber = providedNumber ?? await getNextDocNumberWithPrefix("invoice");
   const [inv] = await db.insert(invoicesTable).values({
     customerId: parsed.data.customerId,
     estimateId: parsed.data.estimateId ?? null,

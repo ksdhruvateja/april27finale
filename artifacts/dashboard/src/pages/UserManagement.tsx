@@ -52,7 +52,7 @@ const ALL_MODULES = [
   { path: "/quotes",          label: "Quotes",            group: "SALES"      },
   { path: "/invoices",        label: "Invoices",          group: "SALES"      },
   { path: "/walk-in",         label: "Walk-in Sale",      group: "SALES"      },
-  { path: "/sales-leads",     label: "Sales Leads",       group: "SALES"      },
+  { path: "/sales-leads",     label: "Sales People",      group: "SALES"      },
   { path: "/returns-refunds", label: "Returns & Refunds", group: "SALES"      },
   { path: "/vendors",         label: "Vendors",           group: "PURCHASING" },
   { path: "/purchase-orders", label: "Purchase Orders",   group: "PURCHASING" },

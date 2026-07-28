@@ -866,14 +866,16 @@ export default function Products() {
 
   const filtered = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase();
-    if (!q) return products ?? [];
-    return (products ?? []).filter((p: any) => {
-      const inv = inventoryMap[p.id];
-      return [
-        p.name, p.sku, p.description, p.category,
-        String(p.id ?? ""), String(inv?.quantity ?? ""),
-      ].some(v => String(v ?? "").toLowerCase().includes(q));
-    });
+    const base = q
+      ? (products ?? []).filter((p: any) => {
+          const inv = inventoryMap[p.id];
+          return [
+            p.name, p.sku, p.description, p.category,
+            String(p.id ?? ""), String(inv?.quantity ?? ""),
+          ].some(v => String(v ?? "").toLowerCase().includes(q));
+        })
+      : (products ?? []);
+    return [...base].sort((a: any, b: any) => (a.name ?? "").localeCompare(b.name ?? ""));
   }, [products, inventoryMap, debouncedSearch]);
 
   const handleDelete = (id: number) => {

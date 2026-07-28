@@ -37,6 +37,7 @@ interface LineItem {
 interface Quote {
   id: number;
   customerName: string;
+  customerCompany?: string | null;
   customerEmail?: string | null;
   customerPhone?: string | null;
   customerAddress?: string | null;
@@ -44,6 +45,9 @@ interface Quote {
   customerState?: string | null;
   customerZip?: string | null;
   customerCountry?: string | null;
+  customerAccountType?: string | null;
+  customerBillingAddress?: any;
+  customerShippingAddress?: any;
   status: string;
   lineItems: LineItem[];
   subtotal: number;
@@ -136,14 +140,44 @@ export default function QuoteView({ quote, onClose }: Props) {
     const accent   = quote.status === "accepted" ? "#276749" : "#1D4E89";
     const docLabel = quote.status === "accepted" ? "ORDER CONFIRMATION" : "QUOTE";
 
-    const customerBlock = [
-      `<b>${escapeHtml(quote.customerName)}</b>`,
-      quote.customerAddress ? escapeHtml(quote.customerAddress) : null,
-      ([quote.customerCity, quote.customerState].filter(Boolean).join(", ") + (quote.customerZip ? ` ${escapeHtml(quote.customerZip)}` : "")) || null,
-      quote.customerCountry && quote.customerCountry !== "US" ? escapeHtml(quote.customerCountry) : null,
-      quote.customerEmail ? escapeHtml(quote.customerEmail) : null,
-      quote.customerPhone ? escapeHtml(quote.customerPhone) : null,
-    ].filter(Boolean).join("<br/>");
+    // ── Net terms helpers ────────────────────────────────────────────────────
+    const netDays = (() => {
+      const t = quote.customerAccountType;
+      if (!t) return null;
+      const m = t.replace(/\s/g, "").match(/^[Nn]et(\d+)$/i);
+      return m ? parseInt(m[1], 10) : null;
+    })();
+    const netTermsLabel = netDays != null ? `Net ${netDays}` : null;
+
+    // ── Bill-to address block ─────────────────────────────────────────────
+    const customerBlock = (() => {
+      const parts: string[] = [];
+      // Company (bold) then contact name if different
+      if (quote.customerCompany) {
+        parts.push(`<b>${escapeHtml(quote.customerCompany)}</b>`);
+        if (quote.customerName && quote.customerName !== quote.customerCompany) {
+          parts.push(escapeHtml(quote.customerName));
+        }
+      } else if (quote.customerName) {
+        parts.push(`<b>${escapeHtml(quote.customerName)}</b>`);
+      }
+      // Street address: prefer structured billingAddress JSON, then flat fields
+      const ba = quote.customerBillingAddress as any;
+      if (ba?.line1) {
+        parts.push(escapeHtml(ba.line1));
+        if (ba.line2) parts.push(escapeHtml(ba.line2));
+        const city = [ba.city, ba.state].filter(Boolean).join(", ") + (ba.zip ? ` ${ba.zip}` : "");
+        if (city.trim()) parts.push(city);
+      } else if (quote.customerAddress) {
+        parts.push(escapeHtml(quote.customerAddress));
+        const city = [quote.customerCity, quote.customerState].filter(Boolean).join(", ") + (quote.customerZip ? ` ${escapeHtml(quote.customerZip)}` : "");
+        if (city.trim()) parts.push(city);
+      }
+      if (quote.customerCountry && quote.customerCountry !== "US") parts.push(escapeHtml(quote.customerCountry));
+      if (quote.customerEmail) parts.push(escapeHtml(quote.customerEmail));
+      if (quote.customerPhone) parts.push(escapeHtml(quote.customerPhone));
+      return parts.join("<br/>") || "—";
+    })();
 
     const lineItemsHTML = (quote.lineItems as LineItem[]).map((item, idx) => {
       const gross   = item.quantity * item.unitPrice;
@@ -272,7 +306,7 @@ export default function QuoteView({ quote, onClose }: Props) {
     <div></div>
     <div>
       <div class="addr-title">Quote Details</div>
-      <div class="addr-body" contenteditable="true"><b>Quote #</b> ${escapeHtml(quoteNum)}<br/><b>Date:</b> ${formatDate(quote.createdAt)}${quote.expiresAt ? `<br/><b>Expires:</b> ${formatDate(quote.expiresAt)}` : ""}<br/><b>Status:</b> ${escapeHtml(status.label)}</div>
+      <div class="addr-body" contenteditable="true"><b>Quote #</b> ${escapeHtml(quoteNum)}<br/><b>Date:</b> ${formatDate(quote.createdAt)}${quote.expiresAt ? `<br/><b>Expires:</b> ${formatDate(quote.expiresAt)}` : ""}${netTermsLabel ? `<br/><b>Terms:</b> ${netTermsLabel}` : ""}<br/><b>Status:</b> ${escapeHtml(status.label)}</div>
     </div>
   </div>
 
@@ -461,11 +495,19 @@ export default function QuoteView({ quote, onClose }: Props) {
             </div>
           </div>
 
-          {/* Dates */}
-          <div className="grid grid-cols-2 gap-3">
-            <MetaChip label="Quote Date" value={formatDate(quote.createdAt)} />
-            <MetaChip label="Expires" value={formatDate(quote.expiresAt)} alert={isExpired ?? false} />
-          </div>
+          {/* Dates + net terms */}
+          {(() => {
+            const nt = quote.customerAccountType;
+            const ntMatch = nt ? nt.replace(/\s/g, "").match(/^[Nn]et(\d+)$/i) : null;
+            const ntLabel = ntMatch ? `Net ${ntMatch[1]}` : null;
+            return (
+              <div className={`grid gap-3 ${ntLabel ? "grid-cols-3" : "grid-cols-2"}`}>
+                <MetaChip label="Quote Date" value={formatDate(quote.createdAt)} />
+                <MetaChip label="Expires" value={formatDate(quote.expiresAt)} alert={isExpired ?? false} />
+                {ntLabel && <MetaChip label="Net Terms" value={ntLabel} />}
+              </div>
+            );
+          })()}
 
           <div className="h-px bg-white/8" />
 
