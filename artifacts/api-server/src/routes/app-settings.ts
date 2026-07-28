@@ -13,6 +13,8 @@ const ALLOWED_KEYS = [
   "company_zip",
   "company_phone",
   "company_email",
+  "net_terms",
+  "company_addresses",
 ];
 
 router.get("/app-settings", async (_req, res): Promise<void> => {

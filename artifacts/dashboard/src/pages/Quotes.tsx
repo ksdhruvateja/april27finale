@@ -3,8 +3,8 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { useLocation } from "wouter";
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
-import { useListQuotes, useDeleteQuote, useConvertQuoteToInvoice, useUpdateQuote, getListQuotesQueryKey, useListInvoices, useListCustomers } from "@workspace/api-client-react";
-import { Search, Plus, MoreHorizontal, Edit, Trash2, FileCheck, Eye, Mail, MessageSquare, Printer, Download, Hash, X, Link2, FileText, Pencil, StickyNote, BarChart2, ChevronDown, ChevronUp, TrendingUp } from "lucide-react";
+import { useListQuotes, useDeleteQuote, useConvertQuoteToInvoice, useUpdateQuote, getListQuotesQueryKey, getListInvoicesQueryKey, useListInvoices, useListCustomers } from "@workspace/api-client-react";
+import { Search, Plus, MoreHorizontal, Edit, Trash2, FileCheck, Eye, Mail, MessageSquare, Printer, Download, Hash, X, Link2, FileText, Pencil, StickyNote, BarChart2, ChevronDown, ChevronUp, TrendingUp, XCircle, AlertCircle } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, PieChart, Pie, Legend, ComposedChart, Line, Area } from "recharts";
 import { useQueryClient } from "@tanstack/react-query";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -79,6 +79,11 @@ export default function Quotes() {
   const [bulkConvertDialog, setBulkConvertDialog] = useState<{
     quoteIds: number[]; orderRef: string; invoiceMode: "single" | "multiple"; converting: boolean;
   } | null>(null);
+  const [declineDialog, setDeclineDialog] = useState<{
+    id: number; customerName: string; currentNotes: string | null;
+  } | null>(null);
+  const [declineReason, setDeclineReason] = useState("");
+  const [declineSaving, setDeclineSaving] = useState(false);
 
   /* ── Analytics ────────────────────────────────────── */
   const [showCharts, setShowCharts] = useState(false);
@@ -230,9 +235,35 @@ export default function Quotes() {
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListQuotesQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
           setConvertDialog(null);
           setLocation("/invoices");
         },
+      }
+    );
+  };
+
+  const handleDeclineQuote = () => {
+    if (!declineDialog) return;
+    setDeclineSaving(true);
+    const reasonTrimmed = declineReason.trim();
+    const newNotes = reasonTrimmed
+      ? [
+          `❌ Declined — ${reasonTrimmed}`,
+          ...(declineDialog.currentNotes ? [declineDialog.currentNotes] : []),
+        ].join("\n\n")
+      : declineDialog.currentNotes ?? null;
+    updateQuote.mutate(
+      { id: declineDialog.id, data: { status: "declined", notes: newNotes } as any },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getListQuotesQueryKey() });
+          setDeclineDialog(null);
+          setDeclineReason("");
+          setDeclineSaving(false);
+          setViewQuote(null);
+        },
+        onError: () => setDeclineSaving(false),
       }
     );
   };
@@ -251,6 +282,7 @@ export default function Quotes() {
       });
     }
     queryClient.invalidateQueries({ queryKey: getListQuotesQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
     setBulkConvertDialog(null);
     setSelectedIds(new Set());
     setLocation("/invoices");
@@ -725,6 +757,13 @@ export default function Quotes() {
                             <DropdownMenuItem onClick={() => setViewQuote(q)} className="gap-2 cursor-pointer text-sm text-green-600 hover:bg-green-50 focus:bg-green-50 focus:text-green-600"><MessageSquare size={13} /> Send SMS</DropdownMenuItem>
                             <DropdownMenuItem onClick={() => setViewQuote(q)} className="gap-2 cursor-pointer text-sm hover:bg-slate-50 focus:bg-slate-50"><Download size={13} /> Download PDF</DropdownMenuItem>
                             <DropdownMenuItem onClick={() => setViewQuote(q)} className="gap-2 cursor-pointer text-sm hover:bg-slate-50 focus:bg-slate-50"><Printer size={13} /> Print</DropdownMenuItem>
+                            {!["declined","invoiced"].includes(q.status) && (
+                              <DropdownMenuItem
+                                onClick={() => { setDeclineDialog({ id: q.id, customerName: q.customerName, currentNotes: (q as any).notes ?? null }); setDeclineReason(""); }}
+                                className="gap-2 text-red-500 cursor-pointer text-sm hover:bg-red-50 focus:bg-red-50 focus:text-red-500">
+                                <XCircle size={13} /> Decline Quote
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem onClick={() => handleDelete(q.id)} className="gap-2 text-red-500 cursor-pointer text-sm hover:bg-red-50 focus:bg-red-50 focus:text-red-500"><Trash2 size={13} /> Delete</DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -829,7 +868,16 @@ export default function Quotes() {
       </div>
       {showModal && <QuoteModal onClose={() => setShowModal(false)} />}
       {editQuote && <QuoteModal onClose={() => setEditQuote(null)} initial={editQuote} />}
-      {viewQuote && <QuoteView quote={viewQuote} onClose={() => setViewQuote(null)} />}
+      {viewQuote && (
+        <QuoteView
+          quote={viewQuote}
+          onClose={() => setViewQuote(null)}
+          onDecline={["declined","invoiced"].includes(viewQuote.status) ? undefined : () => {
+            setDeclineDialog({ id: viewQuote.id, customerName: viewQuote.customerName, currentNotes: (viewQuote as any).notes ?? null });
+            setDeclineReason("");
+          }}
+        />
+      )}
 
       {/* Duplicate Convert Guard Dialog */}
       {duplicateConvertGuard && (() => {
@@ -1070,6 +1118,72 @@ export default function Quotes() {
                 ) : (
                   <><FileCheck size={14} /> Convert</>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── Decline Reason Modal ─────────────────────────────── */}
+      {declineDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => { setDeclineDialog(null); setDeclineReason(""); }}>
+          <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" />
+          <div className="relative z-10 w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="px-6 pt-6 pb-4">
+              <div className="flex items-center gap-3 mb-1">
+                <div className="w-9 h-9 rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0">
+                  <XCircle size={18} className="text-red-500" />
+                </div>
+                <div>
+                  <h3 className="text-slate-900 font-bold text-base leading-tight">Decline Quote</h3>
+                  <p className="text-slate-400 text-xs mt-0.5">{declineDialog.customerName}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 pb-5 flex flex-col gap-4">
+              <div className="flex items-start gap-2 px-3 py-2.5 bg-red-50 border border-red-100 rounded-xl">
+                <AlertCircle size={13} className="text-red-400 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-red-600 leading-relaxed">
+                  This quote will be marked <span className="font-semibold">Declined</span>. The reason will be saved in the quote notes and visible when the quote is opened.
+                </p>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1.5">
+                  Reason for Declining <span className="text-slate-300 normal-case tracking-normal font-normal">(optional)</span>
+                </label>
+                <textarea
+                  autoFocus
+                  rows={3}
+                  value={declineReason}
+                  onChange={e => setDeclineReason(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && e.metaKey) handleDeclineQuote(); }}
+                  placeholder="e.g. Budget not approved, customer chose another vendor…"
+                  className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 placeholder:text-slate-300 focus:outline-none focus:border-red-300 focus:bg-white resize-none transition-colors"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">Press ⌘↵ to confirm quickly.</p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 pb-6 flex gap-3">
+              <button
+                onClick={() => { setDeclineDialog(null); setDeclineReason(""); }}
+                disabled={declineSaving}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeclineQuote}
+                disabled={declineSaving}
+                className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {declineSaving
+                  ? <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Declining…</>
+                  : <><XCircle size={14} />Decline Quote</>}
               </button>
             </div>
           </div>

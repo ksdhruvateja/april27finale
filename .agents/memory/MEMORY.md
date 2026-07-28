@@ -1,0 +1,2 @@
+- [Customer schema fixes](customer-schema.md) — emails/phones/accountType required zod.any() to accept structured objects; fixes silent 400 on create/update
+- [Net terms + company addresses](app-settings-json.md) — stored as JSON blobs in app_settings table; fetch dynamically; `net_terms` and `company_addresses` added to ALLOWED_KEYS

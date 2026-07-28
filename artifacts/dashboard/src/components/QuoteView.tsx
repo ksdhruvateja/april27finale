@@ -1,10 +1,17 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import {
   X, Printer, Clock, CheckCircle2, XCircle, FileText,
-  Mail, MessageSquare, Download, Copy, Check
+  Mail, MessageSquare, Download, Copy, Check, MapPin
 } from "lucide-react";
+
+interface CompanyAddress {
+  id: string; name: string;
+  line1: string; line2?: string;
+  city: string; state: string; zip: string;
+  phone?: string;
+}
 import { formatCurrency, formatDate } from "@/lib/utils";
-import forézLogo from "@assets/image_1775678558898.png";
+import forézLogo from "@assets/image_1785249843852.png";
 
 const BUSINESS = {
   name:    "Forez Corp",
@@ -59,6 +66,7 @@ interface Quote {
 interface Props {
   quote: Quote;
   onClose: () => void;
+  onDecline?: () => void;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; bg: string; text: string; border: string }> = {
@@ -70,12 +78,20 @@ const STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; bg: 
 
 type SendMode = "email" | "sms" | null;
 
-export default function QuoteView({ quote, onClose }: Props) {
+export default function QuoteView({ quote, onClose, onDecline }: Props) {
   const printRef = useRef<HTMLDivElement>(null);
   const [sendMode, setSendMode] = useState<SendMode>(null);
   const [emailTo, setEmailTo] = useState(quote.customerEmail ?? "");
   const [smsTo, setSmsTo] = useState(quote.customerPhone ?? "");
   const [copied, setCopied] = useState(false);
+  const [companyAddresses, setCompanyAddresses] = useState<CompanyAddress[]>([]);
+  const [addrPickerOpen, setAddrPickerOpen] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/app-settings/company_addresses")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.value) { try { setCompanyAddresses(JSON.parse(d.value)); } catch {} } });
+  }, []);
 
   const status = STATUS_CONFIG[quote.status] ?? STATUS_CONFIG.draft;
   const quoteNum = (quote as any).quoteNumber ?? `FRZQ - ${Math.max(5100, 5099 + Number(quote.id ?? 0))}`;
@@ -125,7 +141,16 @@ export default function QuoteView({ quote, onClose }: Props) {
     });
   }
 
-  function handlePrint(_download = false) {
+  function doPrint(fromAddr?: CompanyAddress | null, _download = false) {
+    const lineItems = quote.lineItems as LineItem[];
+    const hasLineDiscounts = lineItems.some(item => item.discountPercent > 0);
+    const fromLine1 = fromAddr?.line1 ?? BUSINESS.line1;
+    const fromLine2 = fromAddr
+      ? `${fromAddr.city}${fromAddr.state ? `, ${fromAddr.state}` : ""}${fromAddr.zip ? ` ${fromAddr.zip}` : ""}`
+      : BUSINESS.line2;
+    const fromName = fromAddr?.name ?? BUSINESS.name;
+    const fromPhone = fromAddr?.phone ?? null;
+
     const w = window.open("", "_blank", "width=900,height=700");
     if (!w) return;
     w.document.write(`
@@ -179,8 +204,7 @@ export default function QuoteView({ quote, onClose }: Props) {
             </div>
           </div>
           <div class="company-addr">
-            ${BUSINESS.line1}, ${BUSINESS.line2}<br/>
-            ${BUSINESS.phone} &nbsp;·&nbsp; ${BUSINESS.email}
+            ${fromLine1}, ${fromLine2}${fromPhone ? `<br/>${fromPhone}` : ""}
           </div>
         </div>
         <div style="text-align:right">
@@ -196,22 +220,27 @@ export default function QuoteView({ quote, onClose }: Props) {
       <div class="meta">
         <div class="meta-block">
           <h4>Prepared By</h4>
-          <p><strong>${BUSINESS.name}</strong><br/>${BUSINESS.line1}<br/>${BUSINESS.line2}<br/>${BUSINESS.email}</p>
+          <p><strong>${fromName}</strong><br/>${fromLine1}<br/>${fromLine2}${fromPhone ? `<br/>${fromPhone}` : ""}</p>
         </div>
         <div class="meta-block">
           <h4>Prepared For</h4>
-          <p><strong>${quote.customerName}</strong>${customerAddrLine ? `<br/>${customerAddrLine.replace(/\n/g, "<br/>")}` : ""}${quote.customerEmail ? `<br/>${quote.customerEmail}` : ""}${quote.customerPhone ? `<br/>${quote.customerPhone}` : ""}</p>
+          <p><strong>${quote.customerName}</strong>${customerAddrLine ? `<br/>${customerAddrLine.replace(/\n/g, "<br/>")}` : ""}</p>
         </div>
         <div class="meta-block" style="text-align:right"></div>
       </div>
       <hr/>
       <table>
-        <thead><tr><th>Description</th><th style="text-align:right">Qty</th><th style="text-align:right">Unit Price</th><th style="text-align:right">Discount</th><th style="text-align:right">Tax</th><th style="text-align:right">Amount</th></tr></thead>
-        <tbody>${(quote.lineItems as LineItem[]).map(item => {
+        <thead><tr>
+          <th>Description</th>
+          <th style="text-align:right">Qty</th>
+          <th style="text-align:right">Unit Price</th>
+          ${hasLineDiscounts ? `<th style="text-align:right">Discount</th>` : ""}
+          <th style="text-align:right">Amount</th>
+        </tr></thead>
+        <tbody>${lineItems.map(item => {
           const gross = item.quantity * item.unitPrice;
           const disc = gross * (item.discountPercent / 100);
-          const taxable = gross - disc;
-          const net = taxable + taxable * (item.taxPercent / 100);
+          const amount = gross - disc;
           return `<tr>
             <td>
               <div class="item-name">${item.description ? nl2br(item.description) : "—"}</div>
@@ -219,9 +248,8 @@ export default function QuoteView({ quote, onClose }: Props) {
             </td>
             <td class="right">${item.quantity}</td>
             <td class="right">${formatCurrency(item.unitPrice)}</td>
-            <td class="right">${item.discountPercent > 0 ? item.discountPercent + "%" : "—"}</td>
-            <td class="right">${item.taxPercent > 0 ? item.taxPercent + "%" : "—"}</td>
-            <td class="right" style="font-weight:600">${formatCurrency(net)}</td>
+            ${hasLineDiscounts ? `<td class="right">${item.discountPercent > 0 ? item.discountPercent + "%" : "—"}</td>` : ""}
+            <td class="right" style="font-weight:600">${formatCurrency(amount)}</td>
           </tr>`;
         }).join("")}</tbody>
       </table>
@@ -229,7 +257,7 @@ export default function QuoteView({ quote, onClose }: Props) {
         <div class="totals-table">
           <div class="totals-row"><span>Subtotal</span><span>${formatCurrency(quote.subtotal)}</span></div>
           ${quote.discountTotal > 0 ? `<div class="totals-row"><span>Discount</span><span style="color:#dc2626">-${formatCurrency(quote.discountTotal)}</span></div>` : ""}
-          <div class="totals-row"><span>Tax</span><span>${formatCurrency(quote.taxTotal)}</span></div>
+          ${quote.taxTotal > 0 ? `<div class="totals-row"><span>Tax</span><span>${formatCurrency(quote.taxTotal)}</span></div>` : ""}
           <div class="totals-total"><span>Total</span><span>${formatCurrency(quote.total)}</span></div>
         </div>
       </div>
@@ -251,7 +279,37 @@ export default function QuoteView({ quote, onClose }: Props) {
     setTimeout(() => { w.print(); }, 400);
   }
 
+  function handlePrint(_download = false) {
+    if (companyAddresses.length > 1) {
+      setAddrPickerOpen(true);
+    } else {
+      doPrint(companyAddresses[0] ?? null, _download);
+    }
+  }
+
   return (
+    <>
+    {addrPickerOpen && (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" onClick={() => setAddrPickerOpen(false)}>
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+        <div className="relative z-10 w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center gap-2 mb-4">
+            <MapPin size={16} className="text-slate-600" />
+            <h3 className="text-slate-900 font-bold text-base">Choose Print Address</h3>
+          </div>
+          <div className="flex flex-col gap-2">
+            {companyAddresses.map(a => (
+              <button key={a.id} onClick={() => { setAddrPickerOpen(false); doPrint(a); }}
+                className="text-left px-4 py-3 rounded-xl border border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                <p className="text-sm font-semibold text-slate-800">{a.name}</p>
+                <p className="text-xs text-slate-500 mt-0.5">{a.line1}{a.line2 ? `, ${a.line2}` : ""}<br/>{[a.city,a.state,a.zip].filter(Boolean).join(", ")}</p>
+              </button>
+            ))}
+          </div>
+          <button onClick={() => setAddrPickerOpen(false)} className="mt-4 w-full text-center text-sm text-slate-400 hover:text-slate-600 transition-colors">Cancel</button>
+        </div>
+      </div>
+    )}
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-slate-950" />
       <div
@@ -284,6 +342,9 @@ export default function QuoteView({ quote, onClose }: Props) {
             <ActionBtn icon={<MessageSquare size={13} />} label="SMS" onClick={() => setSendMode(sendMode === "sms" ? null : "sms")} active={sendMode === "sms"} color="green" />
             <ActionBtn icon={<Download size={13} />} label="Download" onClick={() => handlePrint(true)} color="violet" />
             <ActionBtn icon={<Printer size={13} />} label="Print" onClick={() => handlePrint(false)} color="default" />
+            {onDecline && !["declined", "invoiced", "accepted"].includes(quote.status) && (
+              <ActionBtn icon={<XCircle size={13} />} label="Decline" onClick={onDecline} color="red" />
+            )}
             <button onClick={onClose} className="ml-1 p-1.5 rounded-lg hover:bg-white/8 text-white/50 hover:text-white transition-colors">
               <X size={18} />
             </button>
@@ -371,45 +432,50 @@ export default function QuoteView({ quote, onClose }: Props) {
           <div className="h-px bg-white/8" />
 
           {/* Line Items */}
-          <div>
-            <table className="w-full text-base">
-              <thead>
-                <tr className="border-b border-white/10">
-                  <th className="text-left pb-3 text-white/35 text-xs uppercase tracking-widest font-medium">Description</th>
-                  <th className="text-right pb-3 text-white/35 text-[10px] uppercase tracking-widest font-medium w-16">Qty</th>
-                  <th className="text-right pb-3 text-white/35 text-[10px] uppercase tracking-widest font-medium w-28">Unit Price</th>
-                  <th className="text-right pb-3 text-white/35 text-[10px] uppercase tracking-widest font-medium w-20">Discount</th>
-                  <th className="text-right pb-3 text-white/35 text-[10px] uppercase tracking-widest font-medium w-16">Tax</th>
-                  <th className="text-right pb-3 text-white/35 text-[10px] uppercase tracking-widest font-medium w-28">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(quote.lineItems as LineItem[]).map((item, i) => {
-                  const gross = item.quantity * item.unitPrice;
-                  const disc = gross * (item.discountPercent / 100);
-                  const taxable = gross - disc;
-                  const net = taxable + taxable * (item.taxPercent / 100);
-                  return (
-                    <tr key={i} className="border-b border-white/5">
-                      <td className="py-3.5 pr-4">
-                        <div className="text-white text-base font-semibold whitespace-pre-wrap">{item.description}</div>
-                        {item.lineDescription && (
-                          <div className="text-white/45 text-[15px] mt-1 whitespace-pre-wrap">{item.lineDescription}</div>
+          {(() => {
+            const lineItems = quote.lineItems as LineItem[];
+            const hasLineDiscounts = lineItems.some(item => item.discountPercent > 0);
+            return (
+            <div>
+              <table className="w-full text-base">
+                <thead>
+                  <tr className="border-b border-white/10">
+                    <th className="text-left pb-3 text-white/35 text-xs uppercase tracking-widest font-medium">Description</th>
+                    <th className="text-right pb-3 text-white/35 text-[10px] uppercase tracking-widest font-medium w-16">Qty</th>
+                    <th className="text-right pb-3 text-white/35 text-[10px] uppercase tracking-widest font-medium w-28">Unit Price</th>
+                    {hasLineDiscounts && <th className="text-right pb-3 text-white/35 text-[10px] uppercase tracking-widest font-medium w-20">Discount</th>}
+                    <th className="text-right pb-3 text-white/35 text-[10px] uppercase tracking-widest font-medium w-28">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lineItems.map((item, i) => {
+                    const gross = item.quantity * item.unitPrice;
+                    const disc = gross * (item.discountPercent / 100);
+                    const amount = gross - disc;
+                    return (
+                      <tr key={i} className="border-b border-white/5">
+                        <td className="py-3.5 pr-4">
+                          <div className="text-white text-base font-semibold whitespace-pre-wrap">{item.description}</div>
+                          {item.lineDescription && (
+                            <div className="text-white/45 text-[15px] mt-1 whitespace-pre-wrap">{item.lineDescription}</div>
+                          )}
+                        </td>
+                        <td className="py-3.5 text-right text-white/60">{item.quantity}</td>
+                        <td className="py-3.5 text-right text-white/70">{formatCurrency(item.unitPrice)}</td>
+                        {hasLineDiscounts && (
+                          <td className="py-3.5 text-right text-white/50">
+                            {item.discountPercent > 0 ? <span className="text-red-400">-{item.discountPercent}%</span> : <span className="text-white/25">—</span>}
+                          </td>
                         )}
-                      </td>
-                      <td className="py-3.5 text-right text-white/60">{item.quantity}</td>
-                      <td className="py-3.5 text-right text-white/70">{formatCurrency(item.unitPrice)}</td>
-                      <td className="py-3.5 text-right text-white/50">
-                        {item.discountPercent > 0 ? <span className="text-red-400">-{item.discountPercent}%</span> : <span className="text-white/25">—</span>}
-                      </td>
-                      <td className="py-3.5 text-right text-white/50">{item.taxPercent > 0 ? `${item.taxPercent}%` : <span className="text-white/25">—</span>}</td>
-                      <td className="py-3.5 text-right text-white font-semibold">{formatCurrency(net)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        <td className="py-3.5 text-right text-white font-semibold">{formatCurrency(amount)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            );
+          })()}
 
           {/* Totals */}
           <div className="flex justify-end">
@@ -456,6 +522,7 @@ export default function QuoteView({ quote, onClose }: Props) {
         </div>
       </div>
     </div>
+    </>
   );
 }
 
@@ -465,6 +532,7 @@ const COLOR_MAP = {
   blue:    "bg-blue-400/10 border-blue-400/30 text-blue-300 hover:bg-blue-400/20",
   green:   "bg-green-400/10 border-green-400/30 text-green-300 hover:bg-green-400/20",
   violet:  "bg-violet-400/10 border-violet-400/30 text-violet-300 hover:bg-violet-400/20",
+  red:     "bg-red-500/10 border-red-400/30 text-red-400 hover:bg-red-500/20",
   default: "bg-white/8 border-white/10 text-white/80 hover:bg-white/12",
 };
 

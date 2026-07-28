@@ -1,9 +1,19 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useCreateCustomer, useUpdateCustomer, getListCustomersQueryKey, useListSalesLeads, useListCustomers } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import Modal, { LightFormField, LightFormInput, LightFormSelect, LightFormTextarea, LightSubmitBar } from "./Modal";
-import { Plus, X, ShieldCheck, ShieldOff, Phone } from "lucide-react";
+import { Plus, X, ShieldCheck, ShieldOff, Phone, AlertCircle } from "lucide-react";
 import { US_STATES } from "@/lib/usStates";
+
+interface NetTerm { id: string; label: string; }
+const DEFAULT_NET_TERMS: NetTerm[] = [
+  { id: "net30",        label: "Net 30" },
+  { id: "net60",        label: "Net 60" },
+  { id: "net90",        label: "Net 90" },
+  { id: "cash",         label: "Cash" },
+  { id: "cash_advance", label: "Cash Advance" },
+  { id: "cod",          label: "COD" },
+];
 
 interface AddressObj { address?: string; city?: string; state?: string; zipCode?: string; country?: string; }
 interface PhoneEntry { label: string; number: string; }
@@ -105,6 +115,18 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
   const update = useUpdateCustomer();
   const queryClient = useQueryClient();
   const isEdit = !!customer;
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [netTerms, setNetTerms] = useState<NetTerm[]>(DEFAULT_NET_TERMS);
+
+  useEffect(() => {
+    fetch("/api/app-settings/net_terms")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.value) {
+          try { setNetTerms(JSON.parse(d.value)); } catch {}
+        }
+      });
+  }, []);
 
   const { data: salesLeads = [] } = useListSalesLeads();
   const { data: customers = [] } = useListCustomers();
@@ -194,9 +216,11 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
       country: billingAddress.country || "US",
     };
 
+    setApiError(null);
     if (isEdit) {
       update.mutate({ id: customer.id, data }, {
-        onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListCustomersQueryKey() }); onClose(); }
+        onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListCustomersQueryKey() }); onClose(); },
+        onError: (err: any) => setApiError(err?.message ?? "Failed to save customer. Please try again."),
       });
     } else {
       create.mutate({ data }, {
@@ -204,7 +228,8 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
           queryClient.invalidateQueries({ queryKey: getListCustomersQueryKey() });
           if (onCreated && result?.id) onCreated(result.id);
           onClose();
-        }
+        },
+        onError: (err: any) => setApiError(err?.message ?? "Failed to create customer. Please try again."),
       });
     }
   };
@@ -223,6 +248,12 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
       }
     >
       <form id="customer-form" onSubmit={handleSubmit}>
+        {apiError && (
+          <div className="mx-6 mt-4 flex items-start gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+            <AlertCircle size={15} className="flex-shrink-0 mt-0.5 text-red-500" />
+            <span>{apiError}</span>
+          </div>
+        )}
         <div className="px-6 py-5 flex flex-col gap-5">
 
           {/* Basic Info */}
@@ -306,12 +337,9 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
             <LightFormField label="Payment Terms">
               <LightFormSelect value={form.accountType} onChange={set("accountType")}>
                 <option value="">Select terms…</option>
-                <option value="net30">Net 30 (invoice due in 30 days)</option>
-                <option value="net60">Net 60 (invoice due in 60 days)</option>
-                <option value="net90">Net 90 (invoice due in 90 days)</option>
-                <option value="cash">Cash (immediate payment)</option>
-                <option value="cash_advance">Cash Advance (pay before delivery)</option>
-                <option value="cod">COD (pay on delivery)</option>
+                {netTerms.map(t => (
+                  <option key={t.id} value={t.id}>{t.label}</option>
+                ))}
               </LightFormSelect>
             </LightFormField>
             <LightFormField label="Credit Limit ($)">

@@ -1,8 +1,15 @@
-import { useRef } from "react";
-import { X, Printer, CheckCircle2, Clock, AlertTriangle, Ban, ShoppingCart, Link2 } from "lucide-react";
+import { useRef, useState, useEffect } from "react";
+import { X, Printer, CheckCircle2, Clock, AlertTriangle, Ban, ShoppingCart, Link2, MapPin } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useListCustomers } from "@workspace/api-client-react";
-const forézLogo = "/favicon.svg";
+const forézLogo = "/forez-logo.png";
+
+interface CompanyAddress {
+  id: string; name: string;
+  line1: string; line2?: string;
+  city: string; state: string; zip: string;
+  phone?: string;
+}
 
 interface LineItem {
   description: string;
@@ -85,6 +92,14 @@ const nl2br = (value: string) => escapeHtml(value).replace(/\r?\n/g, "<br/>");
 export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPending, onCreatePO }: Props) {
   const printRef = useRef<HTMLDivElement>(null);
   const { data: customers } = useListCustomers();
+  const [companyAddresses, setCompanyAddresses] = useState<CompanyAddress[]>([]);
+  const [addrPickerOpen, setAddrPickerOpen] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/app-settings/company_addresses")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.value) { try { setCompanyAddresses(JSON.parse(d.value)); } catch {} } });
+  }, []);
 
   const customer = customers?.find((c: any) => c.id === invoice.customerId) as any;
   const addr = customer?.shippingAddress ?? customer?.billingAddress;
@@ -93,15 +108,18 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
   const status = STATUS_CONFIG[invoice.status] ?? STATUS_CONFIG.draft;
   const isOverdue = invoice.status === "sent" && invoice.dueDate && new Date(invoice.dueDate) < new Date();
 
-  function buildPrintHTML() {
+  function buildPrintHTML(fromAddr?: CompanyAddress | null) {
     const badgeClass = isOverdue ? "overdue" : invoice.status;
     const badgeLabel = isOverdue ? "Overdue" : (status.label);
+    const from = fromAddr ?? null;
+    const fromLine1 = from?.line1 ?? BUSINESS.line1;
+    const fromLine2 = from ? `${from.city}${from.state ? `, ${from.state}` : ""}${from.zip ? ` ${from.zip}` : ""}` : BUSINESS.line2;
+    const fromName  = from?.name ?? BUSINESS.name;
+    const fromPhone = from?.phone ?? null;
 
     const customerAddrHTML = (() => {
       const parts: string[] = [];
-      if (customer?.email) parts.push(`<div class="contact-row">✉ ${customer.email}</div>`);
-      if (customer?.phone) parts.push(`<div class="contact-row">📞 ${customer.phone}</div>`);
-      if (addr?.line1)     parts.push(`<div class="addr">${addr.line1}${addr.line2 ? `<br/>${addr.line2}` : ""}${addr.city ? `<br/>${addr.city}${addr.state ? `, ${addr.state}` : ""}${addr.zip ? ` ${addr.zip}` : ""}` : ""}</div>`);
+      if (addr?.line1) parts.push(`<div class="addr">${addr.line1}${addr.line2 ? `<br/>${addr.line2}` : ""}${addr.city ? `<br/>${addr.city}${addr.state ? `, ${addr.state}` : ""}${addr.zip ? ` ${addr.zip}` : ""}` : ""}</div>`);
       return parts.join("");
     })();
 
@@ -233,10 +251,9 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
   <div class="info-grid">
     <div class="info-block">
       <h4>From</h4>
-      <div class="biz-name">${BUSINESS.name}</div>
-      <div class="addr">${BUSINESS.line1}<br/>${BUSINESS.line2}<br/>${BUSINESS.country}</div>
-      <div class="contact-row" style="margin-top:6px">📞 ${BUSINESS.phone}</div>
-      <div class="contact-row">✉ ${BUSINESS.email}</div>
+      <div class="biz-name">${fromName}</div>
+      <div class="addr">${fromLine1}<br/>${fromLine2}</div>
+      ${fromPhone ? `<div class="contact-row" style="margin-top:6px">📞 ${fromPhone}</div>` : ""}
       <div class="contact-row">🌐 ${BUSINESS.website}</div>
     </div>
     <div class="info-block">
@@ -288,8 +305,7 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
         <div class="footer-co">Forez Corp</div>
       </div>
       <div class="footer-addr">
-        ${BUSINESS.line1} · ${BUSINESS.line2}<br/>
-        ${BUSINESS.phone} · ${BUSINESS.email}
+        ${fromLine1} · ${fromLine2}${fromPhone ? `<br/>${fromPhone}` : ""}
       </div>
     </div>
     <div class="footer-right">
@@ -301,8 +317,8 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
 </div></body></html>`;
   }
 
-  function handlePrint() {
-    const html = buildPrintHTML();
+  function doPrint(fromAddr?: CompanyAddress | null) {
+    const html = buildPrintHTML(fromAddr);
     const w = window.open("", "_blank", "width=960,height=800");
     if (!w) return;
     w.document.write(html);
@@ -311,7 +327,37 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
     setTimeout(() => { w.print(); }, 500);
   }
 
+  function handlePrint() {
+    if (companyAddresses.length > 1) {
+      setAddrPickerOpen(true);
+    } else {
+      doPrint(companyAddresses[0] ?? null);
+    }
+  }
+
   return (
+    <>
+    {addrPickerOpen && (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" onClick={() => setAddrPickerOpen(false)}>
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+        <div className="relative z-10 w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center gap-2 mb-4">
+            <MapPin size={16} className="text-slate-600" />
+            <h3 className="text-slate-900 font-bold text-base">Choose Print Address</h3>
+          </div>
+          <div className="flex flex-col gap-2">
+            {companyAddresses.map(a => (
+              <button key={a.id} onClick={() => { setAddrPickerOpen(false); doPrint(a); }}
+                className="text-left px-4 py-3 rounded-xl border border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                <p className="text-sm font-semibold text-slate-800">{a.name}</p>
+                <p className="text-xs text-slate-500 mt-0.5">{a.line1}{a.line2 ? `, ${a.line2}` : ""}<br/>{[a.city,a.state,a.zip].filter(Boolean).join(", ")}</p>
+              </button>
+            ))}
+          </div>
+          <button onClick={() => setAddrPickerOpen(false)} className="mt-4 w-full text-center text-sm text-slate-400 hover:text-slate-600 transition-colors">Cancel</button>
+        </div>
+      </div>
+    )}
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-slate-950" />
       <div
@@ -503,6 +549,7 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
         </div>
       </div>
     </div>
+    </>
   );
 }
 

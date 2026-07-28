@@ -165,8 +165,9 @@ export const CreateCustomerBody = zod.object({
   name: zod.string(),
   company: zod.string().nullish(),
   email: zod.string().nullish(),
-  emails: zod.array(zod.string()).nullish(),
+  emails: zod.array(zod.any()).nullish(),
   phone: zod.string().nullish(),
+  phones: zod.array(zod.any()).nullish(),
   address: zod.string().nullish(),
   city: zod.string().nullish(),
   state: zod.string().nullish(),
@@ -175,9 +176,7 @@ export const CreateCustomerBody = zod.object({
   billingAddress: zod.record(zod.string(), zod.unknown()).nullish(),
   shippingAddress: zod.record(zod.string(), zod.unknown()).nullish(),
   taxExempt: zod.boolean().optional(),
-  accountType: zod
-    .enum(["net30", "net60", "net90", "cash_advance", "cod"])
-    .nullish(),
+  accountType: zod.string().nullish(),
   creditLimit: zod.number().nullish(),
   salesRep: zod.string().nullish(),
   shippingCarrierName: zod.string().nullish(),
@@ -232,8 +231,9 @@ export const UpdateCustomerBody = zod.object({
   name: zod.string().optional(),
   company: zod.string().nullish(),
   email: zod.string().nullish(),
-  emails: zod.array(zod.string()).nullish(),
+  emails: zod.array(zod.any()).nullish(),
   phone: zod.string().nullish(),
+  phones: zod.array(zod.any()).nullish(),
   address: zod.string().nullish(),
   city: zod.string().nullish(),
   state: zod.string().nullish(),
@@ -242,9 +242,7 @@ export const UpdateCustomerBody = zod.object({
   billingAddress: zod.record(zod.string(), zod.unknown()).nullish(),
   shippingAddress: zod.record(zod.string(), zod.unknown()).nullish(),
   taxExempt: zod.boolean().optional(),
-  accountType: zod
-    .enum(["net30", "net60", "net90", "cash_advance", "cod"])
-    .nullish(),
+  accountType: zod.string().nullish(),
   creditLimit: zod.number().nullish(),
   salesRep: zod.string().nullish(),
   shippingCarrierName: zod.string().nullish(),

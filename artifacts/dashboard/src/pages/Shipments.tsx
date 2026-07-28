@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useListAuctions } from "@/lib/auctions-api";
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
@@ -9,7 +9,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { formatDate } from "@/lib/utils";
 import { downloadCsv, downloadPdfFromHtml } from "@/lib/export-utils";
-import { printShippingSlip } from "@/lib/print-slip";
+import { printShippingSlip, fetchCompanyAddresses, CompanyAddress } from "@/lib/print-slip";
 
 const STATUS_MAP: Record<string, string> = {
   delivered: "text-emerald-700 bg-emerald-50 border-emerald-200",
@@ -30,6 +30,12 @@ export default function Shipments() {
   const [showCharts, setShowCharts] = useState(false);
   const [chartView, setChartView]   = useState<"carrier"|"status"|"customer"|"trend">("carrier");
   const [expandedShipId, setExpandedShipId] = useState<number | null>(null);
+  const [companyAddresses, setCompanyAddresses] = useState<CompanyAddress[]>([]);
+  const [addrPicker, setAddrPicker] = useState<{ shipment: any } | null>(null);
+
+  useEffect(() => {
+    fetchCompanyAddresses().then(setCompanyAddresses);
+  }, []);
 
   const customerById = useMemo(() => {
     const m = new Map<number, any>();
@@ -118,9 +124,23 @@ export default function Shipments() {
   };
 
   const handlePrintSlip = async (s: any) => {
+    if (companyAddresses.length > 1) {
+      setAddrPicker({ shipment: s });
+      return;
+    }
     setPrintingId(s.id);
     try {
-      await printShippingSlip(s);
+      await printShippingSlip(s, companyAddresses[0] ?? null);
+    } finally {
+      setPrintingId(null);
+    }
+  };
+
+  const handlePrintSlipWithAddr = async (s: any, addr: CompanyAddress | null) => {
+    setAddrPicker(null);
+    setPrintingId(s.id);
+    try {
+      await printShippingSlip(s, addr);
     } finally {
       setPrintingId(null);
     }
@@ -146,6 +166,29 @@ export default function Shipments() {
   };
 
   return (
+    <>
+    {addrPicker && (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" onClick={() => setAddrPicker(null)}>
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+        <div className="relative z-10 w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center gap-2 mb-1">
+            <MapPin size={16} className="text-slate-600" />
+            <h3 className="text-slate-900 font-bold text-base">Choose Ship-From Address</h3>
+          </div>
+          <p className="text-slate-400 text-xs mb-4">Select which company address to print on this packing slip.</p>
+          <div className="flex flex-col gap-2">
+            {companyAddresses.map(a => (
+              <button key={a.id} onClick={() => handlePrintSlipWithAddr(addrPicker.shipment, a)}
+                className="text-left px-4 py-3 rounded-xl border border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                <p className="text-sm font-semibold text-slate-800">{a.name}</p>
+                <p className="text-xs text-slate-500 mt-0.5">{a.line1}<br/>{[a.city,a.state,a.zip].filter(Boolean).join(", ")}</p>
+              </button>
+            ))}
+          </div>
+          <button onClick={() => setAddrPicker(null)} className="mt-4 w-full text-center text-sm text-slate-400 hover:text-slate-600 transition-colors">Cancel</button>
+        </div>
+      </div>
+    )}
     <Layout>
       <Header title="Shipments" subtitle={`${shipments?.length ?? 0} total`} />
       <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 flex flex-col gap-4 bg-[hsl(220_25%_97%)]">
@@ -514,5 +557,6 @@ export default function Shipments() {
         </div>
       </div>
     </Layout>
+    </>
   );
 }
