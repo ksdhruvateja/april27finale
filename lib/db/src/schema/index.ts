@@ -21,3 +21,4 @@ export * from "./returns";
 export * from "./plaid-items";
 export * from "./documents";
 export * from "./tickets";
+export * from "./transactions";

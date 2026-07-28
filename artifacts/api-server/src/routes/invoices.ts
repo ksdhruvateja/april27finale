@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { eq, inArray } from "drizzle-orm";
-import { db, invoicesTable, customersTable, quotesTable, purchaseOrdersTable, shipmentsTable } from "@workspace/db";
+import { db, invoicesTable, customersTable, quotesTable, purchaseOrdersTable, shipmentsTable, transactionsTable } from "@workspace/db";
 import { getNextDocNumber } from "../lib/doc-numbers";
 import {
   CreateInvoiceBody,
@@ -116,12 +116,16 @@ router.post("/invoices/:id/pay", async (req, res): Promise<void> => {
   const parsed = PayInvoiceBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-  // Fetch current invoice to get the live total
-  const [current] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, params.data.id));
+  // Fetch current invoice to get the live total + customer
+  const [current] = await db
+    .select({ inv: invoicesTable, customerName: customersTable.name, customerId: customersTable.id })
+    .from(invoicesTable)
+    .leftJoin(customersTable, eq(invoicesTable.customerId, customersTable.id))
+    .where(eq(invoicesTable.id, params.data.id));
   if (!current) { res.status(404).json({ error: "Invoice not found" }); return; }
 
-  const currentTotal    = Number(current.total ?? 0);
-  const currentDiscount = Number(current.discountTotal ?? 0);
+  const currentTotal    = Number(current.inv.total ?? 0);
+  const currentDiscount = Number(current.inv.discountTotal ?? 0);
 
   // Compute early pay discount
   let earlyDiscAmt = 0;
@@ -130,10 +134,10 @@ router.post("/invoices/:id/pay", async (req, res): Promise<void> => {
   if (earlyPct != null && earlyPct > 0) {
     earlyDiscAmt = Math.round(currentTotal * earlyPct / 100 * 100) / 100;
   } else if (earlyAmt != null && earlyAmt > 0) {
-    earlyDiscAmt = Math.min(earlyAmt, currentTotal); // can't discount more than total
+    earlyDiscAmt = Math.min(earlyAmt, currentTotal);
   }
 
-  // Build payment note — prepend early discount info if applicable
+  // Build payment note
   const noteParts: string[] = [];
   if (earlyDiscAmt > 0) {
     const pctStr = earlyPct != null ? `${earlyPct}%—` : "";
@@ -141,21 +145,63 @@ router.post("/invoices/:id/pay", async (req, res): Promise<void> => {
   }
   if (parsed.data.paymentNote) noteParts.push(parsed.data.paymentNote);
 
+  const finalTotal = earlyDiscAmt > 0
+    ? Math.round((currentTotal - earlyDiscAmt) * 100) / 100
+    : currentTotal;
+
   const updateFields: Record<string, unknown> = {
     status: "paid",
     paymentMethod: parsed.data.paymentMethod,
     paymentNote: noteParts.join(" | ") || null,
     paidAt: new Date(),
   };
-
-  // Apply discount to stored totals so every downstream consumer sees correct numbers
   if (earlyDiscAmt > 0) {
     updateFields.discountTotal = String(Math.round((currentDiscount + earlyDiscAmt) * 100) / 100);
-    updateFields.total         = String(Math.round((currentTotal - earlyDiscAmt) * 100) / 100);
+    updateFields.total         = String(finalTotal);
   }
 
-  const [inv] = await db.update(invoicesTable).set(updateFields).where(eq(invoicesTable.id, params.data.id)).returning();
-  if (!inv) { res.status(404).json({ error: "Invoice not found" }); return; }
+  // Build reference number: check# → external id → null
+  const refNumber: string | null =
+    (parsed.data as any).checkNumber ??
+    (parsed.data as any).externalTxId ??
+    null;
+
+  // Determine source ref label
+  const sourceRef = current.inv.invoiceNumber
+    ? current.inv.invoiceNumber
+    : `INV-${String(params.data.id).padStart(4, "0")}`;
+
+  const isWalkin = current.inv.isQuickInvoice;
+
+  const paidAt = new Date();
+
+  // ATOMIC: status update + ledger insert in one DB transaction.
+  // The owe is only reduced if the transaction record is also written.
+  const { inv } = await db.transaction(async (tx) => {
+    const [inv] = await tx
+      .update(invoicesTable)
+      .set({ ...updateFields, paidAt })
+      .where(eq(invoicesTable.id, params.data.id))
+      .returning();
+    if (!inv) throw new Error("Invoice not found");
+
+    await tx.insert(transactionsTable).values({
+      type:            isWalkin ? "walkin_sale_payment" : "invoice_payment",
+      sourceId:        inv.id,
+      sourceRef,
+      entityId:        current.customerId ?? current.inv.customerId,
+      entityName:      current.customerName ?? null,
+      amount:          String(finalTotal),
+      paymentMethod:   parsed.data.paymentMethod,
+      referenceNumber: refNumber,
+      bankAccountId:   (parsed.data as any).bankAccountId ?? null,
+      note:            noteParts.join(" | ") || null,
+      paidAt,
+    });
+
+    return { inv };
+  });
+
   res.json(await withCustomerName(inv));
 });
 

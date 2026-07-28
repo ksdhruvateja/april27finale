@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { eq, inArray } from "drizzle-orm";
-import { db, billsTable, vendorsTable, bankAccountsTable } from "@workspace/db";
+import { db, billsTable, vendorsTable, bankAccountsTable, transactionsTable } from "@workspace/db";
 import {
   CreateBillBody,
   UpdateBillBody,
@@ -157,18 +157,51 @@ router.post("/bills/:id/pay", async (req, res): Promise<void> => {
     }
   }
 
-  const [bill] = await db.update(billsTable).set({
-    status: "paid",
-    paymentMethod: d.paymentMethod,
-    paymentNote: d.paymentNote ?? null,
-    paidAt: new Date(),
-    bankAccountId: d.bankAccountId ?? null,
-    checkNumber: d.checkNumber ?? null,
-    checkDate: d.checkDate ? new Date(d.checkDate) : null,
-    externalTxId,
-    externalTxStatus,
-  }).where(eq(billsTable.id, params.data.id)).returning();
-  if (!bill) { res.status(404).json({ error: "Bill not found" }); return; }
+  // Fetch vendor name for transaction record
+  const [existingForName] = await db
+    .select({ total: billsTable.total, vendorId: billsTable.vendorId, vendorName: vendorsTable.name })
+    .from(billsTable)
+    .leftJoin(vendorsTable, eq(billsTable.vendorId, vendorsTable.id))
+    .where(eq(billsTable.id, params.data.id));
+  if (!existingForName) { res.status(404).json({ error: "Bill not found" }); return; }
+
+  const refNumber: string | null = d.checkNumber ?? externalTxId ?? null;
+  const sourceRef = `BILL-${String(params.data.id).padStart(4, "0")}`;
+  const paidAt = new Date();
+
+  // ATOMIC: status update + ledger insert in one DB transaction.
+  // The owe is only reduced if the transaction record is also written.
+  const { bill } = await db.transaction(async (tx) => {
+    const [bill] = await tx.update(billsTable).set({
+      status: "paid",
+      paymentMethod: d.paymentMethod,
+      paymentNote: d.paymentNote ?? null,
+      paidAt,
+      bankAccountId: d.bankAccountId ?? null,
+      checkNumber: d.checkNumber ?? null,
+      checkDate: d.checkDate ? new Date(d.checkDate) : null,
+      externalTxId,
+      externalTxStatus,
+    }).where(eq(billsTable.id, params.data.id)).returning();
+    if (!bill) throw new Error("Bill not found");
+
+    await tx.insert(transactionsTable).values({
+      type:            "bill_payment",
+      sourceId:        bill.id,
+      sourceRef,
+      entityId:        existingForName.vendorId,
+      entityName:      existingForName.vendorName ?? null,
+      amount:          String(Number(existingForName.total)),
+      paymentMethod:   d.paymentMethod,
+      referenceNumber: refNumber,
+      bankAccountId:   d.bankAccountId ?? null,
+      note:            d.paymentNote ?? null,
+      paidAt,
+    });
+
+    return { bill };
+  });
+
   res.json({ ...(await withVendorName(bill)), externalTxId, externalTxStatus });
 });
 
