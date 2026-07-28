@@ -1013,6 +1013,12 @@ export default function Invoices() {
                           className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 transition-all whitespace-nowrap">
                           <Truck size={11} /> Shipment
                         </button>
+                        {inv.status !== "paid" && inv.status !== "cancelled" && (
+                          <button onClick={e => { e.stopPropagation(); openPayDialog(inv.id, e); }}
+                            className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-all whitespace-nowrap">
+                            <CreditCard size={11} /> Pay Now
+                          </button>
+                        )}
                         <button onClick={e => { e.stopPropagation(); openPoModal(inv); }}
                           className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-all whitespace-nowrap">
                           <ShoppingCart size={11} /> Create PO
