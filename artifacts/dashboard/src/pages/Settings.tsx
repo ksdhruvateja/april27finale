@@ -8,15 +8,15 @@ import {
 
 /* ── shared helpers ──────────────────────────────────────────────────── */
 const DEFAULT_NET_TERMS = [
-  { id: "net30",        label: "Net 30" },
-  { id: "net60",        label: "Net 60" },
-  { id: "net90",        label: "Net 90" },
-  { id: "cash",         label: "Cash" },
-  { id: "cash_advance", label: "Cash Advance" },
-  { id: "cod",          label: "COD" },
+  { id: "net30",        label: "Net 30",       days: 30  },
+  { id: "net60",        label: "Net 60",       days: 60  },
+  { id: "net90",        label: "Net 90",       days: 90  },
+  { id: "cash",         label: "Cash",         days: 0   },
+  { id: "cash_advance", label: "Cash Advance", days: 0   },
+  { id: "cod",          label: "COD",          days: 0   },
 ];
 
-export interface NetTerm { id: string; label: string; }
+export interface NetTerm { id: string; label: string; days?: number; }
 export interface CompanyAddress {
   id: string; name: string;
   line1: string; line2?: string;
@@ -45,7 +45,9 @@ function NetTermsSection() {
   const [loaded, setLoaded] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState("");
+  const [editDays, setEditDays] = useState<string>("");
   const [addLabel, setAddLabel] = useState("");
+  const [addDays, setAddDays] = useState<string>("");
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -69,10 +71,11 @@ function NetTermsSection() {
     } finally { setSaving(false); }
   };
 
-  const startEdit = (t: NetTerm) => { setEditingId(t.id); setEditLabel(t.label); };
+  const startEdit = (t: NetTerm) => { setEditingId(t.id); setEditLabel(t.label); setEditDays(t.days !== undefined ? String(t.days) : ""); };
   const saveEdit = () => {
     if (!editLabel.trim() || !editingId) return;
-    persist(terms.map(t => t.id === editingId ? { ...t, label: editLabel.trim() } : t));
+    const days = editDays.trim() === "" ? undefined : Math.max(0, parseInt(editDays) || 0);
+    persist(terms.map(t => t.id === editingId ? { ...t, label: editLabel.trim(), days } : t));
     setEditingId(null);
   };
   const deleteTerm = (id: string) => {
@@ -83,8 +86,10 @@ function NetTermsSection() {
     if (!addLabel.trim()) return;
     const id = addLabel.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
     if (!id || terms.find(t => t.id === id)) return;
-    persist([...terms, { id, label: addLabel.trim() }]);
+    const days = addDays.trim() === "" ? undefined : Math.max(0, parseInt(addDays) || 0);
+    persist([...terms, { id, label: addLabel.trim(), days }]);
     setAddLabel("");
+    setAddDays("");
     setAdding(false);
   };
 
@@ -113,16 +118,36 @@ function NetTermsSection() {
                     value={editLabel}
                     onChange={e => setEditLabel(e.target.value)}
                     onKeyDown={e => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEditingId(null); }}
+                    placeholder="Label"
                     className="flex-1 text-sm bg-slate-50 border border-blue-300 rounded-lg px-3 py-1.5 text-slate-800 focus:outline-none focus:border-blue-500"
                   />
-                  <span className="text-[10px] text-slate-400 font-mono bg-slate-100 px-1.5 py-0.5 rounded">id: {t.id}</span>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <input
+                      type="number"
+                      min="0"
+                      value={editDays}
+                      onChange={e => setEditDays(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEditingId(null); }}
+                      placeholder="Days"
+                      className="w-20 text-sm bg-slate-50 border border-blue-300 rounded-lg px-2 py-1.5 text-slate-800 text-center focus:outline-none focus:border-blue-500"
+                    />
+                    <span className="text-[11px] text-slate-400">days</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono bg-slate-100 px-1.5 py-0.5 rounded hidden sm:inline">id: {t.id}</span>
                   <button onClick={saveEdit} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors"><Check size={14}/></button>
                   <button onClick={() => setEditingId(null)} className="p-1.5 text-slate-400 hover:bg-slate-100 rounded-lg transition-colors"><X size={14}/></button>
                 </>
               ) : (
                 <>
                   <span className="flex-1 text-sm font-medium text-slate-800">{t.label}</span>
-                  <span className="text-[10px] text-slate-400 font-mono bg-slate-100 px-1.5 py-0.5 rounded">{t.id}</span>
+                  {t.days !== undefined ? (
+                    <span className="text-xs text-slate-500 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-md font-medium flex-shrink-0">
+                      {t.days === 0 ? "due on receipt" : `${t.days} days`}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-slate-300 italic flex-shrink-0">no days set</span>
+                  )}
+                  <span className="text-[10px] text-slate-400 font-mono bg-slate-100 px-1.5 py-0.5 rounded hidden sm:inline">{t.id}</span>
                   <button onClick={() => startEdit(t)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Edit2 size={13}/></button>
                   <button onClick={() => deleteTerm(t.id)} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={13}/></button>
                 </>
@@ -133,17 +158,29 @@ function NetTermsSection() {
       )}
 
       {adding ? (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <input
             autoFocus
             placeholder="Term name, e.g. Net 45"
             value={addLabel}
             onChange={e => setAddLabel(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") addTerm(); if (e.key === "Escape") setAdding(false); }}
-            className="flex-1 text-sm bg-white border border-blue-300 rounded-lg px-3 py-2 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500"
+            className="flex-1 min-w-[140px] text-sm bg-white border border-blue-300 rounded-lg px-3 py-2 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500"
           />
+          <div className="flex items-center gap-1.5">
+            <input
+              type="number"
+              min="0"
+              placeholder="Days"
+              value={addDays}
+              onChange={e => setAddDays(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") addTerm(); if (e.key === "Escape") setAdding(false); }}
+              className="w-24 text-sm bg-white border border-blue-300 rounded-lg px-3 py-2 text-slate-800 placeholder:text-slate-400 text-center focus:outline-none focus:border-blue-500"
+            />
+            <span className="text-sm text-slate-400">days</span>
+          </div>
           <button onClick={addTerm} className="px-3 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors">Add</button>
-          <button onClick={() => setAdding(false)} className="px-3 py-2 text-slate-500 text-sm font-medium rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">Cancel</button>
+          <button onClick={() => { setAdding(false); setAddLabel(""); setAddDays(""); }} className="px-3 py-2 text-slate-500 text-sm font-medium rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">Cancel</button>
         </div>
       ) : (
         <button onClick={() => setAdding(true)} className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-semibold transition-colors">
