@@ -2,6 +2,7 @@ import { useRef, useState, useEffect } from "react";
 import { X, Printer, CheckCircle2, Clock, AlertTriangle, Ban, ShoppingCart, Link2, MapPin } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useListCustomers } from "@workspace/api-client-react";
+import { useCompanyProfile } from "@/lib/companyProfile";
 const forézLogo = "/forez-logo.png";
 
 interface CompanyAddress {
@@ -71,15 +72,7 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
   cash:           "Cash",
 };
 
-const BUSINESS = {
-  name:    "Forez Corp",
-  line1:   "2402 Ocean Ave",
-  line2:   "Ronkonkoma, NY 11779",
-  country: "United States",
-  phone:   "+1 (516) 860-2513",
-  email:   "info@forezcorp.com",
-  website: "www.forezcorp.com",
-};
+// BUSINESS is now loaded dynamically via useCompanyProfile() inside the component
 
 const escapeHtml = (value: string) =>
   value
@@ -94,6 +87,7 @@ const nl2br = (value: string) => escapeHtml(value).replace(/\r?\n/g, "<br/>");
 export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPending, onCreatePO, overlayZIndex = "z-50" }: Props) {
   const printRef = useRef<HTMLDivElement>(null);
   const { data: customers } = useListCustomers();
+  const profile = useCompanyProfile();
   const [companyAddresses, setCompanyAddresses] = useState<CompanyAddress[]>([]);
   const [addrPickerOpen, setAddrPickerOpen] = useState(false);
 
@@ -114,10 +108,11 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
     const badgeClass = isOverdue ? "overdue" : invoice.status;
     const badgeLabel = isOverdue ? "Overdue" : (status.label);
     const from = fromAddr ?? null;
-    const fromLine1 = from?.line1 ?? BUSINESS.line1;
-    const fromLine2 = from ? `${from.city}${from.state ? `, ${from.state}` : ""}${from.zip ? ` ${from.zip}` : ""}` : BUSINESS.line2;
-    const fromName  = from?.name ?? BUSINESS.name;
+    const fromLine1 = from?.line1 ?? profile.line1;
+    const fromLine2 = from ? `${from.city}${from.state ? `, ${from.state}` : ""}${from.zip ? ` ${from.zip}` : ""}` : profile.line2;
+    const fromName  = from?.name ?? profile.name;
     const fromPhone = from?.phone ?? null;
+    const logoSrc   = profile.logo ?? forézLogo;
 
     const customerAddrHTML = (() => {
       const parts: string[] = [];
@@ -156,7 +151,7 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
     return `<!DOCTYPE html>
 <html><head>
 <meta charset="utf-8"/>
-<title>Invoice ${effectiveInvoiceNum} — Forez Corp</title>
+<title>Invoice ${effectiveInvoiceNum} — ${profile.name}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:'Segoe UI',system-ui,Arial,sans-serif;background:#fff;color:#1a1a2e;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -234,10 +229,10 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
 
   <div class="header">
     <div class="logo-block">
-      <img src="${forézLogo}" alt="Forez Corp" class="logo-svg" />
+      <img src="${logoSrc}" alt="${profile.name}" class="logo-svg" />
       <div>
-        <div class="company-name">Forez Corp</div>
-        <div class="company-tagline">Industrial &amp; Commercial Supplies</div>
+        <div class="company-name">${profile.name}</div>
+        <div class="company-tagline">${profile.tagline}</div>
       </div>
     </div>
     <div class="inv-title-block">
@@ -303,8 +298,8 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
   <div class="footer">
     <div>
       <div class="footer-logo">
-        <img src="${forézLogo}" alt="Forez Corp" class="footer-logo-badge" />
-        <div class="footer-co">Forez Corp</div>
+        <img src="${logoSrc}" alt="${profile.name}" class="footer-logo-badge" />
+        <div class="footer-co">${profile.name}</div>
       </div>
       <div class="footer-addr">
         ${fromLine1} · ${fromLine2}${fromPhone ? `<br/>${fromPhone}` : ""}
@@ -373,7 +368,7 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
         >
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg overflow-hidden bg-white flex items-center justify-center p-0.5">
-              <img src={forézLogo} alt="Forez Corp" className="w-full h-full object-contain" />
+              <img src={profile.logo ?? forézLogo} alt={profile.name} className="w-full h-full object-contain" />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -383,7 +378,7 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
                   {isOverdue ? "Overdue" : status.label}
                 </span>
               </div>
-              <p className="text-white/40 text-xs">Forez Corp · Industrial &amp; Commercial Supplies</p>
+              <p className="text-white/40 text-xs">{profile.name} · {profile.tagline}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -420,15 +415,15 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
               <p className="text-white/35 text-[10px] uppercase tracking-widest mb-2">From</p>
               <div className="flex items-center gap-2.5 mb-2">
                 <div className="w-6 h-6 rounded-md overflow-hidden bg-white flex items-center justify-center p-0.5">
-                  <img src={forézLogo} alt="Forez Corp" className="w-full h-full object-contain" />
+                  <img src={profile.logo ?? forézLogo} alt={profile.name} className="w-full h-full object-contain" />
                 </div>
-                <span className="text-white font-bold text-sm">Forez Corp</span>
+                <span className="text-white font-bold text-sm">{profile.name}</span>
               </div>
               <p className="text-white/45 text-xs leading-relaxed">
-                {BUSINESS.line1}<br />
-                {BUSINESS.line2}<br />
-                📞 {BUSINESS.phone}<br />
-                ✉ {BUSINESS.email}
+                {profile.line1}<br />
+                {profile.line2}<br />
+                📞 {profile.phone}<br />
+                ✉ {profile.email}
               </p>
             </div>
             <div>
@@ -550,7 +545,7 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
               <div className="w-5 h-5 rounded-md bg-[#0d1f3c] flex items-center justify-center">
                 <span className="text-[#c8ff00] font-black text-[8px]">FC</span>
               </div>
-              <span className="text-white/30 text-xs">Forez Corp · Industrial &amp; Commercial Supplies</span>
+              <span className="text-white/30 text-xs">{profile.name} · {profile.tagline}</span>
             </div>
             <span className="text-white/25 text-xs">Thank you for your business</span>
           </div>

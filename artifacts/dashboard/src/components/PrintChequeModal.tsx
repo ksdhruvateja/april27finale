@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { useCompanyProfile } from "@/lib/companyProfile";
 import { X, Printer, Save, PenLine, CheckSquare, Square, FileText, Edit3, ChevronDown } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useUpdateBill, getListBillsQueryKey, useListVendors, useListCustomers } from "@workspace/api-client-react";
@@ -37,9 +38,6 @@ interface Props {
   onClose: () => void;
 }
 
-const COMPANY = "Forez Corp";
-const COMPANY_ADDR_1 = "123 Corporate Drive";
-const COMPANY_ADDR_2 = "Business City, ST 00000";
 const ROUTING = "021000021";
 const ACCOUNT = "1234567890";
 
@@ -58,6 +56,9 @@ function buildPrintHtml(opts: {
   memo: string;
   signatureName: string;
   billLines: { ref: string; desc: string; amount: number }[];
+  companyName: string;
+  companyAddr1: string;
+  companyAddr2: string;
 }) {
   const fmt = (n: number) => n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   const billRowsHtml = opts.billLines.length === 0 ? "" : opts.billLines.map(l => `
@@ -71,7 +72,7 @@ function buildPrintHtml(opts: {
   <div style="height:3.75in;width:8.5in;padding:0.25in 0.45in 0.2in;box-sizing:border-box;page-break-inside:avoid;border-top:1px dashed #94a3b8;">
     <table style="width:100%;margin-bottom:6px;">
       <tr>
-        <td style="font-size:11pt;font-weight:700;color:#1e3a5f;">${COMPANY}</td>
+        <td style="font-size:11pt;font-weight:700;color:#1e3a5f;">${opts.companyName}</td>
         <td style="text-align:right;font-size:9pt;color:#475569;">${label}</td>
       </tr>
       <tr>
@@ -109,7 +110,7 @@ function buildPrintHtml(opts: {
 <html>
 <head>
 <meta charset="utf-8">
-<title>Check #${opts.checkNumber} — ${COMPANY}</title>
+<title>Check #${opts.checkNumber} — ${opts.companyName}</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body { font-family: Arial, Helvetica, sans-serif; background:#fff; width:8.5in; }
@@ -158,14 +159,14 @@ function buildPrintHtml(opts: {
 
 <!-- ═══ CHECK SECTION (top, 3.5") ═══ -->
 <div class="check-section">
-  <div class="check-watermark">FOREZ CORP</div>
+  <div class="check-watermark">${opts.companyName.toUpperCase()}</div>
   <div class="check-inner">
     <!-- Row 1: Company + Check Number -->
     <div class="row1">
       <div>
-        <div class="co-name">${COMPANY}</div>
-        <div class="co-addr">${COMPANY_ADDR_1}</div>
-        <div class="co-addr">${COMPANY_ADDR_2}</div>
+        <div class="co-name">${opts.companyName}</div>
+        <div class="co-addr">${opts.companyAddr1}</div>
+        <div class="co-addr">${opts.companyAddr2}</div>
       </div>
       <div class="check-num-box">No. ${opts.checkNumber}</div>
     </div>
@@ -234,6 +235,7 @@ ${stubHtml("ACCOUNTS PAYABLE COPY")}
    MODAL COMPONENT
 ═══════════════════════════════════════════════════════════════ */
 export default function PrintChequeModal({ bills, onClose }: Props) {
+  const profile = useCompanyProfile();
   const unpaid = bills.filter(b => b.status !== "paid" && b.status !== "cancelled");
 
   /* Mode: from bills OR custom */
@@ -381,6 +383,9 @@ export default function PrintChequeModal({ bills, onClose }: Props) {
       memo: effectiveMemo,
       signatureName,
       billLines,
+      companyName:  profile.name,
+      companyAddr1: profile.line1,
+      companyAddr2: profile.line2,
     });
 
     const win = window.open("", "_blank");
@@ -642,7 +647,7 @@ export default function PrintChequeModal({ bills, onClose }: Props) {
           {/* ── Preview summary ───────────────────────────── */}
           <div className="flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-sm">
             <div className="flex-1 text-slate-700">
-              <span className="font-semibold text-[#1e3a5f]">{COMPANY}</span>
+              <span className="font-semibold text-[#1e3a5f]">{profile.name ?? "Forez Corp"}</span>
               {effectivePayTo && <> → <span className="font-semibold">{effectivePayTo}</span></>}
               {effectiveAmount > 0 && <> · <span className="font-bold text-[#1e3a5f]">{formatCurrency(effectiveAmount)}</span></>}
             </div>

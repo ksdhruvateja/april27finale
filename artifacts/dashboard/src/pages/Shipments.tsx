@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import ShipmentModal from "@/components/ShipmentModal";
 import { useListAuctions } from "@/lib/auctions-api";
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
@@ -32,6 +33,9 @@ export default function Shipments() {
   const [expandedShipId, setExpandedShipId] = useState<number | null>(null);
   const [companyAddresses, setCompanyAddresses] = useState<CompanyAddress[]>([]);
   const [addrPicker, setAddrPicker] = useState<{ shipment: any } | null>(null);
+  const [createShipOpen, setCreateShipOpen] = useState(false);
+  const [createShipCustomer, setCreateShipCustomer] = useState<{ id: number; name: string } | null>(null);
+  const [createShipSearch, setCreateShipSearch] = useState("");
 
   useEffect(() => {
     fetchCompanyAddresses().then(setCompanyAddresses);
@@ -210,7 +214,7 @@ export default function Shipments() {
               className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-semibold transition-colors ${showCharts?"bg-teal-600 text-white border-teal-600":"bg-white border-slate-200 text-slate-700 hover:bg-slate-50"}`}>
               <BarChart2 size={14} /> Analytics {showCharts ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}
             </button>
-            <button className="bg-[hsl(224_50%_15%)] text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 hover:bg-[hsl(224_50%_20%)] transition-colors">
+            <button onClick={() => setCreateShipOpen(true)} className="bg-[hsl(224_50%_15%)] text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 hover:bg-[hsl(224_50%_20%)] transition-colors">
               <Plus size={14} /> Create Shipment
             </button>
           </div>
@@ -556,6 +560,70 @@ export default function Shipments() {
           )}
         </div>
       </div>
+    {/* ── Create Shipment — Customer Picker ─────────────────── */}
+    {createShipOpen && !createShipCustomer && (
+      <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" onClick={() => { setCreateShipOpen(false); setCreateShipSearch(""); }}>
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+        <div className="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="px-5 py-4 border-b border-slate-100">
+            <h3 className="text-slate-800 font-bold text-base">Create Shipment</h3>
+            <p className="text-slate-400 text-xs mt-0.5">Select a customer for this shipment</p>
+          </div>
+          <div className="px-4 py-3 border-b border-slate-100">
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                autoFocus
+                value={createShipSearch}
+                onChange={e => setCreateShipSearch(e.target.value)}
+                placeholder="Search customers…"
+                className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-slate-400"
+              />
+            </div>
+          </div>
+          <div className="max-h-64 overflow-y-auto">
+            {(customers as any[])
+              .filter((c: any) => {
+                const q = createShipSearch.toLowerCase();
+                return !q || (c.name || "").toLowerCase().includes(q) || (c.company || "").toLowerCase().includes(q);
+              })
+              .slice(0, 40)
+              .map((c: any) => (
+                <button
+                  key={c.id}
+                  onClick={() => { setCreateShipCustomer({ id: c.id, name: c.company || c.name }); setCreateShipSearch(""); }}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 text-left border-b border-slate-50 last:border-0 transition-colors"
+                >
+                  <div className="w-7 h-7 rounded-full bg-[hsl(224_50%_15%)] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                    {(c.company || c.name || "?")[0].toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-slate-800 truncate">{c.company || c.name}</p>
+                    {c.company && <p className="text-xs text-slate-400 truncate">{c.name}</p>}
+                  </div>
+                </button>
+              ))}
+            {(customers as any[]).length === 0 && (
+              <p className="px-4 py-6 text-center text-sm text-slate-400">No customers found</p>
+            )}
+          </div>
+          <div className="px-4 py-3 bg-slate-50 border-t border-slate-100">
+            <button onClick={() => { setCreateShipOpen(false); setCreateShipSearch(""); }} className="w-full py-2 text-sm text-slate-500 hover:text-slate-700 font-medium transition-colors">
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* ── Create Shipment — ShipmentModal ────────────────────── */}
+    {createShipCustomer && (
+      <ShipmentModal
+        customerId={createShipCustomer.id}
+        customerName={createShipCustomer.name}
+        onClose={() => { setCreateShipCustomer(null); setCreateShipOpen(false); }}
+      />
+    )}
     </Layout>
     </>
   );

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useCreateCustomer, useUpdateCustomer, getListCustomersQueryKey, useListSalesLeads, useListCustomers } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import Modal, { LightFormField, LightFormInput, LightFormSelect, LightFormTextarea, LightSubmitBar } from "./Modal";
@@ -142,7 +142,14 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
   }, []);
 
   const { data: salesLeads = [] } = useListSalesLeads();
-  useListCustomers(); // keep cache warm
+  const { data: allCustomers = [] } = useListCustomers();
+
+  const allRepNames = useMemo(() =>
+    Array.from(new Set([
+      ...(salesLeads as any[]).map((l: any) => [l.firstName, l.lastName].filter(Boolean).join(" ")).filter(Boolean),
+      ...(allCustomers as any[]).map((c: any) => c.name).filter(Boolean),
+    ])).sort()
+  , [salesLeads, allCustomers]);
 
   const [form, setForm] = useState({
     name: customer?.name ?? "",

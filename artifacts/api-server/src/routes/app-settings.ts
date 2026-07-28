@@ -9,12 +9,15 @@ const ALLOWED_KEYS = [
   "stripe_secret_key",
   "stripe_publishable_key",
   "company_name",
+  "company_tagline",
   "company_address",
   "company_city",
   "company_state",
   "company_zip",
   "company_phone",
   "company_email",
+  "company_website",
+  "company_logo",          // base64 data-URL of the company logo
   "net_terms",
   "company_addresses",
 ];

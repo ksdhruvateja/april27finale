@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useCompanyProfile } from "@/lib/companyProfile";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -38,6 +39,7 @@ const DATE_FILTER_OPTIONS = [
 ];
 
 export default function Dashboard() {
+  const profile = useCompanyProfile();
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState(0);
   const [receivablesFilter, setReceivablesFilter] = useState(0);
@@ -469,7 +471,7 @@ export default function Dashboard() {
               </div>
               <div className="relative min-w-0">
                 <h2 className="text-slate-900 text-[14px] md:text-[15px] font-extrabold leading-tight">
-                  Welcome to Forez Corp &nbsp;—&nbsp; {today}
+                  Welcome to {profile.name} &nbsp;—&nbsp; {today}
                 </h2>
               </div>
             </div>

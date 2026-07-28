@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useCompanyProfile } from "@/lib/companyProfile";
 import { useQuery } from "@tanstack/react-query";
 import { usePayBill, getListBillsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -7,8 +8,7 @@ import CheckPrintView from "./CheckPrintView";
 import { Banknote, Building2, CreditCard, Wallet, Zap, CheckSquare, Send, Printer, Info } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 
-const FOREZ_NAME = "Forez Corp";
-const FOREZ_ADDRESS = "2402 Ocean Ave\nRonkonkoma, NY 11779";
+// FOREZ_NAME/FOREZ_ADDRESS now loaded via useCompanyProfile()
 
 interface BankAccount {
   id: number;
@@ -46,6 +46,7 @@ function nextCheckNumber(_accounts: BankAccount[], accountId: number) {
 }
 
 export default function PayBillModal({ bill, onClose }: Props) {
+  const profile = useCompanyProfile();
   const payBill = usePayBill();
   const queryClient = useQueryClient();
   const [method, setMethod] = useState<Method | null>(null);
@@ -132,8 +133,8 @@ export default function PayBillModal({ bill, onClose }: Props) {
               bankName: selectedAccount.bankName ?? "",
               routingNumber: selectedAccount.routingNumber ?? "",
               accountNumber: selectedAccount.accountNumber ?? "",
-              payerName: FOREZ_NAME,
-              payerAddress: FOREZ_ADDRESS,
+              payerName: profile.name,
+              payerAddress: `${profile.line1}\n${profile.line2}`,
             }}
             onPrint={handlePrintAndPay}
           />

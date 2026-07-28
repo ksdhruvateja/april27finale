@@ -876,6 +876,17 @@ export default function Quotes() {
             setDeclineDialog({ id: viewQuote.id, customerName: viewQuote.customerName, currentNotes: (viewQuote as any).notes ?? null });
             setDeclineReason("");
           }}
+          onStatusChange={(newStatus) => {
+            updateQuote.mutate(
+              { id: viewQuote.id, data: { status: newStatus } },
+              {
+                onSuccess: () => {
+                  queryClient.invalidateQueries({ queryKey: getListQuotesQueryKey() });
+                  setViewQuote(q => q ? { ...q, status: newStatus } : q);
+                },
+              }
+            );
+          }}
         />
       )}
 

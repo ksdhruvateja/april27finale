@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from "react";
+import { useCompanyProfile } from "@/lib/companyProfile";
 import { createPortal } from "react-dom";
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
@@ -71,6 +72,7 @@ function calcTotals(
 }
 
 export default function WalkIn() {
+  const profile = useCompanyProfile();
   const { data: products }  = useListProducts();
   const { data: customers } = useListCustomers();
   const { data: taxRates }  = useListTaxRates();
@@ -318,7 +320,7 @@ export default function WalkIn() {
         @media print{body{padding:16px}}
       </style>
     </head><body>
-      <h1>Forez Corp</h1>
+      <h1>${profile.name}</h1>
       <div class="sub">${isNetTerms ? "Walk-in Invoice" : "Walk-in Sale Receipt"} · Invoice #${data.invoiceId}</div>
       <div class="badge ${isNetTerms ? "badge-terms" : "badge-paid"}">${isNetTerms ? `📅 Net Terms${data.netTermLabel ? " — " + data.netTermLabel : ""}${dueDateStr ? " · Due " + dueDateStr : ""}` : `✓ Paid — ${methodLabel[data.payMethod]}`}</div>
       <div style="display:flex;justify-content:space-between;margin-bottom:16px">
@@ -341,7 +343,7 @@ export default function WalkIn() {
         <div class="grand-total"><span>${isNetTerms ? "Amount Due" : "Total Paid"}</span><span>$${data.total.toFixed(2)}</span></div>
       </div></div>
       ${data.internalNote ? `<div style="margin-top:16px;padding:10px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:12px;color:#92400e"><strong>Note:</strong> ${data.internalNote}</div>` : ""}
-      <div class="footer">Thank you for your business! · Forez Corp</div>
+      <div class="footer">Thank you for your business! · ${profile.name}</div>
     </body></html>`;
   }
 

@@ -1,4 +1,5 @@
 import { useState, useMemo, ReactNode } from "react";
+import { useCompanyProfile } from "@/lib/companyProfile";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useListAuctions } from "@/lib/auctions-api";
 import Layout from "@/components/Layout";
@@ -1642,6 +1643,7 @@ interface PrintPODialogProps {
 }
 
 function PrintPODialog({ po, onClose }: PrintPODialogProps) {
+  const profile = useCompanyProfile();
   const [includePromiseDate, setIncludePromiseDate] = useState(true);
   const lineItems: Array<{ description: string; quantity: number; unitPrice: number; taxPercent: number; discountPercent: number }> =
     (po.lineItems ?? []).map((li: any) => ({
@@ -1765,7 +1767,7 @@ function PrintPODialog({ po, onClose }: PrintPODialogProps) {
       <div id="po-print-document" style={{ display: "none" }}>
         <div className="header">
           <div className="company-block">
-            <h1>Forez Corp</h1>
+            <h1>{profile.name}</h1>
             <p>Purchase Order</p>
           </div>
           <div className="vendor-block">

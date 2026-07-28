@@ -1,10 +1,12 @@
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Truck, Save, CheckCircle2, Eye, EyeOff, Loader2,
-  Plus, Trash2, Edit2, X, Check, FileText, MapPin, CreditCard
+  Plus, Trash2, Edit2, X, Check, FileText, MapPin, CreditCard,
+  Building2, Globe, Phone, Mail, Image, Upload,
 } from "lucide-react";
+import { invalidateCompanyProfileCache, COMPANY_DEFAULTS } from "@/lib/companyProfile";
 
 /* ── shared helpers ──────────────────────────────────────────────────── */
 const DEFAULT_NET_TERMS = [
@@ -626,6 +628,285 @@ function ShippingSection() {
   );
 }
 
+/* ── Company Profile Section ─────────────────────────────────────────── */
+function CompanyProfileSection() {
+  const [form, setForm] = useState({
+    name: "", tagline: "", line1: "", city: "", state: "", zip: "",
+    phone: "", email: "", website: "",
+  });
+  const [logo, setLogo] = useState<string>("");
+  const [loaded, setLoaded] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    fetch("/api/app-settings")
+      .then(r => r.ok ? r.json() : {})
+      .then((d: Record<string, string | null>) => {
+        setForm({
+          name:    d.company_name    ?? COMPANY_DEFAULTS.name,
+          tagline: d.company_tagline ?? COMPANY_DEFAULTS.tagline,
+          line1:   d.company_address ?? COMPANY_DEFAULTS.line1,
+          city:    d.company_city    ?? COMPANY_DEFAULTS.city,
+          state:   d.company_state   ?? COMPANY_DEFAULTS.state,
+          zip:     d.company_zip     ?? COMPANY_DEFAULTS.zip,
+          phone:   d.company_phone   ?? COMPANY_DEFAULTS.phone,
+          email:   d.company_email   ?? COMPANY_DEFAULTS.email,
+          website: d.company_website ?? COMPANY_DEFAULTS.website,
+        });
+        setLogo(d.company_logo ?? "");
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
+  }, []);
+
+  const setF = (k: keyof typeof form) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+      setForm(f => ({ ...f, [k]: e.target.value }));
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { alert("Logo must be under 2 MB"); return; }
+    const reader = new FileReader();
+    reader.onload = ev => setLogo((ev.target?.result as string) ?? "");
+    reader.readAsDataURL(file);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const pairs: [string, string][] = [
+        ["company_name",    form.name],
+        ["company_tagline", form.tagline],
+        ["company_address", form.line1],
+        ["company_city",    form.city],
+        ["company_state",   form.state],
+        ["company_zip",     form.zip],
+        ["company_phone",   form.phone],
+        ["company_email",   form.email],
+        ["company_website", form.website],
+      ];
+      if (logo) pairs.push(["company_logo", logo]);
+      await Promise.all(pairs.map(([k, v]) =>
+        fetch(`/api/app-settings/${k}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ value: v }),
+        })
+      ));
+      invalidateCompanyProfileCache();
+      setSaved(true);
+      setEditing(false);
+      setTimeout(() => setSaved(false), 2500);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const logoSrc = logo || "/forez-logo.png";
+
+  if (!loaded) {
+    return (
+      <div className="glass-card p-6 flex items-center justify-center py-10">
+        <Loader2 size={18} className="animate-spin text-slate-400" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="glass-card p-6">
+      {/* Header row */}
+      <div className="flex items-center gap-2 mb-4">
+        <Building2 size={16} className="text-[hsl(224_50%_25%)]" />
+        <h2 className="text-slate-800 text-base font-bold flex-1">Company Profile</h2>
+        {saved && (
+          <span className="flex items-center gap-1 text-[10px] font-bold text-green-600">
+            <Check size={11} /> Saved!
+          </span>
+        )}
+        {saving && <Loader2 size={12} className="animate-spin text-slate-400" />}
+        {!editing && !saving && (
+          <button
+            onClick={() => setEditing(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium transition-colors"
+          >
+            <Edit2 size={13} /> Edit
+          </button>
+        )}
+      </div>
+
+      {!editing ? (
+        /* ── View mode ── */
+        <div className="flex items-start gap-5">
+          <div className="w-14 h-14 rounded-xl bg-white border border-slate-200 flex items-center justify-center overflow-hidden flex-shrink-0 shadow-sm">
+            <img src={logoSrc} alt={form.name} className="w-full h-full object-contain p-1.5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-slate-900 font-bold text-sm">{form.name || "—"}</p>
+            {form.tagline && <p className="text-slate-400 text-xs mt-0.5 italic">{form.tagline}</p>}
+            <div className="mt-2.5 flex flex-col gap-1.5">
+              {(form.line1 || form.city) && (
+                <p className="text-slate-500 text-xs flex items-center gap-2">
+                  <MapPin size={11} className="flex-shrink-0 text-slate-400" />
+                  {[form.line1, [form.city, form.state, form.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ")}
+                </p>
+              )}
+              {form.phone && (
+                <p className="text-slate-500 text-xs flex items-center gap-2">
+                  <Phone size={11} className="flex-shrink-0 text-slate-400" />{form.phone}
+                </p>
+              )}
+              {form.email && (
+                <p className="text-slate-500 text-xs flex items-center gap-2">
+                  <Mail size={11} className="flex-shrink-0 text-slate-400" />{form.email}
+                </p>
+              )}
+              {form.website && (
+                <p className="text-slate-500 text-xs flex items-center gap-2">
+                  <Globe size={11} className="flex-shrink-0 text-slate-400" />{form.website}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* ── Edit mode ── */
+        <div className="flex flex-col gap-4">
+          {/* Logo upload */}
+          <div>
+            <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-2">
+              Company Logo
+            </label>
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center overflow-hidden flex-shrink-0">
+                {logo
+                  ? <img src={logo} alt="Logo preview" className="w-full h-full object-contain p-1" />
+                  : <Image size={22} className="text-slate-300" />}
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <button
+                  onClick={() => fileRef.current?.click()}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
+                >
+                  <Upload size={13} /> {logo ? "Replace Logo" : "Upload Logo"}
+                </button>
+                {logo && (
+                  <button
+                    onClick={() => setLogo("")}
+                    className="text-xs text-red-500 hover:text-red-700 transition-colors text-left"
+                  >
+                    Remove logo
+                  </button>
+                )}
+                <p className="text-[10px] text-slate-400">PNG or JPG up to 2 MB. Shown on invoices, quotes &amp; receipts.</p>
+              </div>
+              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+            </div>
+          </div>
+
+          {/* Name + Tagline */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">Company Name *</label>
+              <input
+                value={form.name} onChange={setF("name")} placeholder="Forez Corp"
+                className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">Tagline / Description</label>
+              <input
+                value={form.tagline} onChange={setF("tagline")} placeholder="Industrial & Commercial Supplies"
+                className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400"
+              />
+            </div>
+          </div>
+
+          {/* Address */}
+          <div>
+            <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">Street Address</label>
+            <input
+              value={form.line1} onChange={setF("line1")} placeholder="123 Main St"
+              className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400"
+            />
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">City</label>
+              <input
+                value={form.city} onChange={setF("city")} placeholder="New York"
+                className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">State</label>
+              <select
+                value={form.state} onChange={setF("state")}
+                className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400"
+              >
+                <option value="">—</option>
+                {US_STATE_CODES.map(s => <option key={s}>{s}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">ZIP Code</label>
+              <input
+                value={form.zip} onChange={setF("zip")} placeholder="10001"
+                className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400"
+              />
+            </div>
+          </div>
+
+          {/* Contact */}
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">Phone</label>
+              <input
+                value={form.phone} onChange={setF("phone")} placeholder="+1 (555) 000-0000"
+                className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">Email</label>
+              <input
+                value={form.email} onChange={setF("email")} type="email" placeholder="info@company.com"
+                className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block mb-1">Website</label>
+              <input
+                value={form.website} onChange={setF("website")} placeholder="www.company.com"
+                className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400"
+              />
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-2 pt-1 border-t border-slate-100">
+            <button
+              onClick={handleSave} disabled={saving}
+              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-60 transition-colors mt-3"
+            >
+              {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+              {saving ? "Saving…" : "Save Profile"}
+            </button>
+            <button
+              onClick={() => setEditing(false)}
+              className="px-4 py-2 text-slate-600 text-sm font-medium rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors mt-3"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Main Page ───────────────────────────────────────────────────────── */
 export default function Settings() {
   return (
@@ -633,27 +914,28 @@ export default function Settings() {
       <Header title="Settings" />
       <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-6 bg-[hsl(220_25%_97%)] flex flex-col gap-6">
 
-        {/* Company Settings */}
-        <div className="glass-card p-6 max-w-2xl">
-          <h2 className="text-slate-800 text-base font-bold mb-1">Company Settings</h2>
-          <p className="text-slate-500 text-sm mb-5">Manage your workspace, billing, and team members.</p>
-          <div className="flex flex-col gap-0 rounded-xl border border-slate-200 overflow-hidden">
-            {[
-              { title: "Company Profile",   desc: "Update company name, logo, and contact info.", action: "Edit" },
-              { title: "Team Members",      desc: "Invite users and manage roles.",               action: "Manage" },
-              { title: "Billing & Plan",    desc: "Manage your subscription and payment methods.", action: "Upgrade" },
-            ].map((row, i, arr) => (
-              <div key={row.title} className={`flex items-center justify-between px-5 py-4 bg-white ${i < arr.length - 1 ? "border-b border-slate-100" : ""}`}>
-                <div>
-                  <h3 className="text-slate-800 font-medium text-sm">{row.title}</h3>
-                  <p className="text-slate-400 text-xs mt-0.5">{row.desc}</p>
-                </div>
-                <button className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors">
-                  {row.action}
-                </button>
+        {/* Company Profile */}
+        <div className="max-w-2xl">
+          <h2 className="text-slate-600 text-xs font-bold uppercase tracking-wider mb-3 px-1">Company Settings</h2>
+          <CompanyProfileSection />
+        </div>
+
+        {/* Team + Billing placeholder */}
+        <div className="glass-card p-0 max-w-2xl overflow-hidden">
+          {[
+            { title: "Team Members",   desc: "Invite users and manage roles.",                action: "Manage" },
+            { title: "Billing & Plan", desc: "Manage your subscription and payment methods.", action: "Upgrade" },
+          ].map((row, i, arr) => (
+            <div key={row.title} className={`flex items-center justify-between px-5 py-4 bg-white ${i < arr.length - 1 ? "border-b border-slate-100" : ""}`}>
+              <div>
+                <h3 className="text-slate-800 font-medium text-sm">{row.title}</h3>
+                <p className="text-slate-400 text-xs mt-0.5">{row.desc}</p>
               </div>
-            ))}
-          </div>
+              <button className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors">
+                {row.action}
+              </button>
+            </div>
+          ))}
         </div>
 
         {/* Net Terms */}

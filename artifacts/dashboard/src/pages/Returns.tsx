@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useCompanyProfile } from "@/lib/companyProfile";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { logAudit } from "@/lib/auditLog";
 import { useRole } from "@/context/RoleContext";
@@ -148,7 +149,7 @@ ${hasLines ? `<table><thead><tr><th>Description</th><th>Qty</th><th>Unit Price</
 </div></div>
 ${record.refundMethod ? `<p style="margin-top:12px;font-size:12px;color:#64748b">Refund method: <strong>${record.refundMethod}</strong></p>` : ""}
 ${record.notes ? `<div style="margin-top:16px;padding:10px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;font-size:12px;color:#1e40af"><strong>Notes:</strong> ${record.notes}</div>` : ""}
-<div class="footer">This credit memo was issued by Forez Corp · ${cmNumber}</div>
+<div class="footer">This credit memo was issued by ${profile.name} · ${cmNumber}</div>
 </body></html>`;
     const win = window.open("", "_blank", "width=750,height=950");
     if (!win) return;
@@ -296,6 +297,7 @@ function ReturnModal({
   onClose: () => void;
   onApproved?: (record: ReturnRecord) => void;
 }) {
+  const profile = useCompanyProfile();
   const qc = useQueryClient();
   const isEdit = !!record;
 

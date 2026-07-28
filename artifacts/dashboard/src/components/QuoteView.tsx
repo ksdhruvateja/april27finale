@@ -1,8 +1,10 @@
 import { useRef, useState, useEffect } from "react";
 import {
   X, Printer, Clock, CheckCircle2, XCircle, FileText,
-  Mail, MessageSquare, Download, Copy, Check, MapPin
+  Mail, MessageSquare, Download, Copy, Check, MapPin,
+  ChevronDown, FileCheck, SendHorizonal
 } from "lucide-react";
+import { useCompanyProfile } from "@/lib/companyProfile";
 
 interface CompanyAddress {
   id: string; name: string;
@@ -13,14 +15,7 @@ interface CompanyAddress {
 import { formatCurrency, formatDate } from "@/lib/utils";
 import forézLogo from "@assets/image_1785249843852.png";
 
-const BUSINESS = {
-  name:    "Forez Corp",
-  line1:   "2402 Ocean Ave",
-  line2:   "Ronkonkoma, NY 11779",
-  phone:   "+1 (516) 860-2513",
-  email:   "info@forezcorp.com",
-  website: "www.forezcorp.com",
-};
+// BUSINESS is now loaded dynamically via useCompanyProfile() inside the component
 
 const escapeHtml = (value: string) =>
   value
@@ -67,6 +62,7 @@ interface Props {
   quote: Quote;
   onClose: () => void;
   onDecline?: () => void;
+  onStatusChange?: (status: string) => void;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; bg: string; text: string; border: string }> = {
@@ -78,14 +74,16 @@ const STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; bg: 
 
 type SendMode = "email" | "sms" | null;
 
-export default function QuoteView({ quote, onClose, onDecline }: Props) {
+export default function QuoteView({ quote, onClose, onDecline, onStatusChange }: Props) {
   const printRef = useRef<HTMLDivElement>(null);
+  const profile = useCompanyProfile();
   const [sendMode, setSendMode] = useState<SendMode>(null);
   const [emailTo, setEmailTo] = useState(quote.customerEmail ?? "");
   const [smsTo, setSmsTo] = useState(quote.customerPhone ?? "");
   const [copied, setCopied] = useState(false);
   const [companyAddresses, setCompanyAddresses] = useState<CompanyAddress[]>([]);
   const [addrPickerOpen, setAddrPickerOpen] = useState(false);
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
 
   useEffect(() => {
     fetch("/api/app-settings/company_addresses")
@@ -107,19 +105,19 @@ export default function QuoteView({ quote, onClose, onDecline }: Props) {
     quote.customerCountry && quote.customerCountry !== "US" ? quote.customerCountry : null,
   ].filter(Boolean).join("\n");
 
-  const emailSubject = `Quote ${quoteNum} from Forez Corp`;
+  const emailSubject = `Quote ${quoteNum} from ${profile.name}`;
   const emailBody =
-    `Hi ${quote.customerName},\n\nPlease find your quote ${quoteNum} from Forez Corp below.\n\n` +
+    `Hi ${quote.customerName},\n\nPlease find your quote ${quoteNum} from ${profile.name} below.\n\n` +
     `Items:\n${(quote.lineItems as LineItem[]).map(i => `  • ${i.description} × ${i.quantity} — ${formatCurrency(i.quantity * i.unitPrice)}`).join("\n")}\n\n` +
     `Subtotal: ${formatCurrency(quote.subtotal)}\n` +
     (quote.discountTotal > 0 ? `Discount: -${formatCurrency(quote.discountTotal)}\n` : "") +
     `Tax: ${formatCurrency(quote.taxTotal)}\n` +
     `Total: ${formatCurrency(quote.total)}\n` +
     (quote.expiresAt ? `\nThis quote expires on ${formatDate(quote.expiresAt)}.\n` : "") +
-    `\nThank you for your business!\n\nForez Corp\n${BUSINESS.phone}\n${BUSINESS.email}`;
+    `\nThank you for your business!\n\n${profile.name}\n${profile.phone}\n${profile.email}`;
 
   const smsBody =
-    `Hi ${quote.customerName}, your quote ${quoteNum} from Forez Corp is ready. ` +
+    `Hi ${quote.customerName}, your quote ${quoteNum} from ${profile.name} is ready. ` +
     `Total: ${formatCurrency(quote.total)}` +
     (quote.expiresAt ? ` — expires ${formatDate(quote.expiresAt)}.` : ".");
 
@@ -144,17 +142,18 @@ export default function QuoteView({ quote, onClose, onDecline }: Props) {
   function doPrint(fromAddr?: CompanyAddress | null, _download = false) {
     const lineItems = quote.lineItems as LineItem[];
     const hasLineDiscounts = lineItems.some(item => item.discountPercent > 0);
-    const fromLine1 = fromAddr?.line1 ?? BUSINESS.line1;
+    const fromLine1 = fromAddr?.line1 ?? profile.line1;
     const fromLine2 = fromAddr
       ? `${fromAddr.city}${fromAddr.state ? `, ${fromAddr.state}` : ""}${fromAddr.zip ? ` ${fromAddr.zip}` : ""}`
-      : BUSINESS.line2;
-    const fromName = fromAddr?.name ?? BUSINESS.name;
+      : profile.line2;
+    const fromName = fromAddr?.name ?? profile.name;
     const fromPhone = fromAddr?.phone ?? null;
+    const logoSrc = profile.logo ?? forézLogo;
 
     const w = window.open("", "_blank", "width=900,height=700");
     if (!w) return;
     w.document.write(`
-      <html><head><title>${quoteNum} — Forez Corp</title>
+      <html><head><title>${quoteNum} — ${profile.name}</title>
       <style>
         *{box-sizing:border-box;margin:0;padding:0}
         body{font-family:'Segoe UI',sans-serif;background:#fff;color:#111;padding:48px}
@@ -197,10 +196,10 @@ export default function QuoteView({ quote, onClose, onDecline }: Props) {
       <div class="header">
         <div>
           <div class="logo-block">
-            <img src="${forézLogo}" alt="Forez Corp" class="logo-img" />
+            <img src="${logoSrc}" alt="${profile.name}" class="logo-img" />
             <div>
-              <div class="company-name">Forez Corp</div>
-              <div class="company-sub">Industrial &amp; Commercial Supplies</div>
+              <div class="company-name">${profile.name}</div>
+              <div class="company-sub">${profile.tagline}</div>
             </div>
           </div>
           <div class="company-addr">
@@ -264,12 +263,12 @@ export default function QuoteView({ quote, onClose, onDecline }: Props) {
       ${quote.notes ? `<div class="notes"><strong>Notes:</strong> ${quote.notes}</div>` : ""}
       <div class="footer">
         <div class="footer-logo">
-          <img src="${forézLogo}" alt="Forez Corp" class="footer-logo-img" />
-          <div class="footer-co">Forez Corp</div>
+          <img src="${logoSrc}" alt="${profile.name}" class="footer-logo-img" />
+          <div class="footer-co">${profile.name}</div>
         </div>
         <div class="footer-right">
           ${quote.expiresAt ? `Quote valid until ${formatDate(quote.expiresAt)}` : "Thank you for your business"}<br/>
-          ${BUSINESS.website}
+          ${profile.website}
         </div>
       </div>
       </body></html>
@@ -322,7 +321,7 @@ export default function QuoteView({ quote, onClose, onDecline }: Props) {
           style={{ background: "#0c0c10" }}>
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg overflow-hidden bg-white/10 flex items-center justify-center">
-              <img src={forézLogo} alt="Forez Corp" className="w-full h-full object-contain" />
+              <img src={profile.logo ?? forézLogo} alt={profile.name} className="w-full h-full object-contain" />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -332,7 +331,7 @@ export default function QuoteView({ quote, onClose, onDecline }: Props) {
                   {isExpired ? "Expired" : status.label}
                 </span>
               </div>
-              <p className="text-white/40 text-xs">Forez Corp · Industrial &amp; Commercial Supplies</p>
+              <p className="text-white/40 text-xs">{profile.name} · {profile.tagline}</p>
             </div>
           </div>
 
@@ -344,6 +343,40 @@ export default function QuoteView({ quote, onClose, onDecline }: Props) {
             <ActionBtn icon={<Printer size={13} />} label="Print" onClick={() => handlePrint(false)} color="default" />
             {onDecline && !["declined", "invoiced", "accepted"].includes(quote.status) && (
               <ActionBtn icon={<XCircle size={13} />} label="Decline" onClick={onDecline} color="red" />
+            )}
+            {/* Status Change Dropdown */}
+            {onStatusChange && (
+              <div className="relative">
+                <button
+                  onClick={() => setStatusMenuOpen(v => !v)}
+                  className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors ${status.bg} ${status.text} ${status.border} hover:opacity-90`}
+                >
+                  {status.icon}
+                  {isExpired ? "Expired" : status.label}
+                  <ChevronDown size={11} className={`transition-transform ${statusMenuOpen ? "rotate-180" : ""}`} />
+                </button>
+                {statusMenuOpen && (
+                  <div className="absolute right-0 top-full mt-1 z-50 w-44 bg-[#18181f] border border-white/10 rounded-xl shadow-2xl overflow-hidden">
+                    {[
+                      { value: "draft",    label: "Draft",    icon: <FileText size={12} />,     cls: "text-white/60" },
+                      { value: "sent",     label: "Sent",     icon: <SendHorizonal size={12} />, cls: "text-blue-300" },
+                      { value: "accepted", label: "Accepted", icon: <CheckCircle2 size={12} />,  cls: "text-emerald-400" },
+                      { value: "declined", label: "Declined", icon: <XCircle size={12} />,       cls: "text-red-400" },
+                      { value: "invoiced", label: "Invoiced", icon: <FileCheck size={12} />,     cls: "text-purple-400" },
+                    ].map(s => (
+                      <button
+                        key={s.value}
+                        onClick={() => { onStatusChange(s.value); setStatusMenuOpen(false); }}
+                        className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 text-xs font-semibold transition-colors hover:bg-white/8 ${quote.status === s.value ? "bg-white/6" : ""} ${s.cls}`}
+                      >
+                        {s.icon}
+                        {s.label}
+                        {quote.status === s.value && <Check size={11} className="ml-auto opacity-60" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
             <button onClick={onClose} className="ml-1 p-1.5 rounded-lg hover:bg-white/8 text-white/50 hover:text-white transition-colors">
               <X size={18} />
@@ -397,15 +430,15 @@ export default function QuoteView({ quote, onClose, onDecline }: Props) {
               <p className="text-white/35 text-[10px] uppercase tracking-widest mb-2">From</p>
               <div className="flex items-center gap-2.5 mb-2">
                 <div className="w-6 h-6 rounded-md overflow-hidden bg-white/10 flex items-center justify-center flex-shrink-0">
-                  <img src={forézLogo} alt="Forez Corp" className="w-full h-full object-contain" />
+                  <img src={profile.logo ?? forézLogo} alt={profile.name} className="w-full h-full object-contain" />
                 </div>
-                <span className="text-white font-bold text-sm">Forez Corp</span>
+                <span className="text-white font-bold text-sm">{profile.name}</span>
               </div>
               <p className="text-white/45 text-xs leading-relaxed">
-                {BUSINESS.line1}<br />
-                {BUSINESS.line2}<br />
-                {BUSINESS.phone}<br />
-                {BUSINESS.email}
+                {profile.line1}<br />
+                {profile.line2}<br />
+                {profile.phone}<br />
+                {profile.email}
               </p>
             </div>
             <div>
@@ -511,9 +544,9 @@ export default function QuoteView({ quote, onClose, onDecline }: Props) {
           <div className="flex items-center justify-between pt-2 border-t border-white/8">
             <div className="flex items-center gap-2">
               <div className="w-5 h-5 rounded-md overflow-hidden bg-white/10 flex items-center justify-center">
-                <img src={forézLogo} alt="Forez Corp" className="w-full h-full object-contain" />
+                <img src={profile.logo ?? forézLogo} alt={profile.name} className="w-full h-full object-contain" />
               </div>
-              <span className="text-white/30 text-xs">Forez Corp · {BUSINESS.website}</span>
+              <span className="text-white/30 text-xs">{profile.name} · {profile.website}</span>
             </div>
             <span className="text-white/25 text-xs">
               {quote.expiresAt ? `Valid until ${formatDate(quote.expiresAt)}` : "Thank you for your business"}

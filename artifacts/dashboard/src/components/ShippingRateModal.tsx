@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { useCompanyProfile } from "@/lib/companyProfile";
 import { useCreateShipment, getListShipmentsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -9,16 +10,7 @@ import {
 import { formatCurrency } from "@/lib/utils";
 import { printShippingSlip } from "@/lib/print-slip";
 
-const BUSINESS = {
-  name: "Forez Corp",
-  address: "2402 Ocean Ave",
-  city: "Ronkonkoma",
-  state: "NY",
-  zip: "11779",
-  country: "US",
-  phone: "+1 (516) 860-2513",
-  email: "shipping@forezcorp.com",
-};
+// BUSINESS is now loaded dynamically via useCompanyProfile() inside the component
 
 const PACKAGING_TYPES = [
   { value: "box", label: "Box" },
@@ -134,6 +126,7 @@ function StepIndicator({ current, isCarrier }: { current: Step; isCarrier: boole
 }
 
 export default function ShippingRateModal({ customerId, invoiceId, customerName, lineItems = [], defaultInternalNote, vendorCarrierName, vendorCarrierAccount, onClose }: Props) {
+  const profile = useCompanyProfile();
   const create = useCreateShipment();
   const queryClient = useQueryClient();
 
@@ -182,7 +175,7 @@ export default function ShippingRateModal({ customerId, invoiceId, customerName,
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          from: { zip: BUSINESS.zip, country: BUSINESS.country },
+          from: { zip: profile.zip, country: "US" },
           to: { zip: toAddress.zip || "10001", country: toAddress.country },
           packages: packages.map(p => ({ length: p.length, width: p.width, height: p.height, weight: p.weight })),
           declaredValue: parseFloat(declaredValue) || 10,
@@ -241,7 +234,7 @@ export default function ShippingRateModal({ customerId, invoiceId, customerName,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           courierId: selectedRate.courierId,
-          from: { ...BUSINESS },
+          from: { name: profile.name, address: profile.line1, city: profile.city, state: profile.state, zip: profile.zip, country: "US", phone: profile.phone, email: profile.email },
           to: toAddress,
           packages: packages.map(p => ({ length: p.length, width: p.width, height: p.height, weight: p.weight })),
           declaredValue: parseFloat(declaredValue) || 10,
@@ -537,8 +530,8 @@ export default function ShippingRateModal({ customerId, invoiceId, customerName,
               <div className="grid grid-cols-2 gap-3">
                 <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-sm">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">From</p>
-                  <p className="text-sm font-semibold text-slate-800">{BUSINESS.name}</p>
-                  <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{BUSINESS.address}<br />{BUSINESS.city}, {BUSINESS.state} {BUSINESS.zip}</p>
+                  <p className="text-sm font-semibold text-slate-800">{profile.name}</p>
+                  <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{profile.line1}<br />{profile.city}, {profile.state} {profile.zip}</p>
                 </div>
                 <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 shadow-sm">
                   <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wider mb-1.5">
@@ -618,9 +611,9 @@ export default function ShippingRateModal({ customerId, invoiceId, customerName,
               <div className="grid grid-cols-2 gap-3">
                 <div className="p-3 rounded-xl bg-white border border-slate-200 shadow-sm">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">From</p>
-                  <p className="text-sm font-semibold text-slate-800">{BUSINESS.name}</p>
+                  <p className="text-sm font-semibold text-slate-800">{profile.name}</p>
                   <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
-                    {BUSINESS.address}<br />{BUSINESS.city}, {BUSINESS.state} {BUSINESS.zip}
+                    {profile.line1}<br />{profile.city}, {profile.state} {profile.zip}
                   </p>
                 </div>
                 <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 shadow-sm">
