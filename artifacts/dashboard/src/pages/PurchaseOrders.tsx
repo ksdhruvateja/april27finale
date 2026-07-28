@@ -4,7 +4,7 @@ import { useListAuctions } from "@/lib/auctions-api";
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
 import { useListPurchaseOrders, useDeletePurchaseOrder, useConvertPurchaseOrderToBill, useUpdatePurchaseOrder, getListPurchaseOrdersQueryKey, useListVendors, useListBills, useDeleteBill, getListBillsQueryKey, useListShipments } from "@workspace/api-client-react";
-import { Search, Plus, MoreHorizontal, Edit, Trash2, CreditCard, Truck, RefreshCw, BarChart2, ChevronDown, ChevronUp, CheckCircle2, Pencil, Tag, ChevronRight, Save, Calculator, X as XIcon, Percent, DollarSign, Package, Printer } from "lucide-react";
+import { Search, Plus, MoreHorizontal, Edit, Trash2, CreditCard, Truck, RefreshCw, BarChart2, ChevronDown, ChevronUp, CheckCircle2, Pencil, Tag, ChevronRight, Save, Calculator, X as XIcon, Percent, DollarSign, Package, Printer, AlertCircle, ArrowRight } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from "recharts";
 import { useQueryClient } from "@tanstack/react-query";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -49,6 +49,23 @@ const FILTER_TABS: { value: PoStatusFilter; label: string }[] = [
   { value: "shipped",            label: "Shipped"          },
   { value: "overdue",            label: "Overdue"          },
 ];
+
+// ─── PO reference helper ──────────────────────────────────────────────────────
+// Computes the canonical human-readable PO reference for any PO object.
+// Pass `posMap` (id → po) to resolve backorder references; without it the
+// backorder suffix is approximated from the stored backorderSeq field alone.
+function getPoRef(po: any, posMap?: Map<number, any>): string {
+  if (po.parentPoId) {
+    const parent = posMap ? posMap.get(Number(po.parentPoId)) : null;
+    const parentRef = parent ? getPoRef(parent) : `FRZPO-${String(po.parentPoId).padStart(4, "0")}`;
+    const seq = po.backorderSeq ?? 1;
+    return `${parentRef}-BO${seq > 1 ? seq : ""}`;
+  }
+  if (po.sourceInvoiceId && po.poSequence) {
+    return `FRZPO-${String(po.sourceInvoiceId).padStart(4, "0")}-${po.poSequence}`;
+  }
+  return `FRZPO-${String(po.id).padStart(4, "0")}`;
+}
 
 function getEffectivePoStatus(po: any): string {
   const { status, expectedDate } = po;
@@ -108,6 +125,13 @@ export default function PurchaseOrders() {
 
   const { data: vendors } = useListVendors();
 
+  // Map for fast backorder-ref lookups (id → po)
+  const posMap = useMemo(() => {
+    const m = new Map<number, any>();
+    for (const p of (pos ?? []) as any[]) m.set(Number(p.id), p);
+    return m;
+  }, [pos]);
+
   const STATUS_DOT_COLORS: Record<string,string> = {
     received:"#10b981", billed:"#7c3aed", sent:"#3b82f6", draft:"#94a3b8",
     pending:"#f59e0b", fulfilled:"#6366f1", shipped:"#0ea5e9",
@@ -124,9 +148,7 @@ export default function PurchaseOrders() {
     updatePO.mutate({ id: po.id, data: { status } as any }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListPurchaseOrdersQueryKey() });
-        const poRef = po.sourceInvoiceId && po.poSequence
-          ? `FRZPO-${String(po.sourceInvoiceId).padStart(4,"0")}-${po.poSequence}`
-          : `FRZPO-${String(po.id).padStart(4,"0")}`;
+        const poRef = getPoRef(po, posMap);
         const user = currentUser ?? { name: "Unknown", email: "", role: "unknown" };
         logAudit({
           user: { name: user.name ?? user.email, email: user.email, role: user.role },
@@ -143,9 +165,7 @@ export default function PurchaseOrders() {
   const confirmBillingReversal = () => {
     if (!billingReversalDialog) return;
     const { po, linkedBillId, newStatus, reason } = billingReversalDialog;
-    const poRef = po.sourceInvoiceId && po.poSequence
-      ? `FRZPO-${String(po.sourceInvoiceId).padStart(4,"0")}-${po.poSequence}`
-      : `FRZPO-${String(po.id).padStart(4,"0")}`;
+    const poRef = getPoRef(po, posMap);
     updatePO.mutate(
       { id: po.id, data: { status: newStatus, internalNote: reason.trim() || `Status changed to ${newStatus} — linked bill deleted` } as any },
       {
@@ -227,9 +247,7 @@ export default function PurchaseOrders() {
       await updatePO.mutateAsync({ id: po.id, data: { lineItems: items } as any });
       await queryClient.invalidateQueries({ queryKey: getListPurchaseOrdersQueryKey() });
       setExpandedPoId(null);
-      const poRef = po.sourceInvoiceId && po.poSequence
-        ? `FRZPO-${String(po.sourceInvoiceId).padStart(4,"0")}-${po.poSequence}`
-        : `FRZPO-${String(po.id).padStart(4,"0")}`;
+      const poRef = getPoRef(po, posMap);
       const user = currentUser ?? { name: "Unknown", email: "", role: "unknown" };
       logAudit({
         user: { name: user.name ?? user.email, email: user.email, role: user.role },
@@ -299,9 +317,7 @@ export default function PurchaseOrders() {
       const q = debouncedSearch.trim().toLowerCase();
       if (!q) return true;
       const productText = (p.lineItems ?? []).map((li: any) => String(li.description ?? "")).join(" ").toLowerCase();
-      const poNumber = p.sourceInvoiceId && p.poSequence
-        ? `frzpo-${String(p.sourceInvoiceId).padStart(4, "0")}-${p.poSequence}`
-        : `frzpo-${String(p.id).padStart(4, "0")}`;
+      const poNumber = getPoRef(p, posMap).toLowerCase();
       return [
         p.vendorName, p.status, p.notes, p.internalNote, poNumber, String(p.id), productText,
       ].some(v => String(v ?? "").toLowerCase().includes(q));
@@ -346,9 +362,7 @@ export default function PurchaseOrders() {
     const user = currentUser ?? { name: "Unknown", email: "", role: "unknown" };
     await Promise.all(ids.map(id => {
       const po = (pos ?? []).find((p: any) => p.id === id);
-      const poRef = po?.sourceInvoiceId && po?.poSequence
-        ? `FRZPO-${String(po.sourceInvoiceId).padStart(4,"0")}-${po.poSequence}`
-        : `FRZPO-${String(id).padStart(4,"0")}`;
+      const poRef = po ? getPoRef(po, posMap) : `FRZPO-${String(id).padStart(4, "0")}`;
       return updatePO.mutateAsync({ id, data: { status } as any }).then(() => {
         logAudit({
           user: { name: user.name ?? user.email, email: user.email, role: user.role },
@@ -424,7 +438,7 @@ export default function PurchaseOrders() {
 
   const downloadAllExcel = () => {
     const rows = filtered.map((po) => [
-      `FRZPO-${String(po.id).padStart(4, "0")}`,
+      getPoRef(po, posMap),
       po.vendorName,
       formatDate(po.createdAt),
       formatDate(po.expectedDate),
@@ -436,7 +450,7 @@ export default function PurchaseOrders() {
 
   const downloadAllPdf = () => {
     const tableHtml = `<table><thead><tr><th>PO Number</th><th>Vendor</th><th>Created</th><th>Expected</th><th>Status</th><th>Total</th></tr></thead><tbody>${
-      filtered.map((po) => `<tr><td>FRZPO-${String(po.id).padStart(4, "0")}</td><td>${po.vendorName}</td><td>${formatDate(po.createdAt)}</td><td>${formatDate(po.expectedDate)}</td><td>${getEffectivePoStatus(po)}</td><td>${formatCurrency(po.total)}</td></tr>`).join("")
+      filtered.map((po) => `<tr><td>${getPoRef(po, posMap)}</td><td>${po.vendorName}</td><td>${formatDate(po.createdAt)}</td><td>${formatDate(po.expectedDate)}</td><td>${getEffectivePoStatus(po)}</td><td>${formatCurrency(po.total)}</td></tr>`).join("")
     }</tbody></table>`;
     downloadPdfFromHtml("Purchase Orders", tableHtml);
   };
@@ -758,10 +772,14 @@ export default function PurchaseOrders() {
                       </td>
                       <td className="px-5 py-3.5">
                         <div className="flex flex-col gap-0.5">
-                          {po.sourceInvoiceId && po.poSequence
-                            ? <span className="text-amber-700 font-mono text-xs">FRZPO-{po.sourceInvoiceId.toString().padStart(4, "0")}-{po.poSequence}</span>
-                            : <span className="text-slate-400 font-mono text-xs">FRZPO-{po.id.toString().padStart(4, "0")}</span>
-                          }
+                          <span className={`font-mono text-xs ${po.parentPoId ? "text-orange-600" : po.sourceInvoiceId && po.poSequence ? "text-amber-700" : "text-slate-400"}`}>
+                            {getPoRef(po, posMap)}
+                          </span>
+                          {po.parentPoId && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 border border-orange-200 w-fit">
+                              <ArrowRight size={9} /> Backorder
+                            </span>
+                          )}
                           {auctionByPoId.has(Number(po.id)) && (
                             <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 w-fit">
                               🏷 {auctionByPoId.get(Number(po.id))}
@@ -947,9 +965,7 @@ export default function PurchaseOrders() {
                                   <div className="flex justify-end">
                                     <button
                                       onClick={() => {
-                                        const poRef = po.sourceInvoiceId && po.poSequence
-                                          ? `FRZPO-${String(po.sourceInvoiceId).padStart(4,"0")}-${po.poSequence}`
-                                          : `FRZPO-${String(po.id).padStart(4,"0")}`;
+                                        const poRef = getPoRef(po, posMap);
                                         const fresh = expandedItems[po.id] ?? (po.lineItems ?? []);
                                         setPriceAdjustDialog({
                                           poId: po.id, poRef, vendorName: po.vendorName ?? "",
@@ -1314,45 +1330,64 @@ interface ReceiveItemsModalProps {
 }
 
 function ReceiveItemsModal({ po, onClose, onSaved }: ReceiveItemsModalProps) {
-  const lineItems: Array<{ description: string; quantity: number; unitPrice: number }> = (po.lineItems ?? []).map((li: any) => ({
-    ...li,
-    quantity: Number(li.quantity ?? 0),
-    unitPrice: Number(li.unitPrice ?? 0),
-  }));
+  const lineItems: Array<{ description: string; quantity: number; unitPrice: number; productId?: number; taxPercent?: number; discountPercent?: number }> =
+    (po.lineItems ?? []).map((li: any) => ({
+      ...li,
+      quantity: Number(li.quantity ?? 0),
+      unitPrice: Number(li.unitPrice ?? 0),
+    }));
 
   const existingReceived: Array<{ lineIndex: number; receivedQty: number }> =
     ((po.receivedItems as any[]) ?? []).map((r: any) => ({ lineIndex: Number(r.lineIndex), receivedQty: Number(r.receivedQty ?? 0) }));
 
   const existingMap = new Map(existingReceived.map(r => [r.lineIndex, r.receivedQty]));
 
-  // Only show undelivered lines (items where received < ordered)
   const undeliveredLines = lineItems.map((li, idx) => ({
     idx,
     description: li.description,
     ordered: li.quantity,
     prevReceived: existingMap.get(idx) ?? 0,
+    unitPrice: li.unitPrice,
+    productId: li.productId,
+    taxPercent: li.taxPercent ?? 0,
+    discountPercent: li.discountPercent ?? 0,
   })).filter(li => li.prevReceived < li.ordered);
 
   const [qtyMap, setQtyMap] = useState<Record<number, string>>(() => {
     const init: Record<number, string> = {};
     for (const li of undeliveredLines) {
-      init[li.idx] = String(li.ordered - li.prevReceived); // pre-fill with remaining
+      init[li.idx] = String(li.ordered - li.prevReceived);
     }
     return init;
   });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
+  type Step = "receive" | "backorder-confirm" | "backorder-done";
+  const [step, setStep]       = useState<Step>("receive");
+  const [saving, setSaving]   = useState(false);
+  const [boSaving, setBoSaving] = useState(false);
+  const [error, setError]     = useState<string | null>(null);
+  const [boPoRef, setBoPoRef] = useState<string>("");
 
   const baseUrl = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+  const poRef = getPoRef(po);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Lines that will be backordered given current qty inputs
+  const backordered = undeliveredLines.filter(li => {
+    const entered = Math.min(parseFloat(qtyMap[li.idx] ?? "0") || 0, li.ordered - li.prevReceived);
+    return entered < (li.ordered - li.prevReceived);
+  }).map(li => {
+    const entered = Math.min(parseFloat(qtyMap[li.idx] ?? "0") || 0, li.ordered - li.prevReceived);
+    return { ...li, backorderQty: (li.ordered - li.prevReceived) - entered };
+  });
+
+  const handlePostReceipt = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     setError(null);
     try {
       const items = undeliveredLines.map(li => ({
         lineIndex: li.idx,
-        qty: li.prevReceived + Math.max(0, parseFloat(qtyMap[li.idx] ?? "0") || 0),
+        qty: li.prevReceived + Math.min(parseFloat(qtyMap[li.idx] ?? "0") || 0, li.ordered - li.prevReceived),
       }));
       const res = await fetch(`${baseUrl}/api/purchase-orders/${po.id}/receive`, {
         method: "POST",
@@ -1363,7 +1398,12 @@ function ReceiveItemsModal({ po, onClose, onSaved }: ReceiveItemsModalProps) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error ?? "Failed to receive items");
       }
-      onSaved();
+      if (backordered.length > 0) {
+        // Transition to the backorder confirmation step instead of closing
+        setStep("backorder-confirm");
+      } else {
+        onSaved();
+      }
     } catch (err: any) {
       setError(err.message ?? "Unknown error");
     } finally {
@@ -1371,89 +1411,223 @@ function ReceiveItemsModal({ po, onClose, onSaved }: ReceiveItemsModalProps) {
     }
   };
 
-  const poRef = po.sourceInvoiceId && po.poSequence
-    ? `FRZPO-${String(po.sourceInvoiceId).padStart(4, "0")}-${po.poSequence}`
-    : `FRZPO-${String(po.id).padStart(4, "0")}`;
+  const handleCreateBackorderPO = async () => {
+    setBoSaving(true);
+    setError(null);
+    try {
+      const lineItemsPayload = backordered.map(li => ({
+        description: li.description,
+        quantity: li.backorderQty,
+        unitPrice: li.unitPrice,
+        taxPercent: li.taxPercent,
+        discountPercent: li.discountPercent,
+        ...(li.productId ? { productId: li.productId } : {}),
+      }));
+      const res = await fetch(`${baseUrl}/api/purchase-orders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vendorId: po.vendorId,
+          parentPoId: po.id,
+          status: "draft",
+          lineItems: lineItemsPayload,
+          notes: `Backorder from ${poRef}`,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Failed to create backorder PO");
+      }
+      const newPo = await res.json();
+      const seq = newPo.backorderSeq ?? 1;
+      setBoPoRef(`${poRef}-BO${seq > 1 ? seq : ""}`);
+      setStep("backorder-done");
+      onSaved(); // refresh the list in the background
+    } catch (err: any) {
+      setError(err.message ?? "Unknown error");
+    } finally {
+      setBoSaving(false);
+    }
+  };
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" onClick={step === "receive" ? onClose : undefined}>
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
       <div className="relative z-10 w-full max-w-lg bg-white rounded-2xl border border-slate-200 shadow-2xl" onClick={e => e.stopPropagation()}>
-        {/* Header */}
-        <div className="flex items-center gap-3 px-6 pt-6 pb-4 border-b border-slate-100">
-          <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center flex-shrink-0">
-            <Package size={17} className="text-orange-600" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-slate-800 text-base">Receive Items</h3>
-            <p className="text-xs text-slate-500 mt-0.5 truncate">{poRef} · {po.vendorName}</p>
-          </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 transition-colors">
-            <XIcon size={15} />
-          </button>
-        </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="px-6 py-4 flex flex-col gap-3">
-            {undeliveredLines.length === 0 ? (
-              <p className="text-sm text-slate-500 text-center py-4">All items already fully received.</p>
-            ) : (
-              <>
-                <p className="text-xs text-slate-500">Enter the quantity received for each line item. Pre-filled with remaining undelivered quantity.</p>
-                {/* Column headers */}
-                <div className="grid text-[10px] font-semibold uppercase tracking-wider text-slate-400 px-3"
-                  style={{ gridTemplateColumns: "1fr 80px 80px 90px" }}>
-                  <span>Item</span>
-                  <span className="text-right">Ordered</span>
-                  <span className="text-right">Prev Rcvd</span>
-                  <span className="text-right">Qty Received</span>
-                </div>
-                {undeliveredLines.map(li => {
-                  const maxRemaining = li.ordered - li.prevReceived;
-                  const qty = parseFloat(qtyMap[li.idx] ?? "0") || 0;
-                  const backordered = maxRemaining - qty;
-                  return (
-                    <div key={li.idx} className="grid items-center gap-3 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2.5"
-                      style={{ gridTemplateColumns: "1fr 80px 80px 90px" }}>
-                      <div>
-                        <p className="text-sm text-slate-800 font-medium truncate">{li.description || `Item ${li.idx + 1}`}</p>
-                        {backordered > 0 && qty < maxRemaining && (
-                          <span className="text-[10px] font-semibold text-orange-600 bg-orange-50 border border-orange-200 rounded px-1.5 py-0.5 mt-0.5 inline-block">
-                            {backordered} backordered
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-sm text-slate-500 text-right">{li.ordered}</span>
-                      <span className="text-sm text-slate-400 text-right">{li.prevReceived}</span>
-                      <input
-                        type="number" min="0" max={maxRemaining} step="1"
-                        value={qtyMap[li.idx] ?? ""}
-                        onChange={e => setQtyMap(m => ({ ...m, [li.idx]: e.target.value }))}
-                        className="w-full text-right border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-semibold text-slate-800 focus:outline-none focus:border-orange-400 transition-colors"
-                      />
+        {/* ── Step 1: Receive ── */}
+        {step === "receive" && (
+          <>
+            <div className="flex items-center gap-3 px-6 pt-6 pb-4 border-b border-slate-100">
+              <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center flex-shrink-0">
+                <Package size={17} className="text-orange-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-slate-800 text-base">Receive Items</h3>
+                <p className="text-xs text-slate-500 mt-0.5 truncate">{poRef} · {po.vendorName}</p>
+              </div>
+              <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 transition-colors">
+                <XIcon size={15} />
+              </button>
+            </div>
+
+            <form onSubmit={handlePostReceipt}>
+              <div className="px-6 py-4 flex flex-col gap-3 max-h-[60vh] overflow-y-auto">
+                {undeliveredLines.length === 0 ? (
+                  <p className="text-sm text-slate-500 text-center py-4">All items already fully received.</p>
+                ) : (
+                  <>
+                    <p className="text-xs text-slate-500">
+                      Enter qty received. Any shortfall will be flagged as backordered and you can carry it forward to a new PO automatically.
+                    </p>
+                    <div className="grid text-[10px] font-semibold uppercase tracking-wider text-slate-400 px-3"
+                      style={{ gridTemplateColumns: "1fr 72px 72px 90px" }}>
+                      <span>Item</span>
+                      <span className="text-right">Ordered</span>
+                      <span className="text-right">Prev Rcvd</span>
+                      <span className="text-right">Receiving</span>
                     </div>
-                  );
-                })}
-              </>
-            )}
-            {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
-          </div>
-          <div className="px-6 pb-6 flex gap-3">
-            <button type="button" onClick={onClose}
-              className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors">
-              Cancel
-            </button>
-            {undeliveredLines.length > 0 && (
-              <button type="submit" disabled={saving}
+                    {undeliveredLines.map(li => {
+                      const maxRemaining = li.ordered - li.prevReceived;
+                      const enteredRaw = parseFloat(qtyMap[li.idx] ?? "0") || 0;
+                      const entered = Math.min(enteredRaw, maxRemaining);
+                      const bo = maxRemaining - entered;
+                      return (
+                        <div key={li.idx} className="grid items-center gap-3 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2.5"
+                          style={{ gridTemplateColumns: "1fr 72px 72px 90px" }}>
+                          <div>
+                            <p className="text-sm text-slate-800 font-medium truncate">{li.description || `Item ${li.idx + 1}`}</p>
+                            {bo > 0 && (
+                              <span className="text-[10px] font-semibold text-orange-600 bg-orange-50 border border-orange-200 rounded px-1.5 py-0.5 mt-0.5 inline-block">
+                                {bo} will backorder
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-sm text-slate-500 text-right">{li.ordered}</span>
+                          <span className="text-sm text-slate-400 text-right">{li.prevReceived}</span>
+                          <input
+                            type="number" min="0" max={maxRemaining} step="1"
+                            value={qtyMap[li.idx] ?? ""}
+                            onChange={e => setQtyMap(m => ({ ...m, [li.idx]: e.target.value }))}
+                            className="w-full text-right border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-semibold text-slate-800 focus:outline-none focus:border-orange-400 transition-colors"
+                          />
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+
+                {/* Backorder preview banner */}
+                {backordered.length > 0 && (
+                  <div className="flex items-start gap-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
+                    <AlertCircle size={15} className="text-orange-500 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold text-orange-800">
+                        {backordered.length} line{backordered.length > 1 ? "s" : ""} will be backordered
+                      </p>
+                      <p className="text-xs text-orange-600 mt-0.5">
+                        After posting, you'll be asked whether to auto-create a backorder PO (<span className="font-mono font-bold">{poRef}-BO</span>).
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
+              </div>
+
+              <div className="px-6 pb-6 flex gap-3">
+                <button type="button" onClick={onClose}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors">
+                  Cancel
+                </button>
+                {undeliveredLines.length > 0 && (
+                  <button type="submit" disabled={saving}
+                    className="flex-1 py-2.5 rounded-xl bg-orange-600 text-white text-sm font-semibold hover:bg-orange-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                    {saving
+                      ? <><div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Saving…</>
+                      : <><Package size={14} /> Post Receipt</>
+                    }
+                  </button>
+                )}
+              </div>
+            </form>
+          </>
+        )}
+
+        {/* ── Step 2: Backorder confirm ── */}
+        {step === "backorder-confirm" && (
+          <>
+            <div className="flex items-center gap-3 px-6 pt-6 pb-4 border-b border-slate-100">
+              <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center flex-shrink-0">
+                <ArrowRight size={17} className="text-orange-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-slate-800 text-base">Create Backorder PO?</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Receipt posted · {backordered.length} line{backordered.length > 1 ? "s" : ""} still outstanding</p>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 flex flex-col gap-3">
+              <p className="text-sm text-slate-600">
+                The following items were not fully received. A new PO will be created as{" "}
+                <span className="font-mono font-bold text-orange-700">{poRef}-BO</span>, linked to{" "}
+                <span className="font-mono text-slate-700">{poRef}</span>, so you can track and search both together.
+              </p>
+
+              <div className="grid text-[10px] font-semibold uppercase tracking-wider text-slate-400 px-3"
+                style={{ gridTemplateColumns: "1fr 100px" }}>
+                <span>Item</span>
+                <span className="text-right">Backorder Qty</span>
+              </div>
+              {backordered.map(li => (
+                <div key={li.idx} className="flex items-center justify-between bg-orange-50 border border-orange-100 rounded-xl px-4 py-2.5">
+                  <p className="text-sm text-slate-800 font-medium truncate">{li.description || `Item ${li.idx + 1}`}</p>
+                  <span className="text-sm font-bold text-orange-700 ml-4 flex-shrink-0">{li.backorderQty}</span>
+                </div>
+              ))}
+
+              {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
+            </div>
+
+            <div className="px-6 pb-6 flex gap-3">
+              <button
+                onClick={() => { onSaved(); }}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors">
+                No, Close
+              </button>
+              <button
+                onClick={handleCreateBackorderPO}
+                disabled={boSaving}
                 className="flex-1 py-2.5 rounded-xl bg-orange-600 text-white text-sm font-semibold hover:bg-orange-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
-                {saving
-                  ? <><div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Saving…</>
-                  : <><Package size={14} /> Post Receipt</>
+                {boSaving
+                  ? <><div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Creating…</>
+                  : <><ArrowRight size={14} /> Yes, Create Backorder PO</>
                 }
               </button>
-            )}
+            </div>
+          </>
+        )}
+
+        {/* ── Step 3: Backorder created ── */}
+        {step === "backorder-done" && (
+          <div className="px-6 py-8 flex flex-col items-center gap-4 text-center">
+            <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center">
+              <CheckCircle2 size={28} className="text-emerald-500" />
+            </div>
+            <div>
+              <h3 className="font-black text-slate-800 text-lg">Backorder PO Created</h3>
+              <p className="text-slate-500 text-sm mt-1">
+                New PO <span className="font-mono font-bold text-orange-700">{boPoRef}</span> is now in your PO list as a draft, linked to <span className="font-mono text-slate-600">{poRef}</span>.
+              </p>
+              <p className="text-xs text-slate-400 mt-2">Search by either PO number to find them together.</p>
+            </div>
+            <button
+              onClick={onClose}
+              className="mt-2 px-6 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors">
+              Close
+            </button>
           </div>
-        </form>
+        )}
       </div>
     </div>
   );

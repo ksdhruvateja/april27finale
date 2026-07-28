@@ -16,6 +16,8 @@ export const purchaseOrdersTable = pgTable("purchase_orders", {
   internalNote: text("internal_note"),
   expectedDate: timestamp("expected_date", { withTimezone: true }),
   receivedItems: jsonb("received_items").notNull().default([]),
+  parentPoId: integer("parent_po_id"),   // set on backorder POs — links to the original PO
+  backorderSeq: integer("backorder_seq"), // 1 = first backorder, 2 = second, etc.
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

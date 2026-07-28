@@ -29,6 +29,7 @@ const PurchaseOrderLineItem = z.object({
 const CreatePurchaseOrderPayload = z.object({
   vendorId: z.number(),
   sourceInvoiceId: z.number().nullish(),
+  parentPoId: z.number().nullish(),     // set when this PO is a backorder of another
   status: PurchaseOrderStatus.optional(),
   lineItems: z.array(PurchaseOrderLineItem),
   notes: z.string().nullish(),
@@ -109,10 +110,22 @@ router.post("/purchase-orders", async (req, res): Promise<void> => {
       .where(eq(purchaseOrdersTable.sourceInvoiceId, parsed.data.sourceInvoiceId));
     poSequence = existing.length + 1;
   }
+
+  // Backorder: count existing backorders of the same parent to get the next seq
+  let backorderSeq: number | null = null;
+  if (parsed.data.parentPoId) {
+    const existingBackorders = await db.select({ id: purchaseOrdersTable.id })
+      .from(purchaseOrdersTable)
+      .where(eq(purchaseOrdersTable.parentPoId, parsed.data.parentPoId));
+    backorderSeq = existingBackorders.length + 1;
+  }
+
   const [po] = await db.insert(purchaseOrdersTable).values({
     vendorId: parsed.data.vendorId,
     sourceInvoiceId: parsed.data.sourceInvoiceId ?? null,
     poSequence,
+    parentPoId: parsed.data.parentPoId ?? null,
+    backorderSeq,
     status: parsed.data.status ?? "draft",
     lineItems: parsed.data.lineItems,
     receivedItems: [],
@@ -187,6 +200,21 @@ router.post("/purchase-orders/:id/receive", async (req, res): Promise<void> => {
   // Merge: build a map from lineIndex → total received so far
   const receivedMap = new Map<number, number>();
   for (const r of existingReceived) receivedMap.set(r.lineIndex, r.receivedQty);
+
+  // ─── Over-receive guard ───────────────────────────────────────────────────
+  // Reject the whole receipt if any line would be set above the ordered quantity.
+  // The client sends *cumulative* received qty; we compare against ordered.
+  for (const item of parsed.data.items) {
+    const { lineIndex, qty } = item;
+    if (lineIndex < 0 || lineIndex >= lineItems.length) continue;
+    const orderedQty = Number(lineItems[lineIndex]?.quantity ?? 0);
+    if (qty > orderedQty) {
+      res.status(400).json({
+        error: `Over-receive rejected: "${lineItems[lineIndex]?.description || `Line ${lineIndex + 1}`}" — ordered ${orderedQty}, cannot mark ${qty} total as received`,
+      });
+      return;
+    }
+  }
 
   const newlyReceived: Array<{ lineIndex: number; qty: number; productId?: number }> = [];
   for (const item of parsed.data.items) {
