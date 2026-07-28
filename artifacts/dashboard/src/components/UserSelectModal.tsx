@@ -42,7 +42,7 @@ export default function UserSelectModal() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        if (email.trim().toLowerCase() === FALLBACK_DEV_EMAIL && password === FALLBACK_DEV_PASSWORD) {
+        if (email.trim().toLowerCase() === FALLBACK_DEV_EMAIL && password.trim() === FALLBACK_DEV_PASSWORD) {
           const user: CurrentUser = {
             id: 0,
             email: FALLBACK_DEV_EMAIL,
@@ -140,7 +140,7 @@ export default function UserSelectModal() {
               />
               <input
                 type={showPw ? "text" : "password"}
-                autoComplete="current-password"
+                autoComplete="off"
                 placeholder="••••••••"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
