@@ -44,27 +44,45 @@ const ROLE_TEXT: Record<string, string> = {
 };
 
 const ALL_MODULES = [
-  { path: "/",               label: "Dashboard",       group: "MAIN"       },
-  { path: "/customers",      label: "Customers",       group: "SALES"      },
-  { path: "/quotes",         label: "Quotes",          group: "SALES"      },
-  { path: "/invoices",       label: "Invoices",        group: "SALES"      },
-  { path: "/sales-leads",    label: "Sales Leads",     group: "SALES"      },
-  { path: "/vendors",        label: "Vendors",         group: "PURCHASING" },
-  { path: "/purchase-orders",label: "Purchase Orders", group: "PURCHASING" },
-  { path: "/bills",          label: "Bills",           group: "PURCHASING" },
-  { path: "/products",       label: "Products",        group: "INVENTORY"  },
-  { path: "/shipments",      label: "Shipments",       group: "INVENTORY"  },
-  { path: "/tax-rates",      label: "Tax Rates",       group: "FINANCE"    },
-  { path: "/accounting",     label: "Accounting",      group: "FINANCE"    },
-  { path: "/banking",        label: "Banking",         group: "FINANCE"    },
+  { path: "/",                label: "Dashboard",         group: "MAIN"       },
+  { path: "/auctions",        label: "Auctions",          group: "MAIN"       },
+  { path: "/tickets",         label: "Tickets",           group: "MAIN"       },
+  { path: "/history",         label: "History",           group: "MAIN"       },
+  { path: "/documents",       label: "Documents",         group: "MAIN"       },
+  { path: "/customers",       label: "Customers",         group: "SALES"      },
+  { path: "/quotes",          label: "Quotes",            group: "SALES"      },
+  { path: "/invoices",        label: "Invoices",          group: "SALES"      },
+  { path: "/walk-in",         label: "Walk-in Sale",      group: "SALES"      },
+  { path: "/sales-leads",     label: "Sales Leads",       group: "SALES"      },
+  { path: "/returns-refunds", label: "Returns & Refunds", group: "SALES"      },
+  { path: "/vendors",         label: "Vendors",           group: "PURCHASING" },
+  { path: "/purchase-orders", label: "Purchase Orders",   group: "PURCHASING" },
+  { path: "/bills",           label: "Bills",             group: "PURCHASING" },
+  { path: "/products",        label: "Products",          group: "INVENTORY"  },
+  { path: "/shipments",       label: "Shipments",         group: "INVENTORY"  },
+  { path: "/tax-rates",       label: "Tax Rates",         group: "FINANCE"    },
+  { path: "/accounting",      label: "Accounting",        group: "FINANCE"    },
+  { path: "/banking",         label: "Banking",           group: "FINANCE"    },
+  { path: "/users",           label: "Users",             group: "ADMIN"      },
+  { path: "/settings",        label: "Settings",          group: "ADMIN"      },
 ];
 
-const MODULE_GROUPS = ["MAIN", "SALES", "PURCHASING", "INVENTORY", "FINANCE"] as const;
+const MODULE_GROUPS = ["MAIN", "SALES", "PURCHASING", "INVENTORY", "FINANCE", "ADMIN"] as const;
 
 const DEFAULT_CUSTOM: CustomPermissions = {
   allowedPaths: ["/", "/purchase-orders", "/shipments"],
+  moduleEditPaths: ["/", "/purchase-orders", "/shipments"],
   readOnly: false,
   hidePrices: false,
+};
+
+const GROUP_COLORS: Record<string, string> = {
+  MAIN:       "#6366f1",
+  SALES:      "#10b981",
+  PURCHASING: "#f59e0b",
+  INVENTORY:  "#3b82f6",
+  FINANCE:    "#8b5cf6",
+  ADMIN:      "#ef4444",
 };
 
 // ─── Custom Permission Picker ─────────────────────────────────────────────────
@@ -75,93 +93,138 @@ function CustomPermPicker({
   value: CustomPermissions;
   onChange: (v: CustomPermissions) => void;
 }) {
-  const toggle = (path: string) => {
-    const has = value.allowedPaths.includes(path);
+  const hasView = (path: string) => value.allowedPaths.includes(path);
+  const hasEdit = (path: string) => {
+    if (!hasView(path)) return false;
+    const mep = value.moduleEditPaths;
+    if (mep !== undefined) return mep.includes(path);
+    return !value.readOnly;
+  };
+
+  const toggleView = (path: string) => {
+    const currently = hasView(path);
+    if (currently) {
+      onChange({
+        ...value,
+        allowedPaths: value.allowedPaths.filter(p => p !== path),
+        moduleEditPaths: (value.moduleEditPaths ?? []).filter(p => p !== path),
+      });
+    } else {
+      const mep = value.moduleEditPaths ?? value.allowedPaths.slice(); // init if needed
+      onChange({
+        ...value,
+        allowedPaths: [...value.allowedPaths, path],
+        moduleEditPaths: mep, // don't auto-grant edit
+      });
+    }
+  };
+
+  const toggleEdit = (path: string) => {
+    if (!hasView(path)) return;
+    const mep = value.moduleEditPaths ?? value.allowedPaths.slice();
+    const currentlyEdit = mep.includes(path);
     onChange({
       ...value,
-      allowedPaths: has
-        ? value.allowedPaths.filter(p => p !== path)
-        : [...value.allowedPaths, path],
+      moduleEditPaths: currentlyEdit ? mep.filter(p => p !== path) : [...mep, path],
     });
   };
 
-  const toggleGroup = (group: string) => {
+  const toggleGroupView = (group: string) => {
     const groupPaths = ALL_MODULES.filter(m => m.group === group).map(m => m.path);
-    const allOn = groupPaths.every(p => value.allowedPaths.includes(p));
+    const allOn = groupPaths.every(p => hasView(p));
     if (allOn) {
-      onChange({ ...value, allowedPaths: value.allowedPaths.filter(p => !groupPaths.includes(p)) });
+      const mep = (value.moduleEditPaths ?? []).filter(p => !groupPaths.includes(p));
+      onChange({ ...value, allowedPaths: value.allowedPaths.filter(p => !groupPaths.includes(p)), moduleEditPaths: mep });
     } else {
       const merged = [...new Set([...value.allowedPaths, ...groupPaths])];
       onChange({ ...value, allowedPaths: merged });
     }
   };
 
+  const grantGroupEdit = (group: string, grant: boolean) => {
+    const groupPaths = ALL_MODULES.filter(m => m.group === group && hasView(m.path)).map(m => m.path);
+    const mep = value.moduleEditPaths ?? [];
+    if (grant) {
+      onChange({ ...value, moduleEditPaths: [...new Set([...mep, ...groupPaths])] });
+    } else {
+      onChange({ ...value, moduleEditPaths: mep.filter(p => !groupPaths.includes(p)) });
+    }
+  };
+
   return (
-    <div
-      className="rounded-xl p-4 mt-2"
-      style={{ background: "rgba(59,130,246,0.07)", border: "1px solid rgba(59,130,246,0.20)" }}
-    >
+    <div className="rounded-xl p-4 mt-2" style={{ background: "rgba(59,130,246,0.07)", border: "1px solid rgba(59,130,246,0.20)" }}>
       <div className="flex items-center gap-2 mb-3">
         <Settings2 size={13} style={{ color: "#2563eb" }} />
-        <span className="text-[12px] font-black uppercase tracking-wider" style={{ color: "#2563eb" }}>
-          Module Access
-        </span>
+        <span className="text-[12px] font-black uppercase tracking-wider" style={{ color: "#2563eb" }}>Module Permissions</span>
+        <span className="ml-auto text-[10px] text-slate-400 font-semibold">Access · View Only · View &amp; Edit</span>
       </div>
 
-      {/* Module checkboxes grouped */}
-      <div className="flex flex-col gap-3 mb-4">
+      <div className="flex flex-col gap-4 mb-4">
         {MODULE_GROUPS.map(group => {
           const mods = ALL_MODULES.filter(m => m.group === group);
-          const allOn = mods.every(m => value.allowedPaths.includes(m.path));
-          const someOn = mods.some(m => value.allowedPaths.includes(m.path));
+          const allViewOn = mods.every(m => hasView(m.path));
+          const someViewOn = mods.some(m => hasView(m.path));
+          const viewedMods = mods.filter(m => hasView(m.path));
+          const allEditOn = viewedMods.length > 0 && viewedMods.every(m => hasEdit(m.path));
+          const groupColor = GROUP_COLORS[group] ?? "#6366f1";
+
           return (
             <div key={group}>
-              <button
-                type="button"
-                onClick={() => toggleGroup(group)}
-                className="flex items-center gap-2 mb-1.5 w-full text-left"
-              >
-                <div
-                  className="w-3.5 h-3.5 rounded flex items-center justify-center flex-shrink-0"
-                  style={{
-                    background: allOn ? "#2563eb" : someOn ? "rgba(37,99,235,0.35)" : "rgba(148,163,184,0.22)",
-                    border: allOn ? "none" : "1px solid rgba(148,163,184,0.35)",
-                  }}
-                >
-                  {allOn && <Check size={9} color="#fff" strokeWidth={3} />}
-                  {!allOn && someOn && <div className="w-1.5 h-0.5 rounded-full" style={{ background: "#2563eb" }} />}
-                </div>
-                <span className="text-[10px] font-black tracking-widest uppercase" style={{ color: "rgba(71,85,105,0.75)" }}>
-                  {group}
-                </span>
-              </button>
-              <div className="grid grid-cols-2 gap-1.5 pl-5">
+              {/* Group header */}
+              <div className="flex items-center gap-2 mb-2">
+                <button type="button" onClick={() => toggleGroupView(group)} className="flex items-center gap-1.5">
+                  <div className="w-3.5 h-3.5 rounded flex items-center justify-center flex-shrink-0"
+                    style={{ background: allViewOn ? groupColor : someViewOn ? `${groupColor}55` : "rgba(148,163,184,0.22)", border: allViewOn ? "none" : "1px solid rgba(148,163,184,0.35)" }}>
+                    {allViewOn && <Check size={9} color="#fff" strokeWidth={3} />}
+                    {!allViewOn && someViewOn && <div className="w-1.5 h-0.5 rounded-full" style={{ background: groupColor }} />}
+                  </div>
+                  <span className="text-[10px] font-black tracking-widest uppercase" style={{ color: "rgba(71,85,105,0.8)" }}>{group}</span>
+                </button>
+                {viewedMods.length > 0 && (
+                  <div className="ml-auto flex items-center gap-1">
+                    <span className="text-[9px] text-slate-400 font-semibold">All edit:</span>
+                    <button type="button" onClick={() => grantGroupEdit(group, !allEditOn)}
+                      className="px-2 py-0.5 rounded text-[9px] font-bold transition-colors"
+                      style={{ background: allEditOn ? `${groupColor}22` : "rgba(148,163,184,0.12)", color: allEditOn ? groupColor : "#94a3b8", border: `1px solid ${allEditOn ? `${groupColor}44` : "rgba(148,163,184,0.25)"}` }}>
+                      {allEditOn ? "✓ Edit all" : "View only"}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Module rows */}
+              <div className="flex flex-col gap-1 pl-5">
                 {mods.map(m => {
-                  const on = value.allowedPaths.includes(m.path);
+                  const viewed = hasView(m.path);
+                  const editable = hasEdit(m.path);
                   return (
-                    <button
-                      key={m.path}
-                      type="button"
-                      onClick={() => toggle(m.path)}
-                      className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left transition-colors"
-                      style={{
-                        background: on ? "rgba(37,99,235,0.12)" : "rgba(148,163,184,0.08)",
-                        border: on ? "1px solid rgba(37,99,235,0.25)" : "1px solid rgba(148,163,184,0.20)",
-                      }}
-                    >
-                      <div
-                        className="w-3 h-3 rounded flex items-center justify-center flex-shrink-0"
-                        style={{
-                          background: on ? "#2563eb" : "rgba(148,163,184,0.18)",
-                          border: on ? "none" : "1px solid rgba(148,163,184,0.28)",
-                        }}
-                      >
-                        {on && <Check size={8} color="#fff" strokeWidth={3} />}
-                      </div>
-                      <span className="text-[11px] font-semibold truncate" style={{ color: on ? "#1e3a8a" : "rgba(71,85,105,0.85)" }}>
+                    <div key={m.path} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg transition-colors"
+                      style={{ background: viewed ? `${groupColor}10` : "rgba(148,163,184,0.06)", border: `1px solid ${viewed ? `${groupColor}25` : "rgba(148,163,184,0.18)"}` }}>
+                      {/* View toggle (checkbox) */}
+                      <button type="button" onClick={() => toggleView(m.path)}
+                        className="w-3.5 h-3.5 rounded flex items-center justify-center flex-shrink-0"
+                        style={{ background: viewed ? groupColor : "rgba(148,163,184,0.18)", border: viewed ? "none" : "1px solid rgba(148,163,184,0.28)" }}>
+                        {viewed && <Check size={8} color="#fff" strokeWidth={3} />}
+                      </button>
+                      <span className="text-[11px] font-semibold flex-1 truncate" style={{ color: viewed ? "#1e293b" : "rgba(71,85,105,0.5)" }}>
                         {m.label}
                       </span>
-                    </button>
+                      {/* View/Edit toggle — only visible if module has view access */}
+                      {viewed && (
+                        <div className="flex items-center rounded-md overflow-hidden flex-shrink-0" style={{ border: "1px solid rgba(148,163,184,0.25)" }}>
+                          <button type="button" onClick={() => editable && toggleEdit(m.path)}
+                            className="px-2 py-0.5 text-[9px] font-bold transition-colors"
+                            style={{ background: !editable ? "#e2e8f0" : "transparent", color: !editable ? "#475569" : "#94a3b8" }}>
+                            View
+                          </button>
+                          <button type="button" onClick={() => !editable && toggleEdit(m.path)}
+                            className="px-2 py-0.5 text-[9px] font-bold transition-colors"
+                            style={{ background: editable ? groupColor : "transparent", color: editable ? "#fff" : "#94a3b8" }}>
+                            Edit
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -170,60 +233,21 @@ function CustomPermPicker({
         })}
       </div>
 
-      {/* Extra options */}
-      <div
-        className="flex flex-col gap-2 pt-3"
-        style={{ borderTop: "1px solid rgba(148,163,184,0.20)" }}
-      >
-        <label className="text-[10px] font-black uppercase tracking-wider mb-1" style={{ color: "rgba(71,85,105,0.75)" }}>
-          Restrictions
-        </label>
-        {[
-          { key: "readOnly",   label: "Read-only mode",  desc: "Cannot create, edit, or delete anything" },
-          { key: "hidePrices", label: "Hide prices",     desc: "Prices are hidden across all modules"    },
-        ].map(opt => {
-          const on = value[opt.key as keyof CustomPermissions] as boolean;
-          return (
-            <button
-              key={opt.key}
-              type="button"
-              onClick={() => onChange({ ...value, [opt.key]: !on })}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors"
-              style={{
-                background: on ? "rgba(239,68,68,0.10)" : "rgba(255,255,255,0.04)",
-                border: on ? "1px solid rgba(239,68,68,0.25)" : "1px solid rgba(148,163,184,0.20)",
-              }}
-            >
-              <div
-                className="w-8 h-4.5 rounded-full flex items-center transition-all flex-shrink-0 relative"
-                style={{
-                  background: on ? "#ef4444" : "rgba(255,255,255,0.15)",
-                  width: 32,
-                  height: 18,
-                }}
-              >
-                <div
-                  className="absolute rounded-full transition-all"
-                  style={{
-                    width: 12,
-                    height: 12,
-                    background: "#ffffff",
-                    left: on ? 16 : 4,
-                    top: 3,
-                  }}
-                />
-              </div>
-              <div>
-                <div className="text-[12px] font-bold" style={{ color: on ? "#b91c1c" : "#1e293b" }}>
-                  {opt.label}
-                </div>
-                <div className="text-[10px] font-semibold" style={{ color: "rgba(71,85,105,0.75)" }}>
-                  {opt.desc}
-                </div>
-              </div>
-            </button>
-          );
-        })}
+      {/* Global restrictions */}
+      <div className="flex flex-col gap-2 pt-3" style={{ borderTop: "1px solid rgba(148,163,184,0.20)" }}>
+        <label className="text-[10px] font-black uppercase tracking-wider mb-1" style={{ color: "rgba(71,85,105,0.75)" }}>Global Restrictions</label>
+        <button type="button" onClick={() => onChange({ ...value, hidePrices: !value.hidePrices })}
+          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors"
+          style={{ background: value.hidePrices ? "rgba(239,68,68,0.10)" : "rgba(255,255,255,0.04)", border: value.hidePrices ? "1px solid rgba(239,68,68,0.25)" : "1px solid rgba(148,163,184,0.20)" }}>
+          <div className="relative flex-shrink-0" style={{ width: 32, height: 18 }}>
+            <div className="absolute inset-0 rounded-full" style={{ background: value.hidePrices ? "#ef4444" : "rgba(148,163,184,0.3)" }} />
+            <div className="absolute rounded-full" style={{ width: 12, height: 12, background: "#fff", top: 3, left: value.hidePrices ? 16 : 4, transition: "left 0.15s" }} />
+          </div>
+          <div>
+            <div className="text-[12px] font-bold" style={{ color: value.hidePrices ? "#b91c1c" : "#1e293b" }}>Hide prices</div>
+            <div className="text-[10px] font-semibold" style={{ color: "rgba(71,85,105,0.75)" }}>Prices are hidden across all modules</div>
+          </div>
+        </button>
       </div>
     </div>
   );

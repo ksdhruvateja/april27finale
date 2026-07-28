@@ -1043,8 +1043,8 @@ export default function Products() {
   return (
     <Layout>
       <Header title="Products & Inventory" subtitle={`${products?.length ?? 0} products`} />
-      <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 flex flex-col gap-4 bg-[hsl(220_25%_97%)]">
-        <div className="flex justify-between items-center gap-3">
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden px-5 py-4 gap-4 bg-[hsl(220_25%_97%)]">
+        <div className="flex-shrink-0 flex justify-between items-center gap-3">
           <div className="relative flex-1 max-w-md flex items-center gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
@@ -1098,7 +1098,7 @@ export default function Products() {
 
         {/* ── PRODUCT INSIGHTS PANEL ───────────────────────────────── */}
         {showInsights && (
-          <div className="glass-card p-5 flex flex-col gap-4">
+          <div className="flex-shrink-0 glass-card p-5 flex flex-col gap-4">
             {/* Insight controls */}
             <div className="flex flex-wrap items-center gap-3">
               {/* View toggle */}
@@ -1563,15 +1563,16 @@ export default function Products() {
           </div>
         )}
 
-        <div className="glass-card overflow-hidden">
+        <div className="glass-card flex-1 min-h-0 flex flex-col overflow-hidden">
           {isLoading ? (
             <div className="p-10 flex justify-center"><div className="animate-spin w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full" /></div>
           ) : filtered?.length === 0 ? (
             <div className="p-10 text-center text-slate-500 text-sm">No products found.</div>
           ) : (
+            <div className="flex-1 overflow-y-auto min-h-0">
             <table className="w-full text-sm">
-              <thead>
-                <tr style={{ background: "rgba(239,246,255,0.95)" }}>
+              <thead className="sticky top-0 z-10">
+                <tr style={{ background: "rgba(239,246,255,0.97)" }}>
                   <th className="px-4 py-3 text-left font-semibold text-[11px] uppercase tracking-wider" style={{ background: "rgba(59,130,246,0.13)", color: "#1d4ed8" }}>SKU</th>
                   <th className="px-4 py-3 text-left font-semibold text-[11px] uppercase tracking-wider" style={{ background: "rgba(59,130,246,0.13)", color: "#1d4ed8" }}>Name</th>
                   <th className="px-4 py-3 text-left font-semibold text-[11px] uppercase tracking-wider" style={{ background: "rgba(59,130,246,0.13)", color: "#1d4ed8" }}>Description</th>
@@ -1780,6 +1781,7 @@ export default function Products() {
                 })}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </div>

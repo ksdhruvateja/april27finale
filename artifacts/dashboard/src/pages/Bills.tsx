@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { logAudit } from "@/lib/auditLog";
+import { useRole } from "@/context/RoleContext";
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
 import { useListBills, useDeleteBill, getListBillsQueryKey } from "@workspace/api-client-react";
@@ -146,10 +148,17 @@ export default function Bills() {
   const selectedTotal = selectedBills.reduce((s, b) => s + b.total, 0);
   const allSelected   = pendingBills.length > 0 && selectedIds.size === pendingBills.length;
 
+  const { currentUser } = useRole();
+  const auditUser = () => ({ name: currentUser?.name ?? "", email: currentUser?.email ?? "", role: currentUser?.role ?? "unknown" });
+
   const handleDelete = (id: number) => {
+    const b = (bills as any[])?.find((x: any) => x.id === id);
     if (confirm("Delete this bill?")) {
       deleteBill.mutate({ id }, {
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: getListBillsQueryKey() })
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getListBillsQueryKey() });
+          logAudit({ user: auditUser(), action: "deleted", entityType: "bill", entityId: String(id), entityRef: `BILL-${String(id).padStart(4,"0")}`, description: `Bill deleted${b?.vendorName ? `: ${b.vendorName}` : ""}` });
+        }
       });
     }
   };

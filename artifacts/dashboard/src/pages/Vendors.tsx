@@ -1,5 +1,7 @@
 import { useState, useMemo, Fragment } from "react";
 import { useDebounce } from "@/hooks/useDebounce";
+import { logAudit } from "@/lib/auditLog";
+import { useRole } from "@/context/RoleContext";
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
 import { useListVendors, useDeleteVendor, getListVendorsQueryKey, useListBills, useListPurchaseOrders } from "@workspace/api-client-react";
@@ -37,6 +39,8 @@ export default function Vendors() {
   const { data: bills } = useListBills();
   const { data: purchaseOrders } = useListPurchaseOrders();
   const deleteVendor = useDeleteVendor();
+  const { currentUser } = useRole();
+  const auditUser = () => ({ name: currentUser?.name ?? "", email: currentUser?.email ?? "", role: currentUser?.role ?? "unknown" });
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
@@ -117,9 +121,13 @@ export default function Vendors() {
   }, [owedByVendor, vendors]);
 
   const handleDelete = (id: number) => {
+    const v = (vendors as any[])?.find((x: any) => x.id === id);
     if (confirm("Delete this vendor?")) {
       deleteVendor.mutate({ id }, {
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: getListVendorsQueryKey() })
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getListVendorsQueryKey() });
+          logAudit({ user: auditUser(), action: "deleted", entityType: "vendor", entityId: String(id), entityRef: v ? (v.company || v.name) : `#${id}`, description: `Vendor deleted: ${v ? (v.company || v.name) : id}` });
+        }
       });
     }
   };
@@ -131,10 +139,10 @@ export default function Vendors() {
   return (
     <Layout>
       <Header title="Vendors" subtitle={`${vendors?.length ?? 0} total`} />
-      <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 flex flex-col gap-4 bg-gradient-to-br from-[#eef6ff] via-[#f8fbff] to-[#edf4ff]">
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden px-5 py-4 gap-4 bg-gradient-to-br from-[#eef6ff] via-[#f8fbff] to-[#edf4ff]">
 
         {/* Toolbar */}
-        <div className="flex flex-wrap justify-between items-center gap-3">
+        <div className="flex-shrink-0 flex flex-wrap justify-between items-center gap-3">
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
@@ -179,7 +187,7 @@ export default function Vendors() {
 
         {/* Analytics panel */}
         {showCharts && (
-          <div className="glass-card p-5 flex flex-col gap-4">
+          <div className="flex-shrink-0 glass-card p-5 flex flex-col gap-4">
             <div className="flex items-center gap-3 flex-wrap">
               <div className="flex rounded-xl overflow-hidden border border-slate-200 shadow-sm">
                 {([
@@ -295,15 +303,16 @@ export default function Vendors() {
         )}
 
         {/* Vendor Table */}
-        <div className="glass-card overflow-hidden border border-blue-100/70">
+        <div className="glass-card flex-1 min-h-0 flex flex-col overflow-hidden border border-blue-100/70">
           {isLoading ? (
             <div className="p-10 flex justify-center"><div className="animate-spin w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full" /></div>
           ) : filtered?.length === 0 ? (
             <div className="p-10 text-center text-slate-500 text-sm">No vendors found.</div>
           ) : (
+            <div className="flex-1 overflow-y-auto min-h-0">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-blue-100 bg-blue-50/70">
+              <thead className="sticky top-0 z-10">
+                <tr className="border-b border-blue-100 bg-blue-50/95">
                   <th className="px-5 py-3 text-left text-blue-700 font-medium text-[11px] uppercase tracking-wider">Name</th>
                   <th className="px-5 py-3 text-left text-blue-700 font-medium text-[11px] uppercase tracking-wider">Email</th>
                   <th className="px-5 py-3 text-left text-blue-700 font-medium text-[11px] uppercase tracking-wider">Phone</th>
@@ -438,6 +447,7 @@ export default function Vendors() {
                 })}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </div>

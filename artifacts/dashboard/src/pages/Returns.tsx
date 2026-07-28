@@ -1,5 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { logAudit } from "@/lib/auditLog";
+import { useRole } from "@/context/RoleContext";
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -637,6 +639,8 @@ function ReturnModal({
 /* ── MAIN PAGE ───────────────────────────────────────────────── */
 export default function Returns() {
   const qc = useQueryClient();
+  const { currentUser } = useRole();
+  const auditUser = () => ({ name: currentUser?.name ?? "", email: currentUser?.email ?? "", role: currentUser?.role ?? "unknown" });
   const { data: customers }   = useListCustomers();
   const { data: invoices }    = useListInvoices();
   const { data: records, isLoading } = useQuery<ReturnRecord[]>({
@@ -656,7 +660,11 @@ export default function Returns() {
 
   const deleteRecord = useMutation({
     mutationFn: (id: number) => apiFetch(`/api/returns-refunds/${id}`, { method: "DELETE" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["returns-refunds"] }),
+    onSuccess: (_: any, id: number) => {
+      const r = records?.find(x => x.id === id);
+      qc.invalidateQueries({ queryKey: ["returns-refunds"] });
+      logAudit({ user: auditUser(), action: "deleted", entityType: "other", entityId: String(id), entityRef: r ? `RET-${String(id).padStart(4,"0")}` : `#${id}`, description: `Return/Refund deleted${r ? ` (${r.customerName})` : ""}` });
+    },
   });
 
   const updateStatus = useMutation({
@@ -667,6 +675,7 @@ export default function Returns() {
       if (CREDIT_STATUSES.has(saved.status)) {
         setCreditMemoRecord(saved);
       }
+      logAudit({ user: auditUser(), action: "status_change", entityType: "other", entityId: String(saved.id), entityRef: `RET-${String(saved.id).padStart(4,"0")}`, description: `Return #${saved.id} status → ${saved.status}${saved.customerName ? ` (${saved.customerName})` : ""}` });
     },
   });
 
@@ -743,10 +752,10 @@ export default function Returns() {
   return (
     <Layout>
       <Header title="Returns & Refunds" subtitle="Track product returns and customer refund requests" />
-      <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 flex flex-col gap-4 bg-[hsl(220_25%_97%)]">
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden px-5 py-4 gap-4 bg-[hsl(220_25%_97%)]">
 
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="flex-shrink-0 grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
             { label: "Pending Review", value: stats.pending, icon: Clock, color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-100" },
             { label: "Approved", value: stats.approved, icon: CheckCircle2, color: "text-blue-600", bg: "bg-blue-50", border: "border-blue-100" },
@@ -766,7 +775,7 @@ export default function Returns() {
         </div>
 
         {/* Toolbar */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex-shrink-0 flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[200px] max-w-md">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             <input
@@ -800,7 +809,7 @@ export default function Returns() {
 
         {/* ── Analytics Panel ─────────────────────────────── */}
         {showCharts && (
-          <div className="glass-card p-5 flex flex-col gap-4">
+          <div className="flex-shrink-0 glass-card p-5 flex flex-col gap-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
                 { label: "Total Records", value: String(records?.length??0), color: "text-slate-700" },
@@ -906,7 +915,7 @@ export default function Returns() {
 
         {/* Filter panel */}
         {showFilters && (
-          <div className="glass-card p-4 flex flex-wrap gap-3 items-end">
+          <div className="flex-shrink-0 glass-card p-4 flex flex-wrap gap-3 items-end">
             <div>
               <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1 block">Type</label>
               <select value={filterType} onChange={e => setFilterType(e.target.value)}
@@ -933,7 +942,7 @@ export default function Returns() {
         )}
 
         {/* Table */}
-        <div className="glass-card overflow-hidden">
+        <div className="glass-card flex-1 min-h-0 flex flex-col overflow-hidden">
           {isLoading ? (
             <div className="p-10 flex justify-center">
               <div className="animate-spin w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full" />
@@ -947,9 +956,10 @@ export default function Returns() {
               <p className="text-slate-400 text-xs">Create a new record using the button above</p>
             </div>
           ) : (
+            <div className="flex-1 overflow-y-auto min-h-0">
             <table className="w-full text-sm">
-              <thead>
-                <tr style={{ background: "rgba(239,246,255,0.95)" }}>
+              <thead className="sticky top-0 z-10">
+                <tr style={{ background: "rgba(239,246,255,0.97)" }}>
                   {["#", "Type", "Customer", "Invoice", "Reason", "Status", "Credit Amt", "Method", "Date", ""].map(h => (
                     <th key={h} className={`px-4 py-3 text-[11px] font-semibold uppercase tracking-wider ${h === "Credit Amt" ? "text-right" : "text-left"}`}
                       style={{ background: "rgba(99,102,241,0.10)", color: "#4338ca" }}>
@@ -1048,6 +1058,7 @@ export default function Returns() {
                 })}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </div>

@@ -262,12 +262,8 @@ export default function Invoices() {
   };
 
   const openShipmentPreflight = (inv: InvoiceData) => {
-    const existingShips = (shipments ?? []).filter((s: any) => s.invoiceId === inv.id);
-    if (existingShips.length > 0) {
-      setDuplicateShipGuard({ inv, existingShips });
-    } else {
-      setShipmentPreflight(inv);
-    }
+    // Go directly to shipment creation (skip preflight dialog)
+    setShipmentInvoice(inv);
   };
 
   const auctionByInvoiceId = useMemo(() => {

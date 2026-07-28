@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { logAudit } from "@/lib/auditLog";
+import { useRole } from "@/context/RoleContext";
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
 import {
@@ -117,6 +119,8 @@ export default function SalesLeads() {
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editingLead, setEditingLead] = useState<SalesLead | null>(null);
+  const { currentUser } = useRole();
+  const auditUser = () => ({ name: currentUser?.name ?? "", email: currentUser?.email ?? "", role: currentUser?.role ?? "unknown" });
 
   const filtered = leads?.filter(l => {
     const s = search.toLowerCase();
@@ -129,9 +133,13 @@ export default function SalesLeads() {
   });
 
   const handleDelete = (id: number) => {
+    const lead = leads?.find(l => l.id === id);
     if (confirm("Delete this sales lead?")) {
       deleteLead.mutate(id, {
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: getListSalesLeadsQueryKey() }),
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getListSalesLeadsQueryKey() });
+          logAudit({ user: auditUser(), action: "deleted", entityType: "other", entityId: String(id), entityRef: lead ? `${lead.firstName} ${lead.lastName}` : `#${id}`, description: `Sales lead deleted: ${lead ? `${lead.firstName} ${lead.lastName}` : id}` });
+        },
       });
     }
   };
@@ -139,8 +147,8 @@ export default function SalesLeads() {
   return (
     <Layout>
       <Header title="Sales Leads" subtitle={`${leads?.length ?? 0} total`} />
-      <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 flex flex-col gap-4 bg-gradient-to-br from-[#eef6ff] via-[#f8fbff] to-[#edf4ff]">
-        <div className="flex justify-between items-center gap-3">
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden px-5 py-4 gap-4 bg-gradient-to-br from-[#eef6ff] via-[#f8fbff] to-[#edf4ff]">
+        <div className="flex-shrink-0 flex justify-between items-center gap-3">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
             <input
@@ -157,7 +165,7 @@ export default function SalesLeads() {
           </button>
         </div>
 
-        <div className="glass-card overflow-hidden border border-blue-100/70">
+        <div className="glass-card flex-1 min-h-0 flex flex-col overflow-hidden border border-blue-100/70">
           {isLoading ? (
             <div className="p-8 text-center text-slate-500 text-sm">Loading…</div>
           ) : !filtered?.length ? (
@@ -168,9 +176,10 @@ export default function SalesLeads() {
               </p>
             </div>
           ) : (
+            <div className="flex-1 overflow-y-auto min-h-0">
             <table className="w-full">
-              <thead>
-                <tr className="border-b border-blue-100 bg-blue-50/70">
+              <thead className="sticky top-0 z-10">
+                <tr className="border-b border-blue-100 bg-blue-50/95">
                   <th className="px-5 py-3 text-left text-blue-700 font-medium text-[11px] uppercase tracking-wider">Name</th>
                   <th className="px-5 py-3 text-left text-blue-700 font-medium text-[11px] uppercase tracking-wider">Email</th>
                   <th className="px-5 py-3 text-left text-blue-700 font-medium text-[11px] uppercase tracking-wider">Mobile</th>
@@ -229,6 +238,7 @@ export default function SalesLeads() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </div>
