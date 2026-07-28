@@ -718,36 +718,6 @@ export default function WalkIn() {
               )}
             </div>
 
-            {/* ── Payment method ── */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex-shrink-0">
-              <div className="flex items-center gap-2 mb-3">
-                <CreditCard size={14} className="text-indigo-500" />
-                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Payment Method</span>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {PAYMENT_OPTIONS.map(opt => {
-                  const Icon   = opt.icon;
-                  const active = payMethod === opt.value;
-                  return (
-                    <button key={opt.value} onClick={() => setPayMethod(opt.value)}
-                      className={`flex items-center gap-2.5 px-3 py-3 rounded-xl border text-left transition-all ${
-                        active
-                          ? opt.value === "cash"          ? "bg-emerald-50 border-emerald-300 text-emerald-700 shadow-sm"
-                          : opt.value === "card"          ? "bg-blue-50 border-blue-300 text-blue-700 shadow-sm"
-                          : opt.value === "bank_transfer" ? "bg-indigo-50 border-indigo-300 text-indigo-700 shadow-sm"
-                                                          : "bg-amber-50 border-amber-300 text-amber-700 shadow-sm"
-                          : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
-                      }`}
-                    >
-                      <Icon size={15} className="flex-shrink-0" />
-                      <span className="text-sm font-semibold">{opt.label}</span>
-                      {active && <CheckCircle2 size={13} className="ml-auto flex-shrink-0" />}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
             {/* ── Customer ── */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex-shrink-0">
               {/* Header row */}
@@ -965,6 +935,36 @@ export default function WalkIn() {
                   </button>
                 </div>
               )}
+            </div>
+
+            {/* ── Payment method ── */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex-shrink-0">
+              <div className="flex items-center gap-2 mb-3">
+                <CreditCard size={14} className="text-indigo-500" />
+                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Payment Method</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {PAYMENT_OPTIONS.map(opt => {
+                  const Icon   = opt.icon;
+                  const active = payMethod === opt.value;
+                  return (
+                    <button key={opt.value} onClick={() => setPayMethod(opt.value)}
+                      className={`flex items-center gap-2.5 px-3 py-3 rounded-xl border text-left transition-all ${
+                        active
+                          ? opt.value === "cash"          ? "bg-emerald-50 border-emerald-300 text-emerald-700 shadow-sm"
+                          : opt.value === "card"          ? "bg-blue-50 border-blue-300 text-blue-700 shadow-sm"
+                          : opt.value === "bank_transfer" ? "bg-indigo-50 border-indigo-300 text-indigo-700 shadow-sm"
+                                                          : "bg-amber-50 border-amber-300 text-amber-700 shadow-sm"
+                          : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
+                      }`}
+                    >
+                      <Icon size={15} className="flex-shrink-0" />
+                      <span className="text-sm font-semibold">{opt.label}</span>
+                      {active && <CheckCircle2 size={13} className="ml-auto flex-shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {/* ── Internal Note ── */}

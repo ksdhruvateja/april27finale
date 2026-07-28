@@ -3,7 +3,7 @@ import Header from "@/components/Header";
 import { useState, useEffect } from "react";
 import {
   Truck, Save, CheckCircle2, Eye, EyeOff, Loader2,
-  Plus, Trash2, Edit2, X, Check, FileText, MapPin
+  Plus, Trash2, Edit2, X, Check, FileText, MapPin, CreditCard
 } from "lucide-react";
 
 /* ── shared helpers ──────────────────────────────────────────────────── */
@@ -324,6 +324,160 @@ function CompanyAddressesSection() {
   );
 }
 
+/* ── Stripe Section ──────────────────────────────────────────────────── */
+function StripeSection() {
+  const [secretKey,      setSecretKey]      = useState("");
+  const [pubKey,         setPubKey]         = useState("");
+  const [maskedSecret,   setMaskedSecret]   = useState<string | null>(null);
+  const [savedPubKey,    setSavedPubKey]    = useState<string | null>(null);
+  const [showSecret,     setShowSecret]     = useState(false);
+  const [showPub,        setShowPub]        = useState(false);
+  const [saving,         setSaving]         = useState(false);
+  const [saved,          setSaved]          = useState(false);
+  const [isConfigured,   setIsConfigured]   = useState(false);
+
+  useEffect(() => {
+    fetch("/api/app-settings/stripe_secret_key")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.value) { setMaskedSecret(d.value); setIsConfigured(true); } });
+    fetch("/api/app-settings/stripe_publishable_key")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.value) setSavedPubKey(d.value); });
+  }, []);
+
+  const handleSave = async () => {
+    if (!secretKey.trim() && !pubKey.trim()) return;
+    setSaving(true);
+    try {
+      const ops: Promise<any>[] = [];
+      if (secretKey.trim()) {
+        ops.push(fetch("/api/app-settings/stripe_secret_key", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ value: secretKey.trim() }),
+        }));
+      }
+      if (pubKey.trim()) {
+        ops.push(fetch("/api/app-settings/stripe_publishable_key", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ value: pubKey.trim() }),
+        }));
+      }
+      await Promise.all(ops);
+      if (secretKey.trim()) {
+        setMaskedSecret(secretKey.slice(0, 6) + "••••••••" + secretKey.slice(-4));
+        setSecretKey("");
+        setIsConfigured(true);
+      }
+      if (pubKey.trim()) {
+        setSavedPubKey(pubKey.trim());
+        setPubKey("");
+      }
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } finally { setSaving(false); }
+  };
+
+  const handleClear = async () => {
+    if (!confirm("Remove Stripe keys? Payment processing via Stripe will be disabled.")) return;
+    await Promise.all([
+      fetch("/api/app-settings/stripe_secret_key",      { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value: "" }) }),
+      fetch("/api/app-settings/stripe_publishable_key", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value: "" }) }),
+    ]);
+    setMaskedSecret(null);
+    setSavedPubKey(null);
+    setIsConfigured(false);
+  };
+
+  const canSave = secretKey.trim() || pubKey.trim();
+
+  return (
+    <div className="glass-card p-6 max-w-2xl">
+      <div className="flex items-center gap-2 mb-1">
+        <CreditCard size={16} className="text-[hsl(224_50%_25%)]" />
+        <h2 className="text-slate-800 text-base font-bold">Stripe Payments</h2>
+        <span className={`ml-auto inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+          isConfigured
+            ? "bg-green-50 text-green-700 border-green-200"
+            : "bg-slate-100 text-slate-500 border-slate-200"
+        }`}>
+          {isConfigured ? "● Active" : "○ Not connected"}
+        </span>
+      </div>
+      <p className="text-slate-500 text-sm mb-5">
+        Connect Stripe to accept card payments on invoices and walk-in sales. Keys are stored securely.
+      </p>
+
+      {(maskedSecret || savedPubKey) && !secretKey && !pubKey && (
+        <div className="flex items-center justify-between p-3 mb-4 rounded-lg bg-green-50 border border-green-200">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={14} className="text-green-600 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-green-800">Stripe Connected</p>
+              {maskedSecret && <p className="text-xs text-green-700 font-mono mt-0.5">Secret: {maskedSecret}</p>}
+              {savedPubKey  && <p className="text-xs text-green-700 font-mono">Publishable: {savedPubKey.slice(0, 20)}…</p>}
+            </div>
+          </div>
+          <button onClick={handleClear} className="text-xs text-red-500 hover:text-red-700 font-semibold transition-colors flex-shrink-0">Remove</button>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-4">
+        {/* Secret Key */}
+        <div>
+          <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">
+            Secret Key <span className="text-slate-400 normal-case font-normal tracking-normal">(sk_live_… or sk_test_…)</span>
+          </label>
+          <div className="relative">
+            <input
+              type={showSecret ? "text" : "password"}
+              value={secretKey}
+              onChange={e => setSecretKey(e.target.value)}
+              placeholder={maskedSecret ? "Enter new key to replace…" : "sk_live_…"}
+              className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2.5 pr-10 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-400 transition-colors font-mono"
+            />
+            <button onClick={() => setShowSecret(v => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+              {showSecret ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
+        </div>
+
+        {/* Publishable Key */}
+        <div>
+          <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">
+            Publishable Key <span className="text-slate-400 normal-case font-normal tracking-normal">(pk_live_… or pk_test_…)</span>
+          </label>
+          <div className="relative">
+            <input
+              type={showPub ? "text" : "password"}
+              value={pubKey}
+              onChange={e => setPubKey(e.target.value)}
+              placeholder={savedPubKey ? "Enter new key to replace…" : "pk_live_…"}
+              className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2.5 pr-10 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-400 transition-colors font-mono"
+            />
+            <button onClick={() => setShowPub(v => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+              {showPub ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
+          <p className="text-xs text-slate-400 mt-1.5">Used in the browser to initialise Stripe.js for card collection.</p>
+        </div>
+
+        <button onClick={handleSave} disabled={!canSave || saving}
+          className="flex items-center gap-2 self-start px-4 py-2 bg-[hsl(224_50%_15%)] text-white text-sm font-semibold rounded-lg hover:bg-[hsl(224_50%_20%)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+          {saving
+            ? <><Loader2 size={14} className="animate-spin" /> Saving…</>
+            : saved
+            ? <><CheckCircle2 size={14} /> Saved!</>
+            : <><Save size={14} /> Save Keys</>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ── Shipping Section ───────────────────────────────────────────────── */
 function ShippingSection() {
   const [apiKey, setApiKey] = useState("");
@@ -480,7 +634,10 @@ export default function Settings() {
         {/* Integrations */}
         <div className="max-w-2xl">
           <h2 className="text-slate-600 text-xs font-bold uppercase tracking-wider mb-3 px-1">Integrations</h2>
-          <ShippingSection />
+          <div className="flex flex-col gap-4">
+            <StripeSection />
+            <ShippingSection />
+          </div>
         </div>
 
       </div>
