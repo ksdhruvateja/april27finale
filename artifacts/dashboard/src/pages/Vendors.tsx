@@ -388,10 +388,10 @@ export default function Vendors() {
                                           FRZPO-{po.id.toString().padStart(4, "0")}
                                         </span>
                                         <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border capitalize flex-shrink-0 ${PO_STATUS_MAP[po.status] ?? PO_STATUS_MAP.draft}`}>
-                                          {po.status}
+                                          {po.status?.replace(/_/g, ' ')}
                                         </span>
                                         {po.expectedDate && (
-                                          <span className="text-[10px] text-slate-400 flex-shrink-0">Due {formatDate(po.expectedDate)}</span>
+                                          <span className="text-[10px] text-slate-400 flex-shrink-0"><span className="font-medium mr-0.5">Promise:</span>{formatDate(po.expectedDate)}</span>
                                         )}
                                         <span className="ml-auto text-xs font-semibold text-slate-700 flex-shrink-0">{formatCurrency(Number(po.total ?? 0))}</span>
                                       </div>
