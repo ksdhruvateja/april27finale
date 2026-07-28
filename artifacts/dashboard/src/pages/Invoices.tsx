@@ -5,7 +5,7 @@ import Layout from "@/components/Layout";
 import Header from "@/components/Header";
 import InvoiceView from "@/components/InvoiceView";
 import InvoiceModal from "@/components/InvoiceModal";
-import { useListInvoices, useDeleteInvoice, usePayInvoice, useUpdateInvoice, getListInvoicesQueryKey, useListCustomers, useListPurchaseOrders, useListShipments } from "@workspace/api-client-react";
+import { useListInvoices, useDeleteInvoice, usePayInvoice, useUpdateInvoice, getListInvoicesQueryKey, useListCustomers, useListPurchaseOrders, useListShipments, useUpdateCustomer, getListCustomersQueryKey } from "@workspace/api-client-react";
 import { Search, Plus, MoreHorizontal, Edit, Trash2, CheckCircle, CheckCircle2, Eye, X, Truck, ShoppingCart, Hash, Link2, ChevronDown, Pencil, StickyNote, Mail, MessageSquare, Download, Calendar, ChevronRight, BarChart2, ChevronUp, TrendingUp, TrendingDown, Printer, Save, CreditCard, AlertCircle, FileText, Percent, Tag, ToggleLeft, ToggleRight } from "lucide-react";
 import { printShippingSlip } from "@/lib/print-slip";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, Legend, PieChart, Pie, ComposedChart, Line, Area } from "recharts";
@@ -101,6 +101,7 @@ export default function Invoices() {
   const deleteInvoice = useDeleteInvoice();
   const payInvoice = usePayInvoice();
   const updateInvoice = useUpdateInvoice();
+  const updateCustomer = useUpdateCustomer();
   const queryClient = useQueryClient();
   const [netTermsList, setNetTermsList] = useState<NetTerm[]>([]);
   useEffect(() => {
@@ -126,6 +127,7 @@ export default function Invoices() {
   const [payNote, setPayNote] = useState("");
   const [payDate, setPayDate] = useState<string>("");
   const [earlyDiscount, setEarlyDiscount] = useState<string>("");
+  const [netTermsOverride, setNetTermsOverride] = useState<string>("");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   /* ── Batch Pay ───────────────────────────────────────── */
@@ -338,6 +340,7 @@ export default function Invoices() {
     setPayNote("");
     setPayDate(new Date().toISOString().slice(0, 10));
     setEarlyDiscount("");
+    setNetTermsOverride("");
   };
 
   const toggleSelect = (id: number, e: React.MouseEvent) => {
@@ -521,13 +524,29 @@ export default function Invoices() {
     if (selectedMethod === "net_terms") {
       const inv = (invoices as any[])?.find(i => i.id === payDialog.id);
       const cust = (customers as any[])?.find(c => c.id === inv?.customerId);
-      const term = netTermsList.find(t => t.id === cust?.accountType);
+      // Use override if customer had no terms; fall back to existing accountType
+      const effectiveTermId = netTermsOverride || cust?.accountType || "";
+      const term = netTermsList.find(t => t.id === effectiveTermId);
       const days = term?.days ?? 30;
       const dueDate = new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
-      updateInvoice.mutate({
+
+      const applyInvoice = () => updateInvoice.mutate({
         id: payDialog.id,
-        data: { status: "sent", dueDate, paymentMethod: "net_terms", paymentNote: `Net terms: ${term?.label ?? cust?.accountType ?? "—"}` } as any,
+        data: { status: "sent", dueDate, paymentMethod: "net_terms", paymentNote: `Net terms: ${term?.label ?? effectiveTermId ?? "—"}` } as any,
       }, { onSuccess: invalidate });
+
+      // If override chosen, save it to the customer first
+      if (netTermsOverride && cust?.id) {
+        updateCustomer.mutate({ id: cust.id, data: { accountType: netTermsOverride } as any }, {
+          onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: getListCustomersQueryKey() });
+            applyInvoice();
+          },
+          onError: applyInvoice, // still apply invoice even if customer save fails
+        });
+      } else {
+        applyInvoice();
+      }
       return;
     }
     const noteParts: string[] = [];
@@ -1426,24 +1445,88 @@ export default function Invoices() {
 
               {isNetTerms ? (
                 /* Net Terms info panel */
-                <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 flex flex-col gap-1.5">
-                  <p className="text-xs font-bold text-violet-700 uppercase tracking-wider mb-1">Payment Schedule</p>
-                  {custTerm ? (
+                <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 flex flex-col gap-2">
+                  <p className="text-xs font-bold text-violet-700 uppercase tracking-wider">Payment Schedule</p>
+                  {custTerm && !netTermsOverride ? (
+                    /* Customer already has terms — show info + option to change */
                     <>
                       <p className="text-sm text-violet-900">
                         <span className="font-semibold">{cust?.company || cust?.name || inv?.customerName}</span>
-                        {" "}is billed on <span className="font-bold">{custTerm.label}</span>
+                        {" "}is billed on{" "}<span className="font-bold">{custTerm.label}</span>
                         {custTerm.days !== undefined && ` (${custTerm.days === 0 ? "due on receipt" : `${custTerm.days} days`})`}
                       </p>
                       <p className="text-sm text-violet-700 font-semibold">Due date → {new Date(netDueDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</p>
-                      <p className="text-xs text-violet-500 mt-0.5">Invoice will be set to <span className="font-bold">Sent</span> with this due date. No payment is recorded yet.</p>
+                      <p className="text-xs text-violet-500">Invoice will be set to <span className="font-bold">Sent</span> with this due date. No payment recorded yet.</p>
+                      <button
+                        type="button"
+                        onClick={() => setNetTermsOverride(cust?.accountType ?? "")}
+                        className="self-start text-[11px] font-semibold text-violet-600 underline underline-offset-2 hover:text-violet-800 mt-0.5"
+                      >
+                        Change terms for this customer…
+                      </button>
                     </>
-                  ) : (
-                    <p className="text-sm text-amber-700">
-                      {cust ? "This customer has no payment terms set. A 30-day default will be used." : "No customer linked — 30-day default will be used."}
-                      <span className="block font-semibold mt-0.5">Due date → {new Date(netDueDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
-                    </p>
-                  )}
+                  ) : (() => {
+                    /* No terms yet OR user clicked "change" — show picker */
+                    const overrideTerm = netTermsList.find(t => t.id === netTermsOverride);
+                    const previewDays  = overrideTerm?.days ?? 30;
+                    const previewDue   = new Date(Date.now() + previewDays * 86400000).toISOString().slice(0, 10);
+                    const custName     = cust?.company || cust?.name || inv?.customerName;
+                    const isChanging   = !!(custTerm && netTermsOverride);
+                    return (
+                      <>
+                        {!custTerm && cust && (
+                          <p className="text-xs text-amber-700 font-medium flex items-center gap-1.5">
+                            <AlertCircle size={12} className="flex-shrink-0" />
+                            <span><span className="font-bold">{custName}</span> has no payment terms. Choose one below — it will be saved to their profile.</span>
+                          </p>
+                        )}
+                        {isChanging && (
+                          <p className="text-xs text-violet-600 font-medium flex items-center gap-1.5">
+                            <AlertCircle size={12} className="flex-shrink-0" />
+                            Updating terms for <span className="font-bold ml-1">{custName}</span>. This will be saved to their profile.
+                          </p>
+                        )}
+                        {!cust && (
+                          <p className="text-xs text-slate-500">No customer linked — terms won't be saved to a profile.</p>
+                        )}
+                        <div className="grid grid-cols-2 gap-1.5 mt-0.5">
+                          {netTermsList.map(t => (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={() => setNetTermsOverride(t.id)}
+                              className={`flex items-center justify-between px-3 py-2 rounded-lg border text-left text-sm font-semibold transition-all ${
+                                netTermsOverride === t.id
+                                  ? "border-violet-500 bg-violet-100 text-violet-800"
+                                  : "border-slate-200 bg-white text-slate-700 hover:border-violet-300 hover:bg-violet-50"
+                              }`}
+                            >
+                              <span>{t.label}</span>
+                              {t.days !== undefined && (
+                                <span className={`text-[11px] font-normal ${netTermsOverride === t.id ? "text-violet-500" : "text-slate-400"}`}>
+                                  {t.days === 0 ? "on receipt" : `${t.days}d`}
+                                </span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                        {overrideTerm && (
+                          <p className="text-sm text-violet-700 font-semibold mt-0.5">
+                            Due date → {new Date(previewDue).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                          </p>
+                        )}
+                        {isChanging && (
+                          <button
+                            type="button"
+                            onClick={() => setNetTermsOverride("")}
+                            className="self-start text-[11px] font-semibold text-violet-500 underline underline-offset-2 hover:text-violet-700"
+                          >
+                            ← Keep existing terms ({custTerm?.label})
+                          </button>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               ) : (
                 /* Cash/card/transfer/check — show date + early discount */
