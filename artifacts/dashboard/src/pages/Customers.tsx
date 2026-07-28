@@ -3,12 +3,19 @@ import { useDebounce } from "@/hooks/useDebounce";
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
 import { useListCustomers, useDeleteCustomer, getListCustomersQueryKey, useListInvoices } from "@workspace/api-client-react";
-import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, X, Phone, Mail, MapPin, Building2, AlertCircle, BarChart2, ChevronDown, ChevronUp } from "lucide-react";
+import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, X, Phone, Mail, MapPin, Building2, AlertCircle, BarChart2, ChevronDown, ChevronUp, Gift } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend, CartesianGrid } from "recharts";
 import { formatCurrency } from "@/lib/utils";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import CustomerModal from "@/components/CustomerModal";
+
+const API = import.meta.env.BASE_URL.replace(/\/$/, "");
+async function apiFetch(path: string) {
+  const r = await fetch(`${API}${path}`, { headers: { "Content-Type": "application/json" } });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
 
 type Customer = {
   id: number; name: string; company?: string | null; email?: string | null;
@@ -21,7 +28,7 @@ type Customer = {
   billingAddress?: any; shippingAddress?: any; amountOwed?: number;
 };
 
-function CustomerViewModal({ customer, onClose }: { customer: Customer; onClose: () => void }) {
+function CustomerViewModal({ customer, onClose, creditAvailable }: { customer: Customer; onClose: () => void; creditAvailable: number }) {
   const phones: any[] = customer.phones ?? (customer.phone ? [{ label: "Mobile", number: customer.phone }] : []);
   const emails: any[] = customer.emails ?? (customer.email ? [{ label: "Work", email: customer.email }] : []);
 
@@ -82,6 +89,19 @@ function CustomerViewModal({ customer, onClose }: { customer: Customer; onClose:
               )}
             </div>
           )}
+          {creditAvailable > 0 && (
+            <div className="flex items-center gap-3 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3">
+              <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                <Gift size={15} className="text-emerald-600" />
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600">Store Credit Available</p>
+                <p className="text-lg font-black text-emerald-700 mt-0.5">{formatCurrency(creditAvailable)}</p>
+                <p className="text-[11px] text-emerald-500 mt-0.5">Eligible to receive — from approved returns &amp; refunds</p>
+              </div>
+            </div>
+          )}
+
           {customer.taxExempt !== undefined && (
             <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${customer.taxExempt ? "bg-lime-50 text-lime-700 border border-lime-200" : "bg-slate-50 text-slate-600 border border-slate-200"}`}>
               {customer.taxExempt ? "Tax Exempt" : "Taxable"}
@@ -114,6 +134,10 @@ function CustomerViewModal({ customer, onClose }: { customer: Customer; onClose:
 export default function Customers() {
   const { data: customers, isLoading } = useListCustomers();
   const { data: invoices } = useListInvoices();
+  const { data: returnsData } = useQuery<any[]>({
+    queryKey: ["returns-refunds"],
+    queryFn: () => apiFetch("/api/returns-refunds"),
+  });
   const deleteCustomer = useDeleteCustomer();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
@@ -124,6 +148,18 @@ export default function Customers() {
   const [chartView, setChartView] = useState<"revenue" | "owed" | "type">("revenue");
 
   const debouncedSearch = useDebounce(search, 250);
+
+  /** Credit available per customer ID (approved / refunded / completed returns) */
+  const creditByCustomerId = useMemo(() => {
+    const CREDIT_STATUSES = new Set(["approved", "refunded", "completed"]);
+    const map: Record<number, number> = {};
+    for (const r of (returnsData ?? [])) {
+      if (CREDIT_STATUSES.has(r.status) && r.refundAmount != null) {
+        map[r.customerId] = (map[r.customerId] ?? 0) + Number(r.refundAmount);
+      }
+    }
+    return map;
+  }, [returnsData]);
 
   /* ── Analytics data ─────────────────────────────────────── */
   const revenueByCustomer = useMemo(() => {
@@ -363,11 +399,17 @@ export default function Customers() {
                 {filtered?.map(c => {
                   const phones: any[] = (c as any).phones ?? (c.phone ? [{ label: "Mobile", number: c.phone }] : []);
                   const emails: any[] = (c as any).emails ?? (c.email ? [{ label: "Work", email: c.email }] : []);
+                  const credit = creditByCustomerId[c.id] ?? 0;
                   return (
                     <tr key={c.id} className="border-b border-slate-100 hover:bg-blue-50/50 transition-colors group cursor-pointer" onClick={() => setViewingCustomer(c as Customer)}>
                       <td className="px-5 py-3.5">
                         <p className="text-slate-800 font-semibold">{c.company || c.name}</p>
                         {c.company && <p className="text-xs text-slate-400 mt-0.5">{c.name}</p>}
+                        {credit > 0 && (
+                          <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">
+                            <Gift size={9} /> {formatCurrency(credit)} credit
+                          </span>
+                        )}
                       </td>
                       <td className="px-5 py-3.5">
                         {emails.length === 0 ? <span className="text-slate-400">—</span> : (
@@ -434,7 +476,7 @@ export default function Customers() {
       </div>
       {showModal && <CustomerModal onClose={() => setShowModal(false)} />}
       {editingCustomer && <CustomerModal customer={editingCustomer} onClose={() => setEditingCustomer(null)} />}
-      {viewingCustomer && <CustomerViewModal customer={viewingCustomer} onClose={() => setViewingCustomer(null)} />}
+      {viewingCustomer && <CustomerViewModal customer={viewingCustomer} onClose={() => setViewingCustomer(null)} creditAvailable={creditByCustomerId[viewingCustomer.id] ?? 0} />}
     </Layout>
   );
 }

@@ -6,7 +6,7 @@ import Header from "@/components/Header";
 import InvoiceView from "@/components/InvoiceView";
 import InvoiceModal from "@/components/InvoiceModal";
 import { useListInvoices, useDeleteInvoice, usePayInvoice, useUpdateInvoice, getListInvoicesQueryKey, useListCustomers, useListPurchaseOrders, useListShipments } from "@workspace/api-client-react";
-import { Search, Plus, MoreHorizontal, Edit, Trash2, CheckCircle, Eye, X, Truck, ShoppingCart, Hash, Link2, ChevronDown, Pencil, StickyNote, Mail, MessageSquare, Download, Calendar, ChevronRight, BarChart2, ChevronUp, TrendingUp, TrendingDown, Printer, Save } from "lucide-react";
+import { Search, Plus, MoreHorizontal, Edit, Trash2, CheckCircle, CheckCircle2, Eye, X, Truck, ShoppingCart, Hash, Link2, ChevronDown, Pencil, StickyNote, Mail, MessageSquare, Download, Calendar, ChevronRight, BarChart2, ChevronUp, TrendingUp, TrendingDown, Printer, Save, CreditCard, AlertCircle, FileText } from "lucide-react";
 import { printShippingSlip } from "@/lib/print-slip";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, Legend, PieChart, Pie, ComposedChart, Line, Area } from "recharts";
 import { useQueryClient } from "@tanstack/react-query";
@@ -119,6 +119,16 @@ export default function Invoices() {
   const [payDate, setPayDate] = useState<string>("");
   const [earlyDiscount, setEarlyDiscount] = useState<string>("");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  /* ── Batch Pay ───────────────────────────────────────── */
+  const [batchPayOpen, setBatchPayOpen] = useState(false);
+  const [batchPayMethod, setBatchPayMethod] = useState<PaymentMethod>("bank_transfer");
+  const [batchPayDate, setBatchPayDate] = useState("");
+  const [batchPayNote, setBatchPayNote] = useState("");
+  const [batchPayStatus, setBatchPayStatus] = useState<Record<number, "idle" | "paying" | "paid" | "error">>({});
+  const [batchPayProcessing, setBatchPayProcessing] = useState(false);
+  const [batchPayComplete, setBatchPayComplete] = useState(false);
+  const [batchViewInvoice, setBatchViewInvoice] = useState<InvoiceData | null>(null);
 
   /* ── Analytics ────────────────────────────────────── */
   const [showCharts, setShowCharts] = useState(false);
@@ -499,10 +509,56 @@ export default function Invoices() {
     payInvoice.mutate({ id: payDialog.id, data: { paymentMethod: selectedMethod, paymentNote: noteParts.join(" | ") || undefined } }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
+        queryClient.invalidateQueries({ queryKey: ["accounting-pnl"] });
+        queryClient.invalidateQueries({ queryKey: ["accounting-ar"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard/stats"] });
         setPayDialog(null);
         setViewInvoice(null);
       }
     });
+  };
+
+  const openBatchPay = () => {
+    setBatchPayMethod("bank_transfer");
+    setBatchPayDate(new Date().toISOString().slice(0, 10));
+    setBatchPayNote("");
+    setBatchPayStatus({});
+    setBatchPayProcessing(false);
+    setBatchPayComplete(false);
+    setBatchViewInvoice(null);
+    setBatchPayOpen(true);
+  };
+
+  const handleBatchPay = async () => {
+    setBatchPayProcessing(true);
+    const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+    const batchInvoices = (filtered ?? []).filter(i => selectedIds.has(i.id));
+    const unpaid = batchInvoices.filter(i => i.status !== "paid");
+    const noteParts = [
+      batchPayDate && `Date: ${batchPayDate}`,
+      batchPayNote.trim(),
+    ].filter(Boolean).join(" | ");
+
+    await Promise.all(unpaid.map(async (inv) => {
+      setBatchPayStatus(prev => ({ ...prev, [inv.id]: "paying" }));
+      try {
+        const res = await fetch(`${BASE}/api/invoices/${inv.id}/pay`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ paymentMethod: batchPayMethod, paymentNote: noteParts || undefined }),
+        });
+        setBatchPayStatus(prev => ({ ...prev, [inv.id]: res.ok ? "paid" : "error" }));
+      } catch {
+        setBatchPayStatus(prev => ({ ...prev, [inv.id]: "error" }));
+      }
+    }));
+
+    queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
+    queryClient.invalidateQueries({ queryKey: ["accounting-pnl"] });
+    queryClient.invalidateQueries({ queryKey: ["accounting-ar"] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard/stats"] });
+    setBatchPayProcessing(false);
+    setBatchPayComplete(true);
   };
 
   const STATUS_TABS: { value: StatusFilter; label: string }[] = [
@@ -768,6 +824,12 @@ export default function Invoices() {
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-50 border border-sky-200 text-sky-700 text-xs font-semibold hover:bg-sky-100 transition-colors"
               >
                 <Truck size={12} /> Create Shipment
+              </button>
+              <button
+                onClick={openBatchPay}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold hover:bg-emerald-100 transition-colors"
+              >
+                <CreditCard size={12} /> Batch Pay
               </button>
               <button onClick={bulkDelete} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs font-semibold hover:bg-red-100 transition-colors">
                 <Trash2 size={12} /> Delete
@@ -1337,6 +1399,275 @@ export default function Invoices() {
             </div>
           </div>
         </div>
+      )}
+      {/* ── Batch Pay Overlay ──────────────────────────────────────── */}
+      {batchPayOpen && (() => {
+        const batchInvoices = (filtered ?? []).filter(i => selectedIds.has(i.id));
+        const alreadyPaid = batchInvoices.filter(i => i.status === "paid");
+        const toBePaid = batchInvoices.filter(i => i.status !== "paid");
+        const grandTotal = toBePaid.reduce((s, i) => s + Number(i.total ?? 0), 0);
+        const settledCount = toBePaid.filter(i => batchPayStatus[i.id] === "paid").length;
+        const errorCount = toBePaid.filter(i => batchPayStatus[i.id] === "error").length;
+
+        return (
+          <div className="fixed inset-0 z-[90] flex flex-col bg-[hsl(222_28%_10%)]">
+            {/* Top bar */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/8 bg-[hsl(222_28%_12%)] flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                  <CreditCard size={16} className="text-emerald-400" />
+                </div>
+                <div>
+                  <h2 className="text-white font-bold text-base">Batch Payment</h2>
+                  <p className="text-white/40 text-xs mt-0.5">{toBePaid.length} invoice{toBePaid.length !== 1 ? "s" : ""} · {formatCurrency(grandTotal)} total</p>
+                </div>
+              </div>
+              {!batchPayProcessing && (
+                <button
+                  onClick={() => { setBatchPayOpen(false); if (batchPayComplete) setSelectedIds(new Set()); }}
+                  className="w-8 h-8 rounded-lg hover:bg-white/8 text-white/50 hover:text-white flex items-center justify-center transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              )}
+            </div>
+
+            <div className="flex-1 overflow-hidden flex gap-0">
+              {/* Left: invoice list */}
+              <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-3">
+                <p className="text-white/35 text-[10px] uppercase tracking-widest font-semibold mb-1">
+                  Invoices to Settle
+                </p>
+
+                {toBePaid.map(inv => {
+                  const st = batchPayStatus[inv.id] ?? "idle";
+                  const hasNote = !!(inv.internalNote || inv.notes);
+                  return (
+                    <div key={inv.id}
+                      className={`rounded-2xl border transition-all ${
+                        st === "paid"    ? "bg-emerald-500/10 border-emerald-400/30" :
+                        st === "error"   ? "bg-red-500/10 border-red-400/30" :
+                        st === "paying"  ? "bg-white/5 border-white/15 animate-pulse" :
+                                          "bg-white/4 border-white/8"
+                      }`}
+                    >
+                      <div className="flex items-center gap-4 px-4 py-3.5">
+                        {/* Status icon */}
+                        <div className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center">
+                          {st === "paid"   && <CheckCircle2 size={18} className="text-emerald-400" />}
+                          {st === "error"  && <AlertCircle size={18} className="text-red-400" />}
+                          {st === "paying" && <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />}
+                          {st === "idle"   && <div className="w-4 h-4 rounded-full border-2 border-white/15" />}
+                        </div>
+
+                        {/* Invoice info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-white font-semibold text-sm">{displayName(inv)}</span>
+                            <span className="text-white/40 font-mono text-xs">{inv.invoiceNumber ?? fallbackFcNumber(inv.id)}</span>
+                            {inv.trackingNumber && (
+                              <span className="text-indigo-400 text-[10px] flex items-center gap-0.5"><Link2 size={9} />{inv.trackingNumber}</span>
+                            )}
+                            <StatusBadge status={inv.status} dueDate={inv.dueDate} />
+                          </div>
+                          {inv.dueDate && (
+                            <p className="text-white/30 text-xs mt-0.5">Due {formatDate(inv.dueDate)}</p>
+                          )}
+                          {/* Notes */}
+                          {inv.internalNote && (
+                            <div className="mt-2 flex items-start gap-1.5 bg-amber-500/10 border border-amber-400/20 rounded-lg px-2.5 py-1.5">
+                              <StickyNote size={11} className="text-amber-400 flex-shrink-0 mt-0.5" />
+                              <p className="text-amber-200/80 text-xs leading-relaxed">{inv.internalNote}</p>
+                            </div>
+                          )}
+                          {inv.notes && (
+                            <div className="mt-1.5 flex items-start gap-1.5 bg-white/4 border border-white/8 rounded-lg px-2.5 py-1.5">
+                              <FileText size={11} className="text-white/30 flex-shrink-0 mt-0.5" />
+                              <p className="text-white/50 text-xs leading-relaxed">{inv.notes}</p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Amount + view */}
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                          <span className={`font-black text-lg ${st === "paid" ? "text-emerald-400" : "text-white"}`}>
+                            {formatCurrency(Number(inv.total ?? 0))}
+                          </span>
+                          <button
+                            onClick={() => setBatchViewInvoice(inv)}
+                            className="p-1.5 rounded-lg bg-white/8 hover:bg-white/15 text-white/50 hover:text-white transition-colors"
+                            title="View invoice"
+                          >
+                            <Eye size={13} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Settled banner */}
+                      {st === "paid" && (
+                        <div className="px-4 pb-3 -mt-1">
+                          <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-semibold">
+                            <CheckCircle2 size={12} /> Bill Settled
+                          </div>
+                        </div>
+                      )}
+                      {st === "error" && (
+                        <div className="px-4 pb-3 -mt-1">
+                          <p className="text-red-400 text-xs font-semibold flex items-center gap-1"><AlertCircle size={12} /> Payment failed — check manually</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {/* Already-paid invoices (greyed) */}
+                {alreadyPaid.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-white/20 text-[10px] uppercase tracking-widest font-semibold mb-2">Already Paid</p>
+                    {alreadyPaid.map(inv => (
+                      <div key={inv.id} className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/2 border border-white/5 mb-2 opacity-50">
+                        <CheckCircle2 size={16} className="text-emerald-400 flex-shrink-0" />
+                        <span className="text-white/60 text-sm flex-1">{displayName(inv)}</span>
+                        <span className="text-white/40 font-mono text-xs">{inv.invoiceNumber ?? fallbackFcNumber(inv.id)}</span>
+                        <span className="text-white/50 font-semibold text-sm">{formatCurrency(Number(inv.total ?? 0))}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Right: payment config panel */}
+              <div className="w-80 flex-shrink-0 border-l border-white/8 bg-[hsl(222_28%_11%)] flex flex-col">
+                {batchPayComplete ? (
+                  /* ── Done state ── */
+                  <div className="flex-1 flex flex-col items-center justify-center px-6 gap-4 text-center">
+                    <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 flex items-center justify-center">
+                      <CheckCircle2 size={32} className="text-emerald-400" />
+                    </div>
+                    <div>
+                      <p className="text-white font-bold text-lg">{settledCount} Bill{settledCount !== 1 ? "s" : ""} Settled</p>
+                      {errorCount > 0 && <p className="text-red-400 text-sm mt-1">{errorCount} failed — check manually</p>}
+                      <p className="text-white/40 text-sm mt-1">
+                        {formatCurrency(toBePaid.filter(i => batchPayStatus[i.id] === "paid").reduce((s, i) => s + Number(i.total ?? 0), 0))} collected
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => { setBatchPayOpen(false); setSelectedIds(new Set()); }}
+                      className="w-full py-3 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition-colors mt-2"
+                    >
+                      Done
+                    </button>
+                  </div>
+                ) : (
+                  /* ── Payment config ── */
+                  <>
+                    <div className="flex-1 overflow-y-auto px-5 py-5 flex flex-col gap-5">
+                      <p className="text-white/35 text-[10px] uppercase tracking-widest font-semibold">Payment Details</p>
+
+                      {/* Date */}
+                      <div>
+                        <label className="text-white/40 text-[11px] font-semibold uppercase tracking-wider block mb-1.5">Payment Date</label>
+                        <input
+                          type="date"
+                          value={batchPayDate}
+                          onChange={e => setBatchPayDate(e.target.value)}
+                          className="w-full bg-white/6 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-white/25 [color-scheme:dark]"
+                        />
+                      </div>
+
+                      {/* Method */}
+                      <div>
+                        <label className="text-white/40 text-[11px] font-semibold uppercase tracking-wider block mb-2">Payment Method</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {PAYMENT_METHODS.map(m => (
+                            <button key={m.value} onClick={() => setBatchPayMethod(m.value)}
+                              className={`flex flex-col items-start p-3 rounded-xl border text-left transition-all ${
+                                batchPayMethod === m.value
+                                  ? "border-emerald-400/50 bg-emerald-500/15"
+                                  : "border-white/8 bg-white/4 hover:border-white/15 hover:bg-white/8"
+                              }`}>
+                              <span className={`text-xs font-semibold ${batchPayMethod === m.value ? "text-emerald-300" : "text-white/70"}`}>{m.label}</span>
+                              <span className="text-[10px] text-white/35 mt-0.5">{m.desc}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Note */}
+                      <div>
+                        <label className="text-white/40 text-[11px] font-semibold uppercase tracking-wider block mb-1.5">Note <span className="text-white/20 normal-case font-normal tracking-normal">(optional)</span></label>
+                        <input
+                          type="text"
+                          value={batchPayNote}
+                          onChange={e => setBatchPayNote(e.target.value)}
+                          placeholder="e.g. Batch wire #8821"
+                          className="w-full bg-white/6 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-white/25"
+                        />
+                      </div>
+
+                      {/* Summary */}
+                      <div className="bg-white/4 border border-white/8 rounded-xl p-4 flex flex-col gap-2">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-white/40">Invoices to pay</span>
+                          <span className="text-white font-semibold">{toBePaid.length}</span>
+                        </div>
+                        {alreadyPaid.length > 0 && (
+                          <div className="flex justify-between text-xs">
+                            <span className="text-white/40">Already paid (skip)</span>
+                            <span className="text-white/50">{alreadyPaid.length}</span>
+                          </div>
+                        )}
+                        <div className="border-t border-white/8 pt-2 mt-0.5 flex justify-between">
+                          <span className="text-white/60 text-xs font-semibold">Total to collect</span>
+                          <span className="text-emerald-400 font-black text-base">{formatCurrency(grandTotal)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="px-5 pb-5 pt-3 border-t border-white/8 flex flex-col gap-2">
+                      {toBePaid.length === 0 ? (
+                        <p className="text-center text-white/40 text-sm py-2">All selected invoices are already paid.</p>
+                      ) : (
+                        <button
+                          onClick={handleBatchPay}
+                          disabled={batchPayProcessing}
+                          className="w-full py-3 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-500 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                        >
+                          {batchPayProcessing
+                            ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Settling bills…</>
+                            : <><CreditCard size={15} /> Settle {toBePaid.length} Bill{toBePaid.length !== 1 ? "s" : ""}</>}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setBatchPayOpen(false)}
+                        disabled={batchPayProcessing}
+                        className="w-full py-2.5 rounded-xl border border-white/10 text-white/50 text-sm font-medium hover:bg-white/5 transition-colors disabled:opacity-40"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Batch Pay — inner invoice viewer */}
+      {batchViewInvoice && (
+        <InvoiceView
+          invoice={batchViewInvoice}
+          onClose={() => setBatchViewInvoice(null)}
+          onMarkPaid={(id) => {
+            setPayDialog({ id });
+            setSelectedMethod("bank_transfer");
+            setPayNote("");
+            setPayDate(new Date().toISOString().slice(0, 10));
+            setEarlyDiscount("");
+          }}
+        />
       )}
     </Layout>
   );

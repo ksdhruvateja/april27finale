@@ -16,9 +16,10 @@ import {
   Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle2,
   User, CreditCard, Banknote, Building2, FileCheck2, Tag,
   X, Package, Zap, Receipt, AlertCircle, Percent, StickyNote,
-  UserPlus, ChevronDown, Truck,
+  UserPlus, ChevronDown, Truck, Printer, Download, MapPin,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { US_STATES } from "@/lib/usStates";
 
 type PaymentMethod = "cash" | "card" | "bank_transfer" | "check";
 type CartItem = {
@@ -88,7 +89,20 @@ export default function WalkIn() {
   const [custSearch,     setCustSearch]     = useState("");
   const [custOpen,       setCustOpen]       = useState(false);
   const [internalNote,   setInternalNote]   = useState("");
-  const [success,        setSuccess]        = useState<{ invoiceId: number; total: number } | null>(null);
+  const [success, setSuccess] = useState<{
+    invoiceId: number;
+    total: number;
+    customerName: string;
+    payMethod: PaymentMethod;
+    items: CartItem[];
+    subtotal: number;
+    taxTotal: number;
+    discountTotal: number;
+    orderDiscAmt: number;
+    freight: number;
+    paidAt: string;
+    internalNote: string;
+  } | null>(null);
   const [saving,         setSaving]         = useState(false);
   const [error,          setError]          = useState<string | null>(null);
   const [orderDiscount,  setOrderDiscount]  = useState<OrderDiscountWalkin | null>(null);
@@ -102,6 +116,10 @@ export default function WalkIn() {
   const [newCustCompany, setNewCustCompany] = useState("");
   const [newCustEmail,   setNewCustEmail]   = useState("");
   const [newCustPhone,   setNewCustPhone]   = useState("");
+  const [newCustAddress, setNewCustAddress] = useState("");
+  const [newCustCity,    setNewCustCity]    = useState("");
+  const [newCustState,   setNewCustState]   = useState("");
+  const [newCustZip,     setNewCustZip]     = useState("");
   const [savingCust,     setSavingCust]     = useState(false);
   const [custError,      setCustError]      = useState<string | null>(null);
 
@@ -197,6 +215,7 @@ export default function WalkIn() {
     setTaxExempt(false);
     setShowNewCust(false);
     setNewCustName(""); setNewCustCompany(""); setNewCustEmail(""); setNewCustPhone("");
+    setNewCustAddress(""); setNewCustCity(""); setNewCustState(""); setNewCustZip("");
     setCustError(null);
   }
 
@@ -206,16 +225,21 @@ export default function WalkIn() {
     try {
       const result: any = await createCustomer.mutateAsync({
         data: {
-          name:    newCustName.trim(),
-          company: newCustCompany.trim() || null,
-          email:   newCustEmail.trim()   || null,
-          phone:   newCustPhone.trim()   || null,
+          name:            newCustName.trim(),
+          company:         newCustCompany.trim() || null,
+          email:           newCustEmail.trim()   || null,
+          phone:           newCustPhone.trim()   || null,
+          customerAddress: newCustAddress.trim() || null,
+          customerCity:    newCustCity.trim()    || null,
+          customerState:   newCustState.trim()   || null,
+          customerZip:     newCustZip.trim()     || null,
         } as any,
       });
       await queryClient.invalidateQueries({ queryKey: getListCustomersQueryKey() });
       setSelectedCustId(result?.id ?? null);
       setShowNewCust(false);
       setNewCustName(""); setNewCustCompany(""); setNewCustEmail(""); setNewCustPhone("");
+      setNewCustAddress(""); setNewCustCity(""); setNewCustState(""); setNewCustZip("");
     } catch (e: any) {
       setCustError(e?.message ?? "Could not create customer.");
     } finally {
@@ -232,11 +256,101 @@ export default function WalkIn() {
 
   const customerId = selectedCustId ?? null;
 
+  function buildReceiptHTML(data: NonNullable<typeof success>) {
+    const methodLabel: Record<PaymentMethod, string> = {
+      cash: "Cash", card: "Credit Card", bank_transfer: "Bank Transfer", check: "Check",
+    };
+    const rows = data.items.map(li => {
+      const gross = li.quantity * li.unitPrice;
+      const afterDisc = gross * (1 - li.discountPercent / 100);
+      const lineTotal = afterDisc * (1 + li.taxPercent / 100);
+      return `<tr>
+        <td style="padding:6px 8px;border-bottom:1px solid #f1f5f9">${li.description}${li.sku ? `<br><span style="color:#94a3b8;font-size:11px">${li.sku}</span>` : ""}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #f1f5f9;text-align:center">${li.quantity}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #f1f5f9;text-align:right">$${li.unitPrice.toFixed(2)}</td>
+        ${li.discountPercent > 0 ? `<td style="padding:6px 8px;border-bottom:1px solid #f1f5f9;text-align:right;color:#ef4444">-${li.discountPercent}%</td>` : `<td style="padding:6px 8px;border-bottom:1px solid #f1f5f9;text-align:right;color:#cbd5e1">—</td>`}
+        <td style="padding:6px 8px;border-bottom:1px solid #f1f5f9;text-align:right;font-weight:600">$${lineTotal.toFixed(2)}</td>
+      </tr>`;
+    }).join("");
+    const paidDate = new Date(data.paidAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+      <title>Receipt #${data.invoiceId}</title>
+      <style>
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:Arial,sans-serif;font-size:13px;color:#1e293b;padding:32px;max-width:600px;margin:0 auto}
+        h1{font-size:20px;font-weight:900;margin-bottom:2px}
+        .sub{color:#64748b;font-size:12px;margin-bottom:24px}
+        .badge{display:inline-block;background:#dcfce7;color:#166534;border:1px solid #bbf7d0;border-radius:20px;padding:3px 12px;font-size:12px;font-weight:700;margin-bottom:20px}
+        table{width:100%;border-collapse:collapse;margin:16px 0}
+        th{background:#f8fafc;padding:8px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;border-bottom:2px solid #e2e8f0}
+        th:last-child,th:nth-child(3),th:nth-child(4){text-align:right}
+        .total-row{display:flex;justify-content:space-between;padding:4px 0;color:#475569;font-size:13px}
+        .grand-total{display:flex;justify-content:space-between;padding:10px 0 0;border-top:2px solid #1e293b;font-size:18px;font-weight:900;color:#1e293b}
+        .footer{margin-top:28px;text-align:center;color:#94a3b8;font-size:11px;border-top:1px solid #f1f5f9;padding-top:16px}
+        @media print{body{padding:16px}}
+      </style>
+    </head><body>
+      <h1>Forez Corp</h1>
+      <div class="sub">Walk-in Sale Receipt · Invoice #${data.invoiceId}</div>
+      <div class="badge">✓ Paid — ${methodLabel[data.payMethod]}</div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:16px">
+        <div><strong>Customer</strong><br><span style="color:#475569">${data.customerName}</span></div>
+        <div style="text-align:right"><strong>Date</strong><br><span style="color:#475569">${paidDate}</span></div>
+      </div>
+      <table>
+        <thead><tr>
+          <th>Item</th><th style="text-align:center">Qty</th>
+          <th style="text-align:right">Unit Price</th><th style="text-align:right">Disc</th><th style="text-align:right">Total</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div style="display:flex;justify-content:flex-end"><div style="min-width:220px">
+        <div class="total-row"><span>Subtotal</span><span>$${data.subtotal.toFixed(2)}</span></div>
+        ${data.discountTotal > 0 ? `<div class="total-row"><span>Item Discounts</span><span style="color:#ef4444">−$${data.discountTotal.toFixed(2)}</span></div>` : ""}
+        ${data.taxTotal > 0 ? `<div class="total-row"><span>Tax</span><span>$${data.taxTotal.toFixed(2)}</span></div>` : ""}
+        ${data.freight > 0 ? `<div class="total-row"><span>Freight / Shipping</span><span>$${data.freight.toFixed(2)}</span></div>` : ""}
+        ${data.orderDiscAmt > 0 ? `<div class="total-row"><span>Order Discount</span><span style="color:#16a34a">−$${data.orderDiscAmt.toFixed(2)}</span></div>` : ""}
+        <div class="grand-total"><span>Total Paid</span><span>$${data.total.toFixed(2)}</span></div>
+      </div></div>
+      ${data.internalNote ? `<div style="margin-top:16px;padding:10px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:12px;color:#92400e"><strong>Note:</strong> ${data.internalNote}</div>` : ""}
+      <div class="footer">Thank you for your business! · Forez Corp</div>
+    </body></html>`;
+  }
+
+  function printReceipt() {
+    if (!success) return;
+    const html = buildReceiptHTML(success);
+    const win = window.open("", "_blank", "width=700,height=900");
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+    win.onload = () => { win.focus(); win.print(); };
+  }
+
+  function downloadReceipt() {
+    if (!success) return;
+    const html = buildReceiptHTML(success);
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `receipt-${success.invoiceId}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   async function completeSale() {
     if (cart.length === 0) { setError("Add at least one item to complete a sale."); return; }
     setError(null);
     setSaving(true);
     try {
+      // Capture receipt data before clearSale wipes the cart
+      const cartSnapshot = [...cart];
+      const noteSnapshot = internalNote.trim();
+      const methodSnapshot = payMethod;
+      const nameSnapshot = customerName;
+      const freightSnapshot = showFreight ? freight : 0;
+
       let lineItems = cart.map(li => ({
         description:     li.description,
         quantity:        li.quantity,
@@ -246,6 +360,7 @@ export default function WalkIn() {
       }));
       if (freightCalc > 0)  lineItems = [...lineItems, { description: "Freight / Shipping", quantity: 1, unitPrice: freightCalc,   taxPercent: 0, discountPercent: 0 }];
       if (orderDiscAmt > 0) lineItems = [...lineItems, { description: "Order Discount",      quantity: 1, unitPrice: -orderDiscAmt, taxPercent: 0, discountPercent: 0 }];
+      const paidAt = new Date().toISOString();
       const payload: any = {
         customerName,
         customerId:     customerId ?? undefined,
@@ -256,8 +371,8 @@ export default function WalkIn() {
         total,
         status:         "paid",
         paymentMethod:  payMethod,
-        paidAt:         new Date().toISOString(),
-        notes:          internalNote.trim() || undefined,
+        paidAt,
+        notes:          noteSnapshot || undefined,
         isQuickInvoice: true,
       };
       const result: any = await createInvoice.mutateAsync({ data: payload });
@@ -265,7 +380,20 @@ export default function WalkIn() {
       queryClient.invalidateQueries({ queryKey: ["accounting-pnl"] });
       queryClient.invalidateQueries({ queryKey: ["accounting-ar"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
-      setSuccess({ invoiceId: result?.id ?? 0, total });
+      setSuccess({
+        invoiceId:     result?.id ?? 0,
+        total,
+        customerName:  nameSnapshot,
+        payMethod:     methodSnapshot,
+        items:         cartSnapshot,
+        subtotal,
+        taxTotal,
+        discountTotal: itemDiscTotal,
+        orderDiscAmt,
+        freight:       freightSnapshot,
+        paidAt,
+        internalNote:  noteSnapshot,
+      });
       clearSale();
     } catch (e: any) {
       setError(e?.message ?? "Failed to complete sale. Please try again.");
@@ -727,6 +855,8 @@ export default function WalkIn() {
               {showNewCust && (
                 <div className="border border-indigo-200 rounded-xl p-3 bg-indigo-50/50 flex flex-col gap-2.5">
                   <p className="text-xs font-semibold text-indigo-700 mb-0.5">New Customer Details</p>
+
+                  {/* Name + Company */}
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="text-xs font-semibold text-slate-600 mb-1 block">Full Name <span className="text-red-500">*</span></label>
@@ -738,7 +868,7 @@ export default function WalkIn() {
                       />
                     </div>
                     <div>
-                      <label className="text-xs font-semibold text-slate-600 mb-1 block">Company (optional)</label>
+                      <label className="text-xs font-semibold text-slate-600 mb-1 block">Company <span className="text-slate-400 font-normal">(optional)</span></label>
                       <input
                         value={newCustCompany}
                         onChange={e => setNewCustCompany(e.target.value)}
@@ -747,7 +877,7 @@ export default function WalkIn() {
                       />
                     </div>
                     <div>
-                      <label className="text-xs font-semibold text-slate-600 mb-1 block">Email (optional)</label>
+                      <label className="text-xs font-semibold text-slate-600 mb-1 block">Email <span className="text-slate-400 font-normal">(optional)</span></label>
                       <input
                         type="email"
                         value={newCustEmail}
@@ -757,7 +887,7 @@ export default function WalkIn() {
                       />
                     </div>
                     <div>
-                      <label className="text-xs font-semibold text-slate-600 mb-1 block">Phone (optional)</label>
+                      <label className="text-xs font-semibold text-slate-600 mb-1 block">Phone <span className="text-slate-400 font-normal">(optional)</span></label>
                       <input
                         value={newCustPhone}
                         onChange={e => setNewCustPhone(e.target.value)}
@@ -766,6 +896,60 @@ export default function WalkIn() {
                       />
                     </div>
                   </div>
+
+                  {/* Address section */}
+                  <div className="border-t border-indigo-200/60 pt-2.5 mt-0.5">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <MapPin size={11} className="text-indigo-400" />
+                      <span className="text-[11px] font-semibold text-indigo-600 uppercase tracking-wider">Address <span className="text-indigo-400 normal-case font-normal tracking-normal">(optional)</span></span>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <div>
+                        <label className="text-xs font-semibold text-slate-600 mb-1 block">Street Address</label>
+                        <input
+                          value={newCustAddress}
+                          onChange={e => setNewCustAddress(e.target.value)}
+                          placeholder="123 Main St"
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-300 bg-white"
+                        />
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="col-span-1">
+                          <label className="text-xs font-semibold text-slate-600 mb-1 block">City</label>
+                          <input
+                            value={newCustCity}
+                            onChange={e => setNewCustCity(e.target.value)}
+                            placeholder="New York"
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-300 bg-white"
+                          />
+                        </div>
+                        <div className="col-span-1">
+                          <label className="text-xs font-semibold text-slate-600 mb-1 block">State</label>
+                          <select
+                            value={newCustState}
+                            onChange={e => setNewCustState(e.target.value)}
+                            className="w-full border border-slate-200 rounded-lg px-2 py-2 text-sm text-slate-800 focus:outline-none focus:border-indigo-300 bg-white"
+                          >
+                            <option value="">—</option>
+                            {US_STATES.map(s => (
+                              <option key={s.code} value={s.code}>{s.code}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="col-span-1">
+                          <label className="text-xs font-semibold text-slate-600 mb-1 block">ZIP</label>
+                          <input
+                            value={newCustZip}
+                            onChange={e => setNewCustZip(e.target.value)}
+                            placeholder="10001"
+                            maxLength={10}
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-300 bg-white"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   {custError && (
                     <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{custError}</p>
                   )}
@@ -826,14 +1010,32 @@ export default function WalkIn() {
       {/* Success overlay */}
       {success && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-6" onClick={() => setSuccess(null)}>
-          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
           <div className="relative z-10 bg-white rounded-2xl border border-emerald-200 shadow-2xl p-8 max-w-sm w-full text-center" onClick={e => e.stopPropagation()}>
             <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
               <CheckCircle2 size={32} className="text-emerald-500" />
             </div>
             <h2 className="text-xl font-black text-slate-800 mb-1">Sale Complete!</h2>
             <p className="text-slate-500 text-sm mb-1">Invoice #{success.invoiceId > 0 ? success.invoiceId : "—"} created &amp; marked paid</p>
+            <p className="text-slate-600 text-xs mb-1">{success.customerName}</p>
             <p className="text-3xl font-black text-emerald-600 my-4">{formatCurrency(success.total)}</p>
+
+            {/* Print / Download row */}
+            <div className="flex gap-2 mb-3">
+              <button
+                onClick={printReceipt}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold text-sm hover:bg-slate-50 flex items-center justify-center gap-2 transition-colors"
+              >
+                <Printer size={14} className="text-slate-500" /> Print Receipt
+              </button>
+              <button
+                onClick={downloadReceipt}
+                className="flex-1 py-2.5 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 font-semibold text-sm hover:bg-indigo-100 flex items-center justify-center gap-2 transition-colors"
+              >
+                <Download size={14} /> Download
+              </button>
+            </div>
+
             <div className="flex gap-3">
               <button
                 onClick={() => setSuccess(null)}

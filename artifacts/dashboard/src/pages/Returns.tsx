@@ -7,9 +7,13 @@ import { useListCustomers, useListInvoices } from "@workspace/api-client-react";
 import {
   Search, Plus, X, RefreshCw, RotateCcw, DollarSign, AlertTriangle,
   CheckCircle2, Clock, ChevronDown, ChevronUp, MoreHorizontal, Edit, Trash2, Filter,
-  ArrowLeftRight, Package, BarChart2, TrendingDown,
+  ArrowLeftRight, Package, BarChart2, TrendingDown, FileText, Printer, CreditCard,
+  CheckSquare, Square, Info,
 } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, CartesianGrid, PieChart, Pie, Legend } from "recharts";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
+  LineChart, Line, CartesianGrid, PieChart, Pie, Legend,
+} from "recharts";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 const API = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -41,6 +45,8 @@ const STATUS_COLORS: Record<string, string> = {
   refunded:  "bg-emerald-50 text-emerald-700 border-emerald-200",
   completed: "bg-emerald-50 text-emerald-700 border-emerald-200",
 };
+
+const CREDIT_STATUSES = new Set(["approved", "refunded", "completed"]);
 
 const REFUND_METHODS = ["Cash", "Credit Card", "Bank Transfer", "ACH", "Check", "Store Credit", "Other"];
 const RETURN_REASONS = [
@@ -83,17 +89,210 @@ interface ReturnRecord {
   updatedAt: string;
 }
 
+/* ── CREDIT MEMO VIEW ────────────────────────────────────────── */
+function CreditMemoView({
+  record,
+  onClose,
+}: {
+  record: ReturnRecord;
+  onClose: () => void;
+}) {
+  const cmNumber = `CM-${String(record.id).padStart(4, "0")}`;
+  const lineItems: any[] = Array.isArray(record.lineItems) ? record.lineItems : [];
+  const hasLines = lineItems.length > 0;
+  const total = record.refundAmount ?? 0;
+
+  function printMemo() {
+    const rows = lineItems.map(li => {
+      const gross = (li.quantity ?? 1) * (li.unitPrice ?? 0);
+      const disc  = gross * ((li.discountPercent ?? 0) / 100);
+      const lineTotal = gross - disc;
+      return `<tr>
+        <td style="padding:6px 10px;border-bottom:1px solid #f1f5f9">${li.description ?? ""}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid #f1f5f9;text-align:center">${li.quantity ?? 1}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid #f1f5f9;text-align:right">$${Number(li.unitPrice ?? 0).toFixed(2)}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid #f1f5f9;text-align:right;color:#ef4444">${(li.discountPercent ?? 0) > 0 ? `-${li.discountPercent}%` : "—"}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid #f1f5f9;text-align:right;font-weight:700">$${lineTotal.toFixed(2)}</td>
+      </tr>`;
+    }).join("");
+
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Credit Memo ${cmNumber}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;font-size:13px;color:#1e293b;padding:32px;max-width:680px;margin:0 auto}
+h1{font-size:22px;font-weight:900;color:#1e293b}
+.cm-badge{display:inline-block;background:#dcfce7;color:#166534;border:1px solid #bbf7d0;border-radius:20px;padding:3px 14px;font-size:12px;font-weight:700;margin-bottom:20px}
+table{width:100%;border-collapse:collapse;margin:16px 0}
+th{background:#f8fafc;padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;border-bottom:2px solid #e2e8f0}
+th:nth-child(2),th:nth-child(3),th:nth-child(4),th:last-child{text-align:right}
+th:nth-child(2){text-align:center}
+.row-total{display:flex;justify-content:space-between;padding:5px 0;color:#475569;font-size:13px;border-top:1px solid #f1f5f9}
+.grand{display:flex;justify-content:space-between;padding:10px 0 0;border-top:2px solid #1e293b;font-size:18px;font-weight:900}
+.footer{margin-top:24px;text-align:center;color:#94a3b8;font-size:11px;border-top:1px solid #f1f5f9;padding-top:14px}
+@media print{body{padding:16px}}
+</style></head><body>
+<h1>Credit Memo</h1>
+<p style="color:#64748b;font-size:12px;margin-bottom:6px">${cmNumber}</p>
+<div class="cm-badge">✓ Credit Approved</div>
+<div style="display:flex;justify-content:space-between;margin-bottom:20px;gap:24px">
+  <div><strong>Customer</strong><br><span style="color:#475569">${record.customerName}</span></div>
+  ${record.invoiceNumber ? `<div><strong>Invoice Ref</strong><br><span style="color:#6366f1">${record.invoiceNumber}</span></div>` : ""}
+  <div><strong>Reason</strong><br><span style="color:#475569">${record.reason ?? "—"}</span></div>
+  <div style="text-align:right"><strong>Date</strong><br><span style="color:#475569">${new Date(record.createdAt).toLocaleDateString("en-US",{dateStyle:"medium"})}</span></div>
+</div>
+${hasLines ? `<table><thead><tr><th>Description</th><th>Qty</th><th>Unit Price</th><th>Disc</th><th>Credit</th></tr></thead><tbody>${rows}</tbody></table>` : ""}
+<div style="display:flex;justify-content:flex-end"><div style="min-width:220px">
+  <div class="grand"><span>Total Credit</span><span style="color:#16a34a">$${total.toFixed(2)}</span></div>
+</div></div>
+${record.refundMethod ? `<p style="margin-top:12px;font-size:12px;color:#64748b">Refund method: <strong>${record.refundMethod}</strong></p>` : ""}
+${record.notes ? `<div style="margin-top:16px;padding:10px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;font-size:12px;color:#1e40af"><strong>Notes:</strong> ${record.notes}</div>` : ""}
+<div class="footer">This credit memo was issued by Forez Corp · ${cmNumber}</div>
+</body></html>`;
+    const win = window.open("", "_blank", "width=750,height=950");
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+    win.onload = () => { win.focus(); win.print(); };
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center p-4"
+      style={{ background: "rgba(15,23,42,0.6)", backdropFilter: "blur(10px)" }}
+      onClick={onClose}
+    >
+      <div
+        className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-200 max-h-[90vh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 sticky top-0 bg-white z-10">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center">
+              <FileText size={16} className="text-emerald-600" />
+            </div>
+            <div>
+              <h2 className="font-black text-slate-800 text-base">Credit Memo</h2>
+              <p className="text-xs text-slate-400 font-mono mt-0.5">{cmNumber}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={printMemo}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              <Printer size={13} /> Print
+            </button>
+            <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-5 flex flex-col gap-5">
+          {/* Status banner */}
+          <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
+            <CheckCircle2 size={16} className="text-emerald-600 flex-shrink-0" />
+            <span className="text-sm font-semibold text-emerald-700">Credit Approved — {record.refundMethod ? `to be issued via ${record.refundMethod}` : "Credit on file"}</span>
+          </div>
+
+          {/* Meta grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: "Customer", value: record.customerName },
+              { label: "Invoice Ref", value: record.invoiceNumber ?? "—", mono: true, color: "text-indigo-600" },
+              { label: "Reason", value: record.reason ?? "—" },
+              { label: "Date Issued", value: new Date(record.createdAt).toLocaleDateString("en-US", { dateStyle: "medium" }) },
+            ].map(({ label, value, mono, color }) => (
+              <div key={label} className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">{label}</p>
+                <p className={`text-sm font-semibold ${mono ? `font-mono ${color ?? "text-slate-700"}` : color ?? "text-slate-700"}`}>{value}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Line items */}
+          {hasLines ? (
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Returned Items</p>
+              <div className="rounded-xl border border-slate-200 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ background: "rgba(16,185,129,0.07)" }}>
+                      {["Description", "Qty", "Unit Price", "Disc", "Credit"].map(h => (
+                        <th key={h} className={`px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 ${h === "Qty" ? "text-center" : h === "Unit Price" || h === "Disc" || h === "Credit" ? "text-right" : "text-left"}`}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lineItems.map((li: any, i: number) => {
+                      const gross = (li.quantity ?? 1) * (li.unitPrice ?? 0);
+                      const disc  = gross * ((li.discountPercent ?? 0) / 100);
+                      const lineTotal = gross - disc;
+                      return (
+                        <tr key={i} className="border-t border-slate-100">
+                          <td className="px-4 py-3 text-slate-800">{li.description ?? `Item ${i + 1}`}</td>
+                          <td className="px-4 py-3 text-center text-slate-600">{li.quantity ?? 1}</td>
+                          <td className="px-4 py-3 text-right text-slate-600">{formatCurrency(li.unitPrice ?? 0)}</td>
+                          <td className="px-4 py-3 text-right text-red-500 text-xs">
+                            {(li.discountPercent ?? 0) > 0 ? `-${li.discountPercent}%` : <span className="text-slate-300">—</span>}
+                          </td>
+                          <td className="px-4 py-3 text-right font-semibold text-emerald-700">{formatCurrency(lineTotal)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Total */}
+          <div className="flex justify-end">
+            <div className="min-w-[200px]">
+              <div className="flex justify-between items-center pt-3 border-t-2 border-slate-200 gap-8">
+                <span className="text-sm font-semibold text-slate-600">Total Credit</span>
+                <span className="text-2xl font-black text-emerald-600">{formatCurrency(total)}</span>
+              </div>
+              {record.refundMethod && (
+                <p className="text-xs text-slate-400 text-right mt-1">Via {record.refundMethod}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Notes */}
+          {record.notes && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-800">
+              <p className="font-semibold text-[11px] uppercase tracking-wider text-blue-500 mb-1">Notes</p>
+              <p>{record.notes}</p>
+            </div>
+          )}
+          {record.internalNote && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
+              <p className="font-semibold text-[11px] uppercase tracking-wider text-amber-500 mb-1">Internal Note</p>
+              <p>{record.internalNote}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── FORM MODAL ──────────────────────────────────────────────── */
 function ReturnModal({
   record,
   customers,
   invoices,
   onClose,
+  onApproved,
 }: {
   record?: ReturnRecord;
   customers: any[];
   invoices: any[];
   onClose: () => void;
+  onApproved?: (record: ReturnRecord) => void;
 }) {
   const qc = useQueryClient();
   const isEdit = !!record;
@@ -104,6 +303,7 @@ function ReturnModal({
   const [status, setStatus]           = useState(record?.status ?? "pending");
   const [reason, setReason]           = useState(record?.reason ?? "");
   const [refundAmount, setRefundAmount] = useState(record?.refundAmount?.toString() ?? "");
+  const [refundAmountEdited, setRefundAmountEdited] = useState(false);
   const [refundMethod, setRefundMethod] = useState(record?.refundMethod ?? "");
   const [refundedAt, setRefundedAt]   = useState(record?.refundedAt ? record.refundedAt.slice(0, 10) : "");
   const [notes, setNotes]             = useState(record?.notes ?? "");
@@ -111,34 +311,108 @@ function ReturnModal({
   const [saving, setSaving]           = useState(false);
   const [error, setError]             = useState<string | null>(null);
 
+  // Line-item selection state
+  const [selectedLineIdxs, setSelectedLineIdxs] = useState<Set<number>>(() => {
+    if (record?.lineItems?.length) {
+      return new Set(record.lineItems.map((_: any, i: number) => i));
+    }
+    return new Set<number>();
+  });
+
   const filteredInvoices = invoices.filter(inv =>
     !customerId || Number(inv.customerId) === Number(customerId)
   );
+
+  // Get the selected invoice's line items
+  const selectedInvoice = invoices.find(inv => invoiceId && Number(inv.id) === Number(invoiceId));
+  const invLineItems: any[] = selectedInvoice?.lineItems ?? [];
+
+  // When invoice changes, select all items and auto-calc total
+  function handleInvoiceChange(newInvId: string) {
+    setInvoiceId(newInvId);
+    setRefundAmountEdited(false);
+    const inv = invoices.find(i => Number(i.id) === Number(newInvId));
+    if (inv) {
+      const lines: any[] = inv.lineItems ?? [];
+      const allIdxs = new Set(lines.map((_: any, i: number) => i));
+      setSelectedLineIdxs(allIdxs);
+      if (!refundAmountEdited) {
+        setRefundAmount(Number(inv.total ?? 0).toFixed(2));
+      }
+    } else {
+      setSelectedLineIdxs(new Set());
+    }
+  }
+
+  // Recalculate total when selection changes
+  function calcSelectedTotal(idxs: Set<number>): number {
+    return [...idxs].reduce((sum, i) => {
+      const li = invLineItems[i];
+      if (!li) return sum;
+      const gross = (li.quantity ?? 1) * (li.unitPrice ?? 0);
+      const disc = gross * ((li.discountPercent ?? 0) / 100);
+      return sum + (gross - disc);
+    }, 0);
+  }
+
+  function toggleLine(idx: number) {
+    setSelectedLineIdxs(prev => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx); else next.add(idx);
+      setRefundAmountEdited(false);
+      const total = calcSelectedTotal(next);
+      setRefundAmount(total.toFixed(2));
+      return next;
+    });
+  }
+
+  function toggleAllLines() {
+    if (selectedLineIdxs.size === invLineItems.length) {
+      setSelectedLineIdxs(new Set());
+      setRefundAmount("0.00");
+    } else {
+      const allIdxs = new Set(invLineItems.map((_: any, i: number) => i));
+      setSelectedLineIdxs(allIdxs);
+      const total = calcSelectedTotal(allIdxs);
+      setRefundAmount(total.toFixed(2));
+    }
+    setRefundAmountEdited(false);
+  }
 
   const handleSave = async () => {
     if (!customerId) { setError("Please select a customer."); return; }
     setSaving(true); setError(null);
     try {
+      const selectedLines = invLineItems.length > 0
+        ? invLineItems.filter((_: any, i: number) => selectedLineIdxs.has(i))
+        : (record?.lineItems ?? []);
+
       const body = {
         type,
         customerId: Number(customerId),
         invoiceId: invoiceId ? Number(invoiceId) : null,
         status,
         reason: reason || null,
-        lineItems: [],
+        lineItems: selectedLines,
         refundAmount: refundAmount ? Number(refundAmount) : null,
         refundMethod: refundMethod || null,
         refundedAt: refundedAt || null,
         notes: notes || null,
         internalNote: internalNote || null,
       };
+
+      let saved: ReturnRecord;
       if (isEdit) {
-        await apiFetch(`/api/returns-refunds/${record!.id}`, { method: "PATCH", body: JSON.stringify(body) });
+        saved = await apiFetch(`/api/returns-refunds/${record!.id}`, { method: "PATCH", body: JSON.stringify(body) });
       } else {
-        await apiFetch("/api/returns-refunds", { method: "POST", body: JSON.stringify(body) });
+        saved = await apiFetch("/api/returns-refunds", { method: "POST", body: JSON.stringify(body) });
       }
       await qc.invalidateQueries({ queryKey: ["returns-refunds"] });
       onClose();
+      // If status is approved/refunded/completed, show credit memo
+      if (CREDIT_STATUSES.has(saved.status) && onApproved) {
+        onApproved(saved);
+      }
     } catch (e: any) {
       setError(e.message || "Failed to save.");
     } finally {
@@ -146,9 +420,12 @@ function ReturnModal({
     }
   };
 
+  const selectedTotal = calcSelectedTotal(selectedLineIdxs);
+  const showLineItems = (type === "return" || type === "return_refund") && invLineItems.length > 0;
+
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: "rgba(15,23,42,0.5)", backdropFilter: "blur(8px)" }} onClick={onClose}>
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-xl border border-slate-200 max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 sticky top-0 bg-white z-10">
           <div>
             <h2 className="font-bold text-slate-800 text-base">{isEdit ? "Edit Return / Refund" : "New Return / Refund"}</h2>
@@ -156,6 +433,7 @@ function ReturnModal({
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"><X size={16} /></button>
         </div>
+
         <div className="px-6 py-5 flex flex-col gap-4">
           {/* Type */}
           <div>
@@ -173,7 +451,7 @@ function ReturnModal({
           {/* Customer */}
           <div>
             <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 block">Customer *</label>
-            <select value={customerId} onChange={e => { setCustomerId(e.target.value); setInvoiceId(""); }}
+            <select value={customerId} onChange={e => { setCustomerId(e.target.value); setInvoiceId(""); setSelectedLineIdxs(new Set()); }}
               className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2.5 bg-white text-slate-800 focus:outline-none focus:border-indigo-400">
               <option value="">Select customer…</option>
               {customers.map((c: any) => (
@@ -185,16 +463,78 @@ function ReturnModal({
           {/* Invoice */}
           <div>
             <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 block">Linked Invoice (optional)</label>
-            <select value={invoiceId} onChange={e => setInvoiceId(e.target.value)}
+            <select value={invoiceId} onChange={e => handleInvoiceChange(e.target.value)}
               className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2.5 bg-white text-slate-700 focus:outline-none focus:border-indigo-400">
               <option value="">None</option>
               {filteredInvoices.map((inv: any) => (
                 <option key={inv.id} value={inv.id}>
-                  {inv.invoiceNumber || `INV-${inv.id}`} — ${Number(inv.total ?? 0).toFixed(2)}
+                  {inv.invoiceNumber || `INV-${inv.id}`} — {formatCurrency(Number(inv.total ?? 0))}
                 </option>
               ))}
             </select>
           </div>
+
+          {/* ── Invoice line-item picker ─────────────────────────── */}
+          {showLineItems && (
+            <div className="border border-indigo-100 rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-2.5 bg-indigo-50/60 border-b border-indigo-100">
+                <div className="flex items-center gap-2">
+                  <Package size={13} className="text-indigo-500" />
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-indigo-600">Select Items to Return</span>
+                </div>
+                <button
+                  onClick={toggleAllLines}
+                  className="text-[11px] font-semibold text-indigo-500 hover:text-indigo-700 transition-colors"
+                >
+                  {selectedLineIdxs.size === invLineItems.length ? "Deselect all" : "Select all"}
+                </button>
+              </div>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-slate-50/70 border-b border-slate-100">
+                    <th className="px-3 py-2 text-left font-semibold text-slate-500 w-8"></th>
+                    <th className="px-3 py-2 text-left font-semibold text-slate-500">Description</th>
+                    <th className="px-3 py-2 text-center font-semibold text-slate-500 w-12">Qty</th>
+                    <th className="px-3 py-2 text-right font-semibold text-slate-500 w-20">Unit $</th>
+                    <th className="px-3 py-2 text-right font-semibold text-slate-500 w-20">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invLineItems.map((li: any, i: number) => {
+                    const gross = (li.quantity ?? 1) * (li.unitPrice ?? 0);
+                    const disc  = gross * ((li.discountPercent ?? 0) / 100);
+                    const lineTotal = gross - disc;
+                    const checked = selectedLineIdxs.has(i);
+                    return (
+                      <tr
+                        key={i}
+                        onClick={() => toggleLine(i)}
+                        className={`border-b border-slate-100 cursor-pointer transition-colors ${checked ? "bg-indigo-50/40" : "hover:bg-slate-50"}`}
+                      >
+                        <td className="px-3 py-2.5">
+                          {checked
+                            ? <CheckSquare size={14} className="text-indigo-600" />
+                            : <Square size={14} className="text-slate-300" />
+                          }
+                        </td>
+                        <td className={`px-3 py-2.5 ${checked ? "text-slate-800 font-medium" : "text-slate-500"}`}>{li.description ?? `Item ${i + 1}`}</td>
+                        <td className={`px-3 py-2.5 text-center ${checked ? "text-slate-700" : "text-slate-400"}`}>{li.quantity ?? 1}</td>
+                        <td className={`px-3 py-2.5 text-right ${checked ? "text-slate-700" : "text-slate-400"}`}>${Number(li.unitPrice ?? 0).toFixed(2)}</td>
+                        <td className={`px-3 py-2.5 text-right font-semibold ${checked ? "text-indigo-700" : "text-slate-300"}`}>${lineTotal.toFixed(2)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {/* Running total */}
+              <div className="flex items-center justify-between px-4 py-2.5 bg-indigo-50/60 border-t border-indigo-100">
+                <span className="text-xs text-indigo-600 font-semibold">
+                  {selectedLineIdxs.size} of {invLineItems.length} items selected
+                </span>
+                <span className="text-sm font-black text-indigo-700">{formatCurrency(selectedTotal)}</span>
+              </div>
+            </div>
+          )}
 
           {/* Reason */}
           <div>
@@ -213,15 +553,27 @@ function ReturnModal({
               className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2.5 bg-white text-slate-700 focus:outline-none focus:border-indigo-400">
               {STATUSES.map(s => <option key={s} value={s} className="capitalize">{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
             </select>
+            {CREDIT_STATUSES.has(status) && (
+              <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-emerald-700 font-medium">
+                <Info size={11} /> Saving with this status will generate a Credit Memo
+              </p>
+            )}
           </div>
 
           {/* Refund fields */}
           {(type === "refund" || type === "return_refund") && (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 block">Refund Amount ($)</label>
-                <input type="number" placeholder="0.00" step="0.01" value={refundAmount} onChange={e => setRefundAmount(e.target.value)}
-                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2.5 bg-white text-slate-800 focus:outline-none focus:border-indigo-400" />
+                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 block">
+                  Refund Amount ($)
+                  {showLineItems && !refundAmountEdited && <span className="ml-1 text-indigo-400 normal-case font-normal">auto-calculated</span>}
+                </label>
+                <input
+                  type="number" placeholder="0.00" step="0.01"
+                  value={refundAmount}
+                  onChange={e => { setRefundAmount(e.target.value); setRefundAmountEdited(true); }}
+                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2.5 bg-white text-slate-800 focus:outline-none focus:border-indigo-400"
+                />
               </div>
               <div>
                 <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 block">Refund Method</label>
@@ -239,6 +591,22 @@ function ReturnModal({
             </div>
           )}
 
+          {/* For return-only type, still show a simple amount field */}
+          {type === "return" && (
+            <div>
+              <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 block">
+                Credit Amount ($)
+                {showLineItems && !refundAmountEdited && <span className="ml-1 text-indigo-400 normal-case font-normal">auto-calculated</span>}
+              </label>
+              <input
+                type="number" placeholder="0.00" step="0.01"
+                value={refundAmount}
+                onChange={e => { setRefundAmount(e.target.value); setRefundAmountEdited(true); }}
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2.5 bg-white text-slate-800 focus:outline-none focus:border-indigo-400"
+              />
+            </div>
+          )}
+
           {/* Notes */}
           <div>
             <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 block">Notes</label>
@@ -253,6 +621,7 @@ function ReturnModal({
 
           {error && <p className="text-xs text-red-500 bg-red-50 rounded-lg px-3 py-2 border border-red-200">{error}</p>}
         </div>
+
         <div className="flex gap-3 px-6 pb-6 justify-end">
           <button onClick={onClose} className="px-4 py-2 text-slate-700 border border-slate-200 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors">Cancel</button>
           <button onClick={handleSave} disabled={saving}
@@ -283,6 +652,7 @@ export default function Returns() {
   const [editRecord, setEditRecord] = useState<ReturnRecord | null>(null);
   const [showCharts, setShowCharts] = useState(false);
   const [chartView, setChartView]   = useState<"type"|"reason"|"trend"|"status">("type");
+  const [creditMemoRecord, setCreditMemoRecord] = useState<ReturnRecord | null>(null);
 
   const deleteRecord = useMutation({
     mutationFn: (id: number) => apiFetch(`/api/returns-refunds/${id}`, { method: "DELETE" }),
@@ -292,7 +662,12 @@ export default function Returns() {
   const updateStatus = useMutation({
     mutationFn: ({ id, status }: { id: number; status: string }) =>
       apiFetch(`/api/returns-refunds/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["returns-refunds"] }),
+    onSuccess: (saved: ReturnRecord) => {
+      qc.invalidateQueries({ queryKey: ["returns-refunds"] });
+      if (CREDIT_STATUSES.has(saved.status)) {
+        setCreditMemoRecord(saved);
+      }
+    },
   });
 
   const q = search.trim().toLowerCase();
@@ -396,7 +771,7 @@ export default function Returns() {
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             <input
               type="text"
-              placeholder="Search by customer, invoice, reason, notes…"
+              placeholder="Search by customer, invoice, reason…"
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-400"
@@ -426,7 +801,6 @@ export default function Returns() {
         {/* ── Analytics Panel ─────────────────────────────── */}
         {showCharts && (
           <div className="glass-card p-5 flex flex-col gap-4">
-            {/* KPI row */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
                 { label: "Total Records", value: String(records?.length??0), color: "text-slate-700" },
@@ -443,7 +817,6 @@ export default function Returns() {
                 </div>
               ))}
             </div>
-            {/* View tabs */}
             <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5 w-fit">
               {(["type","reason","trend","status"] as const).map(v => (
                 <button key={v} onClick={() => setChartView(v)}
@@ -452,7 +825,6 @@ export default function Returns() {
                 </button>
               ))}
             </div>
-
             {chartView === "type" && (
               <div className="h-56">
                 <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mb-2">Returns & Refunds by Type</p>
@@ -578,8 +950,8 @@ export default function Returns() {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ background: "rgba(239,246,255,0.95)" }}>
-                  {["#", "Type", "Customer", "Invoice", "Reason", "Status", "Refund Amt", "Refund Method", "Date", ""].map(h => (
-                    <th key={h} className={`px-4 py-3 text-[11px] font-semibold uppercase tracking-wider ${h === "Refund Amt" ? "text-right" : "text-left"}`}
+                  {["#", "Type", "Customer", "Invoice", "Reason", "Status", "Credit Amt", "Method", "Date", ""].map(h => (
+                    <th key={h} className={`px-4 py-3 text-[11px] font-semibold uppercase tracking-wider ${h === "Credit Amt" ? "text-right" : "text-left"}`}
                       style={{ background: "rgba(99,102,241,0.10)", color: "#4338ca" }}>
                       {h}
                     </th>
@@ -587,69 +959,93 @@ export default function Returns() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(r => (
-                  <tr key={r.id}
-                    className="border-b border-slate-100 hover:bg-indigo-50/30 transition-colors group"
-                    style={{ background: "rgba(255,255,255,0.45)" }}
-                  >
-                    <td className="px-4 py-3.5 font-mono text-xs text-slate-400">#{r.id.toString().padStart(4, "0")}</td>
-                    <td className="px-4 py-3.5"><TypeBadge type={r.type} /></td>
-                    <td className="px-4 py-3.5">
-                      <p className="font-semibold text-slate-800 text-sm">{r.customerName}</p>
-                    </td>
-                    <td className="px-4 py-3.5 font-mono text-xs text-indigo-600">
-                      {r.invoiceNumber || (r.invoiceId ? `INV-${r.invoiceId}` : "—")}
-                    </td>
-                    <td className="px-4 py-3.5 max-w-[160px]">
-                      <span className="truncate block text-slate-500 text-xs" title={r.reason ?? ""}>{r.reason || "—"}</span>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button className="flex items-center gap-1 cursor-pointer">
-                            <StatusBadge status={r.status} />
-                            <ChevronDown size={10} className="text-slate-400" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="bg-white border-slate-200 shadow-lg text-slate-800 min-w-[140px]">
-                          {STATUSES.map(s => (
-                            <DropdownMenuItem key={s} onClick={() => updateStatus.mutate({ id: r.id, status: s })}
-                              className={`capitalize text-xs cursor-pointer gap-2 ${r.status === s ? "font-bold" : ""}`}>
-                              {r.status === s && <CheckCircle2 size={11} className="text-indigo-600" />}
-                              {s}
+                {filtered.map(r => {
+                  const hasCreditMemo = CREDIT_STATUSES.has(r.status);
+                  return (
+                    <tr key={r.id}
+                      className="border-b border-slate-100 hover:bg-indigo-50/30 transition-colors group"
+                      style={{ background: "rgba(255,255,255,0.45)" }}
+                    >
+                      <td className="px-4 py-3.5 font-mono text-xs text-slate-400">#{r.id.toString().padStart(4, "0")}</td>
+                      <td className="px-4 py-3.5"><TypeBadge type={r.type} /></td>
+                      <td className="px-4 py-3.5">
+                        <p className="font-semibold text-slate-800 text-sm">{r.customerName}</p>
+                      </td>
+                      <td className="px-4 py-3.5 font-mono text-xs text-indigo-600">
+                        {r.invoiceNumber || (r.invoiceId ? `INV-${r.invoiceId}` : "—")}
+                      </td>
+                      <td className="px-4 py-3.5 max-w-[140px]">
+                        <span className="truncate block text-slate-500 text-xs" title={r.reason ?? ""}>{r.reason || "—"}</span>
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button className="flex items-center gap-1 cursor-pointer">
+                              <StatusBadge status={r.status} />
+                              <ChevronDown size={10} className="text-slate-400" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start" className="bg-white border-slate-200 shadow-lg text-slate-800 min-w-[140px]">
+                            {STATUSES.map(s => (
+                              <DropdownMenuItem key={s} onClick={() => updateStatus.mutate({ id: r.id, status: s })}
+                                className={`capitalize text-xs cursor-pointer gap-2 ${r.status === s ? "font-bold" : ""}`}>
+                                {r.status === s && <CheckCircle2 size={11} className="text-indigo-600" />}
+                                {s}
+                                {CREDIT_STATUSES.has(s) && s !== r.status && (
+                                  <span className="ml-auto text-[10px] text-emerald-600 font-semibold">→ Credit Memo</span>
+                                )}
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </td>
+                      <td className="px-4 py-3.5 text-right font-semibold text-sm">
+                        {r.refundAmount != null ? (
+                          <span className="text-emerald-600">{formatCurrency(r.refundAmount)}</span>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3.5 text-xs text-slate-500">{r.refundMethod || "—"}</td>
+                      <td className="px-4 py-3.5">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs text-slate-400 font-mono">{formatDate(r.createdAt)}</span>
+                          {hasCreditMemo && (
+                            <button
+                              onClick={() => setCreditMemoRecord(r)}
+                              className="flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5 hover:bg-emerald-100 transition-colors w-fit"
+                            >
+                              <FileText size={9} /> CM-{String(r.id).padStart(4, "0")}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-slate-100 rounded-lg transition-all">
+                            <MoreHorizontal size={14} className="text-slate-500" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="bg-white border-slate-200 shadow-lg text-slate-800 min-w-[160px]">
+                            <DropdownMenuItem onClick={() => { setEditRecord(r); setShowModal(true); }}
+                              className="gap-2 cursor-pointer text-sm hover:bg-slate-50 focus:bg-slate-50">
+                              <Edit size={13} /> Edit
                             </DropdownMenuItem>
-                          ))}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </td>
-                    <td className="px-4 py-3.5 text-right font-semibold text-sm">
-                      {r.refundAmount != null ? (
-                        <span className="text-emerald-600">{formatCurrency(r.refundAmount)}</span>
-                      ) : (
-                        <span className="text-slate-300">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3.5 text-xs text-slate-500">{r.refundMethod || "—"}</td>
-                    <td className="px-4 py-3.5 text-xs text-slate-400 font-mono">{formatDate(r.createdAt)}</td>
-                    <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-slate-100 rounded-lg transition-all">
-                          <MoreHorizontal size={14} className="text-slate-500" />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="bg-white border-slate-200 shadow-lg text-slate-800 min-w-[140px]">
-                          <DropdownMenuItem onClick={() => { setEditRecord(r); setShowModal(true); }}
-                            className="gap-2 cursor-pointer text-sm hover:bg-slate-50 focus:bg-slate-50">
-                            <Edit size={13} /> Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => confirm("Delete this record?") && deleteRecord.mutate(r.id)}
-                            className="gap-2 text-red-500 cursor-pointer text-sm hover:bg-red-50 focus:bg-red-50 focus:text-red-500">
-                            <Trash2 size={13} /> Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </td>
-                  </tr>
-                ))}
+                            {hasCreditMemo && (
+                              <DropdownMenuItem onClick={() => setCreditMemoRecord(r)}
+                                className="gap-2 cursor-pointer text-sm text-emerald-700 hover:bg-emerald-50 focus:bg-emerald-50 focus:text-emerald-700">
+                                <FileText size={13} /> View Credit Memo
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem onClick={() => confirm("Delete this record?") && deleteRecord.mutate(r.id)}
+                              className="gap-2 text-red-500 cursor-pointer text-sm hover:bg-red-50 focus:bg-red-50 focus:text-red-500">
+                              <Trash2 size={13} /> Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -662,6 +1058,14 @@ export default function Returns() {
           customers={(customers ?? []) as any[]}
           invoices={(invoices ?? []) as any[]}
           onClose={() => { setShowModal(false); setEditRecord(null); }}
+          onApproved={saved => { setCreditMemoRecord(saved); }}
+        />
+      )}
+
+      {creditMemoRecord && (
+        <CreditMemoView
+          record={creditMemoRecord}
+          onClose={() => setCreditMemoRecord(null)}
         />
       )}
     </Layout>
