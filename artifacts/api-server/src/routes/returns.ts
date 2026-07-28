@@ -22,18 +22,34 @@ const CreateReturnBody = z.object({
 const UpdateReturnBody = CreateReturnBody.partial();
 
 async function withNames(r: typeof returnsTable.$inferSelect) {
-  const [customer] = await db.select({ name: customersTable.name, company: customersTable.company })
-    .from(customersTable).where(eq(customersTable.id, r.customerId));
+  const [customer] = await db
+    .select({ name: customersTable.name, company: customersTable.company })
+    .from(customersTable)
+    .where(eq(customersTable.id, r.customerId));
+
   let invoiceNumber: string | null = null;
   if (r.invoiceId) {
-    const [inv] = await db.select({ invoiceNumber: invoicesTable.invoiceNumber })
-      .from(invoicesTable).where(eq(invoicesTable.id, r.invoiceId));
+    const [inv] = await db
+      .select({ invoiceNumber: invoicesTable.invoiceNumber })
+      .from(invoicesTable)
+      .where(eq(invoicesTable.id, r.invoiceId));
     invoiceNumber = inv?.invoiceNumber ?? null;
   }
+
+  let usedByInvoiceNumber: string | null = null;
+  if ((r as any).usedByInvoiceId) {
+    const [inv] = await db
+      .select({ invoiceNumber: invoicesTable.invoiceNumber })
+      .from(invoicesTable)
+      .where(eq(invoicesTable.id, (r as any).usedByInvoiceId));
+    usedByInvoiceNumber = inv?.invoiceNumber ?? null;
+  }
+
   return {
     ...r,
     customerName: customer?.company || customer?.name || "Unknown",
     invoiceNumber,
+    usedByInvoiceNumber,
     refundAmount: r.refundAmount != null ? Number(r.refundAmount) : null,
     lineItems: (r.lineItems ?? []) as object[],
   };
@@ -73,18 +89,35 @@ router.patch("/returns-refunds/:id", async (req, res): Promise<void> => {
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const updateData: Record<string, any> = {};
   const d = parsed.data;
-  if (d.type        !== undefined) updateData.type        = d.type;
-  if (d.customerId  !== undefined) updateData.customerId  = d.customerId;
-  if (d.invoiceId   !== undefined) updateData.invoiceId   = d.invoiceId ?? null;
-  if (d.status      !== undefined) updateData.status      = d.status;
-  if (d.reason      !== undefined) updateData.reason      = d.reason ?? null;
-  if (d.lineItems   !== undefined) updateData.lineItems   = d.lineItems;
-  if (d.refundAmount!== undefined) updateData.refundAmount = d.refundAmount != null ? String(d.refundAmount) : null;
-  if (d.refundMethod!== undefined) updateData.refundMethod = d.refundMethod ?? null;
-  if (d.refundedAt  !== undefined) updateData.refundedAt  = d.refundedAt ? new Date(d.refundedAt) : null;
-  if (d.notes       !== undefined) updateData.notes       = d.notes ?? null;
-  if (d.internalNote!== undefined) updateData.internalNote= d.internalNote ?? null;
+  if (d.type         !== undefined) updateData.type         = d.type;
+  if (d.customerId   !== undefined) updateData.customerId   = d.customerId;
+  if (d.invoiceId    !== undefined) updateData.invoiceId    = d.invoiceId ?? null;
+  if (d.status       !== undefined) updateData.status       = d.status;
+  if (d.reason       !== undefined) updateData.reason       = d.reason ?? null;
+  if (d.lineItems    !== undefined) updateData.lineItems    = d.lineItems;
+  if (d.refundAmount !== undefined) updateData.refundAmount = d.refundAmount != null ? String(d.refundAmount) : null;
+  if (d.refundMethod !== undefined) updateData.refundMethod = d.refundMethod ?? null;
+  if (d.refundedAt   !== undefined) updateData.refundedAt   = d.refundedAt ? new Date(d.refundedAt) : null;
+  if (d.notes        !== undefined) updateData.notes        = d.notes ?? null;
+  if (d.internalNote !== undefined) updateData.internalNote = d.internalNote ?? null;
+  // allow clearing usedByInvoiceId if explicitly passed
+  if (req.body.usedByInvoiceId !== undefined) updateData.usedByInvoiceId = req.body.usedByInvoiceId ?? null;
   const [row] = await db.update(returnsTable).set(updateData).where(eq(returnsTable.id, id)).returning();
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
+  res.json(await withNames(row));
+});
+
+// POST /api/returns-refunds/:id/use  — mark a credit as consumed by an invoice
+router.post("/returns-refunds/:id/use", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const { invoiceId } = req.body as { invoiceId: number };
+  if (!invoiceId || isNaN(Number(invoiceId))) { res.status(400).json({ error: "invoiceId required" }); return; }
+  const [row] = await db
+    .update(returnsTable)
+    .set({ usedByInvoiceId: Number(invoiceId) } as any)
+    .where(eq(returnsTable.id, id))
+    .returning();
   if (!row) { res.status(404).json({ error: "Not found" }); return; }
   res.json(await withNames(row));
 });

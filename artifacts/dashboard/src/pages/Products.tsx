@@ -1565,7 +1565,7 @@ export default function Products() {
           </div>
         )}
 
-        <div className="glass-card overflow-hidden">
+        <div className="glass-card overflow-x-auto scrollbar-thin">
           {isLoading ? (
             <div className="p-10 flex justify-center"><div className="animate-spin w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full" /></div>
           ) : filtered?.length === 0 ? (

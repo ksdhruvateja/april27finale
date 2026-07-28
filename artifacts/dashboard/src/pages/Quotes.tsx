@@ -359,7 +359,7 @@ export default function Quotes() {
   return (
     <Layout>
       <Header title="Quotes" subtitle={`${quotes?.length ?? 0} total`} />
-      <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 flex flex-col gap-4 bg-[hsl(220_25%_97%)]">
+      <div className="flex-1 overflow-y-auto scrollbar-thin px-5 py-4 flex flex-col gap-4 bg-[hsl(220_25%_97%)]">
         <div className="flex justify-between items-center gap-3">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
@@ -561,7 +561,7 @@ export default function Quotes() {
               <button onClick={() => setSelectedIds(new Set())} className="ml-auto text-xs text-indigo-500 hover:text-indigo-700 font-medium">Clear selection</button>
             </div>
             )}
-          <div className="max-h-[70vh] overflow-y-auto">
+          <div className="max-h-[70vh] overflow-y-auto scrollbar-thin">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/70">

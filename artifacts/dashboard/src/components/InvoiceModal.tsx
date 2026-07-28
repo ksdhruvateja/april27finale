@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCreateInvoice, useUpdateInvoice, useListCustomers, useListTaxRates, getListInvoicesQueryKey, useListSalesLeads, useListInvoices, useListQuotes } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import Modal, { LightFormField as FormField, LightFormInput as FormInput, LightFormTextarea as FormTextarea, LightSubmitBar as SubmitBar } from "./Modal";
 import LineItemsEditor, { LineItem, OrderDiscount, calcTotals } from "./LineItemsEditor";
 import CustomerModal from "./CustomerModal";
@@ -9,11 +9,21 @@ import SalesLeadQuickModal from "./SalesLeadQuickModal";
 
 interface Props { onClose: () => void; initial?: any; }
 
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+const apiFetch = (path: string) => fetch(`${BASE}${path}`, { headers: { "Content-Type": "application/json" } }).then(r => r.json());
+
+const CREDIT_STATUSES = new Set(["approved", "refunded", "completed"]);
+
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const dateStr = (v: string | null | undefined) => v ? new Date(v).toISOString().slice(0, 10) : "";
 const initItems = (raw: any[]): LineItem[] =>
   raw?.length ? raw.map(i => ({ ...i, taxPercent: i.taxPercent ?? 0, discountPercent: i.discountPercent ?? 0 }))
     : [{ description: "", quantity: 1, unitPrice: 0 }];
+
+// Format return ref number
+const retRef = (id: number) => `RET-${String(id).padStart(4, "0")}`;
+const invRef = (id?: number | null, num?: string | null) =>
+  num ?? (id ? `FRZI-${String(id).padStart(4, "0")}` : null);
 
 export default function InvoiceModal({ onClose, initial }: Props) {
   const create = useCreateInvoice();
@@ -23,6 +33,11 @@ export default function InvoiceModal({ onClose, initial }: Props) {
   const { data: salesLeads } = useListSalesLeads();
   const { data: allInvoices = [] } = useListInvoices();
   const { data: allQuotes = [] } = useListQuotes();
+  const { data: allReturns = [] } = useQuery<any[]>({
+    queryKey: ["returns-refunds"],
+    queryFn: () => apiFetch("/api/returns-refunds"),
+    staleTime: 30_000,
+  });
   const queryClient = useQueryClient();
   const isEditing = !!initial;
 
@@ -53,6 +68,68 @@ export default function InvoiceModal({ onClose, initial }: Props) {
   const [sendStatus, setSendStatus] = useState<"idle" | "sending-email" | "sending-text" | "sent-email" | "sent-text">("idle");
   const salesLeadRef = useRef<HTMLDivElement>(null);
 
+  // ── Credit state ────────────────────────────────────────────────────────────
+  // Credits that are eligible for this customer (available, not yet used)
+  const [showCreditPopup, setShowCreditPopup] = useState(false);
+  // Track which credits the user has chosen to apply (before saving invoice)
+  const [appliedCredits, setAppliedCredits] = useState<number[]>([]); // return IDs
+  // pending markings: returnId → invoiceId; applied after create/update
+  const pendingCreditApplications = useRef<number[]>([]);
+
+  const availableCredits = useMemo(() => {
+    if (!customerId) return [];
+    return (allReturns as any[]).filter(r =>
+      String(r.customerId) === String(customerId) &&
+      CREDIT_STATUSES.has(r.status) &&
+      r.refundAmount != null &&
+      Number(r.refundAmount) > 0 &&
+      !r.usedByInvoiceId
+    );
+  }, [allReturns, customerId]);
+
+  // Show credit popup automatically when customer is selected on new invoice and credits are found
+  useEffect(() => {
+    if (!isEditing && customerId && availableCredits.length > 0) {
+      setShowCreditPopup(true);
+    } else {
+      setShowCreditPopup(false);
+    }
+    setAppliedCredits([]);
+  }, [customerId]);
+
+  // Keep items in sync with applied/removed credits
+  const syncCreditItems = (newApplied: number[]) => {
+    // Remove all existing credit line items first
+    const withoutCredits = items.filter(it => !String(it.description).startsWith("Store Credit –"));
+    // Add a line item for each applied credit
+    const creditLines: LineItem[] = newApplied.map(rid => {
+      const r = availableCredits.find(c => c.id === rid);
+      if (!r) return null!;
+      const srcInvRef = invRef(r.invoiceId, r.invoiceNumber);
+      const desc = `Store Credit – ${retRef(r.id)}${srcInvRef ? ` (Ref: ${srcInvRef})` : ""}`;
+      return { description: desc, quantity: 1, unitPrice: -Number(r.refundAmount), taxPercent: 0, discountPercent: 0 } as LineItem;
+    }).filter(Boolean);
+    setItems([...withoutCredits, ...creditLines]);
+  };
+
+  const toggleCredit = (rid: number) => {
+    const next = appliedCredits.includes(rid)
+      ? appliedCredits.filter(id => id !== rid)
+      : [...appliedCredits, rid];
+    setAppliedCredits(next);
+    syncCreditItems(next);
+  };
+
+  const applyAllCredits = () => {
+    const all = availableCredits.map(c => c.id);
+    setAppliedCredits(all);
+    syncCreditItems(all);
+    setShowCreditPopup(false);
+  };
+
+  const dismissCredit = () => setShowCreditPopup(false);
+
+  // ── Tax / due-date helpers ───────────────────────────────────────────────────
   const taxRateMap = useMemo(() => {
     const map: Record<string, { rate: number; name: string }> = {};
     for (const r of taxRates ?? []) {
@@ -86,7 +163,6 @@ export default function InvoiceModal({ onClose, initial }: Props) {
         return base.toISOString().split("T")[0];
       }
     }
-    // no terms: default to 30 days from base
     const d = new Date(base); d.setDate(d.getDate() + 30);
     return d.toISOString().split("T")[0];
   };
@@ -100,17 +176,14 @@ export default function InvoiceModal({ onClose, initial }: Props) {
     setCustomerId(id);
     setDocLinked(null);
     if (!taxExempt) applyStateTax(id);
-    // always recalculate due date from the current invoiceDate when customer changes
     setDueDate(calcDueDateFromTerms(id, invoiceDate));
   };
 
-  // When invoice date changes on a new invoice, recalculate due date
   useEffect(() => {
     if (isEditing || !invoiceDate) return;
     if (customerId) {
       setDueDate(calcDueDateFromTerms(customerId, invoiceDate));
     } else {
-      // no customer yet — default to invoiceDate + 30
       const base = new Date(invoiceDate + "T00:00:00");
       base.setDate(base.getDate() + 30);
       setDueDate(base.toISOString().split("T")[0]);
@@ -140,12 +213,14 @@ export default function InvoiceModal({ onClose, initial }: Props) {
     }
     return results;
   }, [allInvoices, allQuotes, customers, docQuery]);
+
   const handleTaxExemptChange = (exempt: boolean) => {
     setTaxExempt(exempt);
     if (exempt) { setOrderTaxPercent(0); setTaxHint(null); }
     else if (customerId) applyStateTax(customerId);
   };
 
+  // ── Submit ───────────────────────────────────────────────────────────────────
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerId || items.length === 0) return;
@@ -156,26 +231,55 @@ export default function InvoiceModal({ onClose, initial }: Props) {
     if (freightCost > 0) finalItems = [...finalItems, { description: "Freight", quantity: 1, unitPrice: freightCost }];
     const sanitizedItems = finalItems.map(item => ({ ...item, taxPercent: item.taxPercent ?? 0, discountPercent: item.discountPercent ?? 0 }));
 
+    // Capture applied credit IDs before async save
+    pendingCreditApplications.current = [...appliedCredits];
+
+    // Build notes with credit mentions
+    const creditNoteLines = appliedCredits.map(rid => {
+      const r = availableCredits.find(c => c.id === rid);
+      if (!r) return null;
+      const srcInvRef = invRef(r.invoiceId, r.invoiceNumber);
+      return `Credit applied: ${retRef(r.id)}${srcInvRef ? ` (Ref: ${srcInvRef})` : ""} — $${Number(r.refundAmount).toFixed(2)}`;
+    }).filter(Boolean);
+
+    const finalNotes = [notes, ...creditNoteLines].filter(Boolean).join("\n");
+
     const payload = {
       customerId: Number(customerId),
       lineItems: sanitizedItems,
       dueDate: dueDate ? new Date(dueDate).toISOString() : null,
       salesLead: salesLead || null,
-      notes: notes || null,
+      notes: finalNotes || null,
       internalNote: internalNote || null,
       createdAt: invoiceDate ? new Date(invoiceDate).toISOString() : undefined,
     } as any;
 
-    const onSuccess = () => {
+    const onSuccess = async (savedInvoice?: any) => {
       queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
       queryClient.invalidateQueries({ queryKey: ["accounting-pnl"] });
       queryClient.invalidateQueries({ queryKey: ["accounting-ar"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+
+      // Mark credits as used by this invoice
+      const invoiceId = savedInvoice?.id ?? savedInvoice?.data?.id;
+      if (invoiceId && pendingCreditApplications.current.length > 0) {
+        await Promise.allSettled(
+          pendingCreditApplications.current.map(rid =>
+            fetch(`${BASE}/api/returns-refunds/${rid}/use`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ invoiceId }),
+            })
+          )
+        );
+        queryClient.invalidateQueries({ queryKey: ["returns-refunds"] });
+      }
+
       setShowSendPrompt(true);
     };
 
-    if (isEditing) update.mutate({ id: initial.id, data: payload }, { onSuccess });
-    else create.mutate({ data: payload }, { onSuccess });
+    if (isEditing) update.mutate({ id: initial.id, data: payload }, { onSuccess: (data) => onSuccess(data) });
+    else create.mutate({ data: payload }, { onSuccess: (data) => onSuccess(data) });
   };
 
   const selectedCustomer = useMemo(() => (customers ?? []).find((c: any) => String(c.id) === String(customerId)), [customers, customerId]);
@@ -191,6 +295,11 @@ export default function InvoiceModal({ onClose, initial }: Props) {
   };
 
   const isPending = isEditing ? update.isPending : create.isPending;
+
+  const totalCreditApplied = appliedCredits.reduce((sum, rid) => {
+    const r = availableCredits.find(c => c.id === rid);
+    return sum + (r ? Number(r.refundAmount) : 0);
+  }, 0);
 
   return (
     <>
@@ -298,6 +407,47 @@ export default function InvoiceModal({ onClose, initial }: Props) {
                 </div>
               )}
             </FormField>
+
+            {/* ── Store Credit Alert ─────────────────────────────────────────── */}
+            {!isEditing && availableCredits.length > 0 && showCreditPopup && (
+              <CreditApplyBanner
+                credits={availableCredits}
+                appliedCredits={appliedCredits}
+                onToggle={toggleCredit}
+                onApplyAll={applyAllCredits}
+                onDismiss={dismissCredit}
+              />
+            )}
+            {/* Compact applied-credit summary badge (after dismissing the full popup) */}
+            {!isEditing && !showCreditPopup && appliedCredits.length > 0 && (
+              <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
+                <span className="text-emerald-600 text-base">✓</span>
+                <div className="flex-1">
+                  <p className="text-xs font-semibold text-emerald-700">
+                    Store credit applied: −${totalCreditApplied.toFixed(2)}
+                  </p>
+                  <p className="text-[10px] text-emerald-500">
+                    {appliedCredits.map(rid => retRef(rid)).join(", ")} added as line item{appliedCredits.length > 1 ? "s" : ""}
+                  </p>
+                </div>
+                <button type="button" onClick={() => setShowCreditPopup(true)}
+                  className="text-[10px] text-emerald-600 underline underline-offset-2 hover:text-emerald-800">
+                  Edit
+                </button>
+              </div>
+            )}
+            {/* Remind about unapplied credits when popup is dismissed */}
+            {!isEditing && !showCreditPopup && appliedCredits.length === 0 && availableCredits.length > 0 && (
+              <button type="button" onClick={() => setShowCreditPopup(true)}
+                className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 hover:bg-amber-100 transition-colors text-left w-full">
+                <span className="text-amber-500 text-sm">🎁</span>
+                <p className="flex-1 text-xs font-semibold text-amber-700">
+                  This customer has {availableCredits.length} available credit{availableCredits.length > 1 ? "s" : ""} — click to review
+                </p>
+                <span className="text-[10px] text-amber-600 font-medium">Apply ›</span>
+              </button>
+            )}
+
             <div className="grid grid-cols-3 gap-3">
               <FormField label="Invoice Date">
                 <FormInput type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} />
@@ -410,5 +560,103 @@ export default function InvoiceModal({ onClose, initial }: Props) {
         />
       )}
     </>
+  );
+}
+
+// ─── CreditApplyBanner ────────────────────────────────────────────────────────
+
+interface CreditBannerProps {
+  credits: any[];
+  appliedCredits: number[];
+  onToggle: (rid: number) => void;
+  onApplyAll: () => void;
+  onDismiss: () => void;
+}
+
+function CreditApplyBanner({ credits, appliedCredits, onToggle, onApplyAll, onDismiss }: CreditBannerProps) {
+  const totalAvailable = credits.reduce((s, c) => s + Number(c.refundAmount ?? 0), 0);
+  const totalApplied = appliedCredits.reduce((s, rid) => {
+    const c = credits.find(x => x.id === rid);
+    return s + (c ? Number(c.refundAmount ?? 0) : 0);
+  }, 0);
+
+  return (
+    <div className="rounded-xl border-2 border-emerald-300 bg-emerald-50 overflow-hidden shadow-sm">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 py-3 bg-emerald-100/70 border-b border-emerald-200">
+        <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
+          <span className="text-white text-base leading-none">🎁</span>
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-bold text-emerald-800">Store Credit Available for This Customer</p>
+          <p className="text-[11px] text-emerald-600 mt-0.5">
+            {credits.length} credit{credits.length > 1 ? "s" : ""} totalling{" "}
+            <span className="font-bold">${totalAvailable.toFixed(2)}</span> — select which to apply to this invoice
+          </p>
+        </div>
+        <button type="button" onClick={onDismiss} className="p-1 rounded hover:bg-emerald-200 text-emerald-500 hover:text-emerald-700 transition-colors text-base leading-none" title="Dismiss">✕</button>
+      </div>
+
+      {/* Credit rows */}
+      <div className="px-4 py-3 flex flex-col gap-2">
+        {credits.map(c => {
+          const isApplied = appliedCredits.includes(c.id);
+          const ref = retRef(c.id);
+          const srcInv = invRef(c.invoiceId, c.invoiceNumber);
+          return (
+            <label
+              key={c.id}
+              className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 cursor-pointer transition-all select-none ${
+                isApplied
+                  ? "bg-emerald-100 border-emerald-400 shadow-sm"
+                  : "bg-white border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/40"
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={isApplied}
+                onChange={() => onToggle(c.id)}
+                className="rounded accent-emerald-600 w-4 h-4 flex-shrink-0"
+              />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-xs font-bold text-slate-800">{ref}</span>
+                  {srcInv && (
+                    <span className="text-[10px] font-semibold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded px-1.5 py-0.5">
+                      Order: {srcInv}
+                    </span>
+                  )}
+                  <span className="text-[10px] text-slate-400 capitalize">{c.status}</span>
+                </div>
+                {c.reason && <p className="text-[10px] text-slate-400 mt-0.5 truncate">{c.reason}</p>}
+              </div>
+              <span className={`text-sm font-bold flex-shrink-0 ${isApplied ? "text-emerald-700" : "text-slate-700"}`}>
+                −${Number(c.refundAmount).toFixed(2)}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+
+      {/* Footer */}
+      <div className="px-4 pb-3 flex items-center gap-2">
+        {credits.length > 1 && appliedCredits.length < credits.length && (
+          <button type="button" onClick={onApplyAll}
+            className="flex-1 py-2 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition-colors">
+            Apply All Credits (−${totalAvailable.toFixed(2)})
+          </button>
+        )}
+        {totalApplied > 0 && (
+          <button type="button" onClick={onDismiss}
+            className="flex-1 py-2 rounded-lg bg-emerald-700 text-white text-xs font-bold hover:bg-emerald-800 transition-colors">
+            ✓ Confirm — Apply −${totalApplied.toFixed(2)} &amp; Continue
+          </button>
+        )}
+        <button type="button" onClick={onDismiss}
+          className="px-4 py-2 rounded-lg border border-slate-200 text-slate-500 text-xs font-medium hover:bg-slate-50 transition-colors">
+          Skip Credits
+        </button>
+      </div>
+    </div>
   );
 }

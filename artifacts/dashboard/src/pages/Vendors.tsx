@@ -392,7 +392,7 @@ export default function Vendors() {
                                           {po.status}
                                         </span>
                                         {po.expectedDate && (
-                                          <span className="text-[10px] text-slate-400 flex-shrink-0">Due {formatDate(po.expectedDate)}</span>
+                                          <span className="text-[10px] text-indigo-500 font-semibold flex-shrink-0">📅 Promise: {formatDate(po.expectedDate)}</span>
                                         )}
                                         <span className="ml-auto text-xs font-semibold text-slate-700 flex-shrink-0">{formatCurrency(Number(po.total ?? 0))}</span>
                                       </div>

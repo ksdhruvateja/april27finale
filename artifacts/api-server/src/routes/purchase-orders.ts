@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { eq, inArray } from "drizzle-orm";
-import { db, purchaseOrdersTable, vendorsTable, billsTable } from "@workspace/db";
+import { db, purchaseOrdersTable, vendorsTable, billsTable, stockMovementsTable, inventoryTable } from "@workspace/db";
 import {
   GetPurchaseOrderParams,
   UpdatePurchaseOrderParams,
@@ -32,7 +32,9 @@ const CreatePurchaseOrderPayload = z.object({
   status: PurchaseOrderStatus.optional(),
   lineItems: z.array(PurchaseOrderLineItem),
   notes: z.string().nullish(),
+  // accept both "expectedDate" and "promiseDate" as the delivery commitment date
   expectedDate: z.coerce.date().nullish(),
+  promiseDate: z.coerce.date().nullish(),
 });
 
 const UpdatePurchaseOrderPayload = z.object({
@@ -41,7 +43,15 @@ const UpdatePurchaseOrderPayload = z.object({
   lineItems: z.array(PurchaseOrderLineItem).optional(),
   notes: z.string().nullish(),
   expectedDate: z.coerce.date().nullish(),
+  promiseDate: z.coerce.date().nullish(),
 }).partial();
+
+const ReceiveItemsPayload = z.object({
+  items: z.array(z.object({
+    lineIndex: z.number().int().min(0),
+    qty: z.number().min(0),
+  })),
+});
 
 function calcTotals(lineItems: Array<{ quantity: number; unitPrice: number; taxPercent: number; discountPercent: number }>) {
   let subtotal = 0, taxTotal = 0;
@@ -56,7 +66,32 @@ function calcTotals(lineItems: Array<{ quantity: number; unitPrice: number; taxP
 
 async function withVendorName(po: typeof purchaseOrdersTable.$inferSelect) {
   const [vendor] = await db.select({ name: vendorsTable.name }).from(vendorsTable).where(eq(vendorsTable.id, po.vendorId));
-  return { ...po, vendorName: vendor?.name ?? "Unknown", lineItems: po.lineItems as object[], subtotal: Number(po.subtotal), taxTotal: Number(po.taxTotal), total: Number(po.total) };
+  return { ...po, vendorName: vendor?.name ?? "Unknown", lineItems: po.lineItems as object[], receivedItems: po.receivedItems as object[], subtotal: Number(po.subtotal), taxTotal: Number(po.taxTotal), total: Number(po.total) };
+}
+
+function computePoStatus(
+  currentStatus: string,
+  lineItems: Array<{ quantity: number; [k: string]: any }>,
+  receivedItems: Array<{ lineIndex: number; receivedQty: number }>,
+): string {
+  // Terminal statuses are not overridden by receipt logic
+  if (["billed", "cancelled"].includes(currentStatus)) return currentStatus;
+  if (lineItems.length === 0) return currentStatus;
+
+  const orderedQtyByIdx = lineItems.map((li) => Number(li.quantity ?? 0));
+  const receivedQtyByIdx: number[] = new Array(lineItems.length).fill(0);
+  for (const r of receivedItems) {
+    if (r.lineIndex >= 0 && r.lineIndex < lineItems.length) {
+      receivedQtyByIdx[r.lineIndex] = Number(r.receivedQty ?? 0);
+    }
+  }
+
+  const allFull = orderedQtyByIdx.every((oq, i) => receivedQtyByIdx[i] >= oq);
+  const anyReceived = receivedQtyByIdx.some((rq) => rq > 0);
+
+  if (allFull) return "received";
+  if (anyReceived) return "partially_received";
+  return currentStatus;
 }
 
 router.get("/purchase-orders", async (_req, res): Promise<void> => {
@@ -65,7 +100,7 @@ router.get("/purchase-orders", async (_req, res): Promise<void> => {
   const ids = [...new Set(pos.map(p => p.vendorId))];
   const vendors = await db.select({ id: vendorsTable.id, name: vendorsTable.name }).from(vendorsTable).where(inArray(vendorsTable.id, ids));
   const vmap = new Map(vendors.map(v => [v.id, v.name]));
-  res.json(pos.map(p => ({ ...p, vendorName: vmap.get(p.vendorId) ?? "Unknown", lineItems: p.lineItems as object[], subtotal: Number(p.subtotal), taxTotal: Number(p.taxTotal), total: Number(p.total) })));
+  res.json(pos.map(p => ({ ...p, vendorName: vmap.get(p.vendorId) ?? "Unknown", lineItems: p.lineItems as object[], receivedItems: p.receivedItems as object[], subtotal: Number(p.subtotal), taxTotal: Number(p.taxTotal), total: Number(p.total) })));
 });
 
 router.post("/purchase-orders", async (req, res): Promise<void> => {
@@ -79,6 +114,8 @@ router.post("/purchase-orders", async (req, res): Promise<void> => {
       .where(eq(purchaseOrdersTable.sourceInvoiceId, parsed.data.sourceInvoiceId));
     poSequence = existing.length + 1;
   }
+  // promiseDate takes precedence over expectedDate
+  const resolvedDate = parsed.data.promiseDate ?? parsed.data.expectedDate ?? null;
   const [po] = await db.insert(purchaseOrdersTable).values({
     vendorId: parsed.data.vendorId,
     sourceInvoiceId: parsed.data.sourceInvoiceId ?? null,
@@ -89,8 +126,8 @@ router.post("/purchase-orders", async (req, res): Promise<void> => {
     taxTotal: String(totals.taxTotal),
     total: String(totals.total),
     notes: parsed.data.notes ?? null,
-    internalNote: req.body.internalNote ?? null,
-    expectedDate: parsed.data.expectedDate ? new Date(parsed.data.expectedDate) : null,
+    expectedDate: resolvedDate ? new Date(resolvedDate) : null,
+    receivedItems: [],
   }).returning();
   res.status(201).json(await withVendorName(po));
 });
@@ -108,12 +145,14 @@ router.patch("/purchase-orders/:id", async (req, res): Promise<void> => {
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const parsed = UpdatePurchaseOrderPayload.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-  const updateData: Record<string, unknown> = {};
+  const updateData: Partial<typeof purchaseOrdersTable.$inferInsert> = {};
   if (parsed.data.vendorId !== undefined) updateData.vendorId = parsed.data.vendorId;
   if (parsed.data.status !== undefined) updateData.status = parsed.data.status;
   if (parsed.data.notes !== undefined) updateData.notes = parsed.data.notes;
   if (req.body.internalNote !== undefined) updateData.internalNote = req.body.internalNote;
-  if (parsed.data.expectedDate !== undefined) updateData.expectedDate = parsed.data.expectedDate ? new Date(parsed.data.expectedDate) : null;
+  // promiseDate takes precedence over expectedDate
+  const dateVal = parsed.data.promiseDate ?? parsed.data.expectedDate;
+  if (dateVal !== undefined) updateData.expectedDate = dateVal ? new Date(dateVal) : null;
   if (parsed.data.lineItems !== undefined) {
     const totals = calcTotals(parsed.data.lineItems as Array<{ quantity: number; unitPrice: number; taxPercent: number; discountPercent: number }>);
     updateData.lineItems = parsed.data.lineItems;
@@ -132,6 +171,69 @@ router.delete("/purchase-orders/:id", async (req, res): Promise<void> => {
   const [po] = await db.delete(purchaseOrdersTable).where(eq(purchaseOrdersTable.id, params.data.id)).returning();
   if (!po) { res.status(404).json({ error: "Purchase order not found" }); return; }
   res.sendStatus(204);
+});
+
+// POST /purchase-orders/:id/receive — record partial or full receipt of items
+router.post("/purchase-orders/:id/receive", async (req, res): Promise<void> => {
+  const id = Number(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const parsed = ReceiveItemsPayload.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+  const [po] = await db.select().from(purchaseOrdersTable).where(eq(purchaseOrdersTable.id, id));
+  if (!po) { res.status(404).json({ error: "Purchase order not found" }); return; }
+
+  const lineItems = (po.lineItems as Array<{ quantity: number; productId?: number; description?: string; [k: string]: any }>) ?? [];
+  const existing = (po.receivedItems as Array<{ lineIndex: number; receivedQty: number }>) ?? [];
+
+  // Merge received quantities
+  const merged = [...existing];
+  for (const inc of parsed.data.items) {
+    const existing_idx = merged.findIndex(r => r.lineIndex === inc.lineIndex);
+    if (existing_idx >= 0) {
+      merged[existing_idx] = { lineIndex: inc.lineIndex, receivedQty: merged[existing_idx].receivedQty + inc.qty };
+    } else {
+      merged.push({ lineIndex: inc.lineIndex, receivedQty: inc.qty });
+    }
+  }
+
+  // Write stock movements + update inventory for items that have a productId
+  for (const inc of parsed.data.items) {
+    if (inc.qty <= 0) continue;
+    const li = lineItems[inc.lineIndex];
+    if (!li) continue;
+    const productId = li.productId ?? (li as any).product_id;
+    if (!productId) continue;
+
+    // Insert stock movement
+    await db.insert(stockMovementsTable).values({
+      productId: Number(productId),
+      movementType: "in",
+      quantity: String(inc.qty),
+      referenceId: po.id,
+      referenceType: "purchase_order",
+      notes: `Received from PO ${po.id}`,
+    });
+
+    // Update inventory quantity
+    const [inv] = await db.select().from(inventoryTable).where(eq(inventoryTable.productId, Number(productId)));
+    if (inv) {
+      const newQty = Number(inv.quantity) + inc.qty;
+      await db.update(inventoryTable).set({ quantity: String(newQty) }).where(eq(inventoryTable.productId, Number(productId)));
+    } else {
+      await db.insert(inventoryTable).values({ productId: Number(productId), quantity: String(inc.qty), reorderPoint: "0" });
+    }
+  }
+
+  // Compute new status
+  const newStatus = computePoStatus(po.status ?? "draft", lineItems, merged);
+
+  const [updated] = await db.update(purchaseOrdersTable)
+    .set({ receivedItems: merged, status: newStatus })
+    .where(eq(purchaseOrdersTable.id, id))
+    .returning();
+
+  res.json(await withVendorName(updated));
 });
 
 router.post("/purchase-orders/:id/convert", async (req, res): Promise<void> => {

@@ -3,7 +3,7 @@ import { useDebounce } from "@/hooks/useDebounce";
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
 import { useListCustomers, useDeleteCustomer, getListCustomersQueryKey, useListInvoices } from "@workspace/api-client-react";
-import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, X, Phone, Mail, MapPin, Building2, AlertCircle, BarChart2, ChevronDown, ChevronUp, Gift } from "lucide-react";
+import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, X, Phone, Mail, MapPin, Building2, AlertCircle, BarChart2, ChevronDown, ChevronUp, Gift, CheckCircle2, Clock, Ban } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend, CartesianGrid } from "recharts";
 import { formatCurrency } from "@/lib/utils";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -28,9 +28,10 @@ type Customer = {
   billingAddress?: any; shippingAddress?: any; amountOwed?: number;
 };
 
-function CustomerViewModal({ customer, onClose, creditAvailable }: { customer: Customer; onClose: () => void; creditAvailable: number }) {
+function CustomerViewModal({ customer, onClose, creditAvailable, creditRecords }: { customer: Customer; onClose: () => void; creditAvailable: number; creditRecords: any[] }) {
   const phones: any[] = customer.phones ?? (customer.phone ? [{ label: "Mobile", number: customer.phone }] : []);
   const emails: any[] = customer.emails ?? (customer.email ? [{ label: "Work", email: customer.email }] : []);
+  const [showCreditDetail, setShowCreditDetail] = useState(false);
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: "rgba(15,23,42,0.45)", backdropFilter: "blur(8px)" }} onClick={onClose}>
@@ -90,15 +91,67 @@ function CustomerViewModal({ customer, onClose, creditAvailable }: { customer: C
             </div>
           )}
           {creditAvailable > 0 && (
-            <div className="flex items-center gap-3 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3">
-              <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                <Gift size={15} className="text-emerald-600" />
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600">Store Credit Available</p>
-                <p className="text-lg font-black text-emerald-700 mt-0.5">{formatCurrency(creditAvailable)}</p>
-                <p className="text-[11px] text-emerald-500 mt-0.5">Eligible to receive — from approved returns &amp; refunds</p>
-              </div>
+            <div className="rounded-xl bg-emerald-50 border border-emerald-200 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setShowCreditDetail(v => !v)}
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-emerald-100/60 transition-colors text-left"
+              >
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                  <Gift size={15} className="text-emerald-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600">Store Credit Available</p>
+                  <p className="text-lg font-black text-emerald-700">{formatCurrency(creditAvailable)}</p>
+                </div>
+                <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-100 border border-emerald-200 rounded-full px-2.5 py-1">
+                  {showCreditDetail ? "Hide" : "View Credits ▾"}
+                </span>
+              </button>
+              {showCreditDetail && (
+                <div className="border-t border-emerald-200 bg-white/60 px-4 pb-3 pt-2 flex flex-col gap-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 mb-1">Credit Breakdown</p>
+                  {creditRecords.map((r) => {
+                    const retRef = `RET-${String(r.id).padStart(4, "0")}`;
+                    const srcInv = r.invoiceNumber ?? (r.invoiceId ? `FRZI-${String(r.invoiceId).padStart(4, "0")}` : null);
+                    const usedOn = r.usedByInvoiceId
+                      ? (r.usedByInvoiceNumber ?? `FRZI-${String(r.usedByInvoiceId).padStart(4, "0")}`)
+                      : null;
+                    const isUsed = !!r.usedByInvoiceId;
+                    return (
+                      <div key={r.id} className={`rounded-lg border px-3 py-2.5 flex items-start gap-3 ${isUsed ? "bg-slate-50 border-slate-200 opacity-60" : "bg-white border-emerald-200"}`}>
+                        <div className="flex-shrink-0 mt-0.5">
+                          {isUsed
+                            ? <Ban size={14} className="text-slate-400" />
+                            : <CheckCircle2 size={14} className="text-emerald-500" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-bold text-slate-700">{retRef}</span>
+                            {srcInv && (
+                              <span className="text-[10px] font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 rounded px-1.5 py-0.5">
+                                From: {srcInv}
+                              </span>
+                            )}
+                            {isUsed && (
+                              <span className="text-[10px] font-medium text-slate-500 bg-slate-100 border border-slate-200 rounded px-1.5 py-0.5">
+                                Applied on {usedOn}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-0.5 capitalize">{r.type?.replace(/_/g, " ")} · {r.status}</p>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className={`text-sm font-bold ${isUsed ? "text-slate-400 line-through" : "text-emerald-700"}`}>
+                            {formatCurrency(Number(r.refundAmount ?? 0))}
+                          </p>
+                          <p className="text-[10px] text-slate-400">{new Date(r.createdAt).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -149,13 +202,26 @@ export default function Customers() {
 
   const debouncedSearch = useDebounce(search, 250);
 
-  /** Credit available per customer ID (approved / refunded / completed returns) */
+  const CREDIT_STATUSES = new Set(["approved", "refunded", "completed"]);
+
+  /** Credit available per customer ID — only unused credits */
   const creditByCustomerId = useMemo(() => {
-    const CREDIT_STATUSES = new Set(["approved", "refunded", "completed"]);
     const map: Record<number, number> = {};
     for (const r of (returnsData ?? [])) {
-      if (CREDIT_STATUSES.has(r.status) && r.refundAmount != null) {
+      if (CREDIT_STATUSES.has(r.status) && r.refundAmount != null && !r.usedByInvoiceId) {
         map[r.customerId] = (map[r.customerId] ?? 0) + Number(r.refundAmount);
+      }
+    }
+    return map;
+  }, [returnsData]);
+
+  /** All credit records (available + used) per customer for the detail view */
+  const creditRecordsByCustomerId = useMemo(() => {
+    const map: Record<number, any[]> = {};
+    for (const r of (returnsData ?? [])) {
+      if (CREDIT_STATUSES.has(r.status) && r.refundAmount != null) {
+        if (!map[r.customerId]) map[r.customerId] = [];
+        map[r.customerId].push(r);
       }
     }
     return map;
@@ -380,7 +446,7 @@ export default function Customers() {
           </div>
         )}
 
-        <div className="glass-card overflow-hidden border border-blue-100/70">
+        <div className="glass-card overflow-x-auto scrollbar-thin border border-blue-100/70">
           {isLoading ? (
             <div className="p-10 flex justify-center"><div className="animate-spin w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full" /></div>
           ) : filtered?.length === 0 ? (
@@ -478,7 +544,7 @@ export default function Customers() {
       </div>
       {showModal && <CustomerModal onClose={() => setShowModal(false)} />}
       {editingCustomer && <CustomerModal customer={editingCustomer} onClose={() => setEditingCustomer(null)} />}
-      {viewingCustomer && <CustomerViewModal customer={viewingCustomer} onClose={() => setViewingCustomer(null)} creditAvailable={creditByCustomerId[viewingCustomer.id] ?? 0} />}
+      {viewingCustomer && <CustomerViewModal customer={viewingCustomer} onClose={() => setViewingCustomer(null)} creditAvailable={creditByCustomerId[viewingCustomer.id] ?? 0} creditRecords={creditRecordsByCustomerId[viewingCustomer.id] ?? []} />}
     </Layout>
   );
 }

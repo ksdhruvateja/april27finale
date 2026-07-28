@@ -246,7 +246,7 @@ export default function PurchaseOrderModal({ onClose, initial }: Props) {
                   </button>
                 </div>
               </FormField>
-              <FormField label="Expected Delivery Date">
+              <FormField label="Promise Date (Vendor Delivery Commitment)">
                 <FormInput type="date" value={expectedDate} onChange={e => setExpectedDate(e.target.value)} />
               </FormField>
             </div>
