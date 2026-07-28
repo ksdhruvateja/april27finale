@@ -215,13 +215,15 @@ export default function Customers() {
   }, [customers]);
   const filtered = useMemo(() => {
     const s = debouncedSearch.toLowerCase();
-    if (!s) return customers ?? [];
-    return (customers ?? []).filter(c =>
-      c.name.toLowerCase().includes(s) ||
-      (c.company ?? "").toLowerCase().includes(s) ||
-      (c.email ?? "").toLowerCase().includes(s) ||
-      (c.phone ?? "").includes(s)
-    );
+    const list = s
+      ? (customers ?? []).filter(c =>
+          c.name.toLowerCase().includes(s) ||
+          (c.company ?? "").toLowerCase().includes(s) ||
+          (c.email ?? "").toLowerCase().includes(s) ||
+          (c.phone ?? "").includes(s)
+        )
+      : (customers ?? []);
+    return [...list].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
   }, [customers, debouncedSearch]);
 
   const handleDelete = (id: number) => {
@@ -235,7 +237,7 @@ export default function Customers() {
   return (
     <Layout>
       <Header title="Customers" subtitle={`${customers?.length ?? 0} total`} />
-      <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 flex flex-col gap-4 bg-gradient-to-br from-[#eef6ff] via-[#f8fbff] to-[#edf4ff]">
+      <div className="flex-1 overflow-y-auto scrollbar-thin px-5 py-4 flex flex-col gap-4 bg-gradient-to-br from-[#eef6ff] via-[#f8fbff] to-[#edf4ff]">
         <div className="flex justify-between items-center gap-3">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />

@@ -8,15 +8,15 @@ import {
 
 /* ── shared helpers ──────────────────────────────────────────────────── */
 const DEFAULT_NET_TERMS = [
-  { id: "net30",        label: "Net 30" },
-  { id: "net60",        label: "Net 60" },
-  { id: "net90",        label: "Net 90" },
-  { id: "cash",         label: "Cash" },
-  { id: "cash_advance", label: "Cash Advance" },
-  { id: "cod",          label: "COD" },
+  { id: "net30",        label: "Net 30",        days: 30 },
+  { id: "net60",        label: "Net 60",        days: 60 },
+  { id: "net90",        label: "Net 90",        days: 90 },
+  { id: "cash",         label: "Cash",          days: 0  },
+  { id: "cash_advance", label: "Cash Advance",  days: 0  },
+  { id: "cod",          label: "COD",           days: 0  },
 ];
 
-export interface NetTerm { id: string; label: string; }
+export interface NetTerm { id: string; label: string; days?: number; }
 export interface CompanyAddress {
   id: string; name: string;
   line1: string; line2?: string;
@@ -45,7 +45,9 @@ function NetTermsSection() {
   const [loaded, setLoaded] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState("");
+  const [editDays, setEditDays] = useState<string>("");
   const [addLabel, setAddLabel] = useState("");
+  const [addDays, setAddDays] = useState<string>("");
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -53,7 +55,18 @@ function NetTermsSection() {
   useEffect(() => {
     getAppSetting("net_terms").then(v => {
       if (v) {
-        try { setTerms(JSON.parse(v)); } catch { setTerms(DEFAULT_NET_TERMS); }
+        try {
+          const loaded: NetTerm[] = JSON.parse(v);
+          // Backfill missing `days` from defaults for existing stored terms
+          const backfilled = loaded.map(t => {
+            if (t.days != null) return t;
+            const def = DEFAULT_NET_TERMS.find(d => d.id === t.id);
+            return def?.days != null ? { ...t, days: def.days } : t;
+          });
+          const changed = backfilled.some((t, i) => t.days !== loaded[i].days);
+          setTerms(backfilled);
+          if (changed) putAppSetting("net_terms", JSON.stringify(backfilled));
+        } catch { setTerms(DEFAULT_NET_TERMS); }
       }
       setLoaded(true);
     });
@@ -69,10 +82,11 @@ function NetTermsSection() {
     } finally { setSaving(false); }
   };
 
-  const startEdit = (t: NetTerm) => { setEditingId(t.id); setEditLabel(t.label); };
+  const startEdit = (t: NetTerm) => { setEditingId(t.id); setEditLabel(t.label); setEditDays(t.days != null ? String(t.days) : ""); };
   const saveEdit = () => {
     if (!editLabel.trim() || !editingId) return;
-    persist(terms.map(t => t.id === editingId ? { ...t, label: editLabel.trim() } : t));
+    const days = editDays.trim() !== "" ? parseInt(editDays, 10) : undefined;
+    persist(terms.map(t => t.id === editingId ? { ...t, label: editLabel.trim(), days: !isNaN(days as number) ? days : t.days } : t));
     setEditingId(null);
   };
   const deleteTerm = (id: string) => {
@@ -83,8 +97,10 @@ function NetTermsSection() {
     if (!addLabel.trim()) return;
     const id = addLabel.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
     if (!id || terms.find(t => t.id === id)) return;
-    persist([...terms, { id, label: addLabel.trim() }]);
+    const daysNum = addDays.trim() !== "" ? parseInt(addDays, 10) : undefined;
+    persist([...terms, { id, label: addLabel.trim(), days: daysNum != null && !isNaN(daysNum) ? daysNum : undefined }]);
     setAddLabel("");
+    setAddDays("");
     setAdding(false);
   };
 
@@ -113,7 +129,17 @@ function NetTermsSection() {
                     value={editLabel}
                     onChange={e => setEditLabel(e.target.value)}
                     onKeyDown={e => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEditingId(null); }}
+                    placeholder="Term name"
                     className="flex-1 text-sm bg-slate-50 border border-blue-300 rounded-lg px-3 py-1.5 text-slate-800 focus:outline-none focus:border-blue-500"
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    value={editDays}
+                    onChange={e => setEditDays(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEditingId(null); }}
+                    placeholder="Days"
+                    className="w-20 text-sm bg-slate-50 border border-blue-300 rounded-lg px-3 py-1.5 text-slate-800 focus:outline-none focus:border-blue-500"
                   />
                   <span className="text-[10px] text-slate-400 font-mono bg-slate-100 px-1.5 py-0.5 rounded">id: {t.id}</span>
                   <button onClick={saveEdit} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors"><Check size={14}/></button>
@@ -122,6 +148,10 @@ function NetTermsSection() {
               ) : (
                 <>
                   <span className="flex-1 text-sm font-medium text-slate-800">{t.label}</span>
+                  {t.days != null
+                    ? <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full">{t.days === 0 ? "Due on receipt" : `${t.days} days`}</span>
+                    : <span className="text-[10px] text-slate-400 italic px-1">no days set</span>
+                  }
                   <span className="text-[10px] text-slate-400 font-mono bg-slate-100 px-1.5 py-0.5 rounded">{t.id}</span>
                   <button onClick={() => startEdit(t)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Edit2 size={13}/></button>
                   <button onClick={() => deleteTerm(t.id)} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={13}/></button>
@@ -133,17 +163,41 @@ function NetTermsSection() {
       )}
 
       {adding ? (
-        <div className="flex items-center gap-2">
-          <input
-            autoFocus
-            placeholder="Term name, e.g. Net 45"
-            value={addLabel}
-            onChange={e => setAddLabel(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") addTerm(); if (e.key === "Escape") setAdding(false); }}
-            className="flex-1 text-sm bg-white border border-blue-300 rounded-lg px-3 py-2 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500"
-          />
-          <button onClick={addTerm} className="px-3 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors">Add</button>
-          <button onClick={() => setAdding(false)} className="px-3 py-2 text-slate-500 text-sm font-medium rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">Cancel</button>
+        <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <div className="flex-1">
+              <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Term name</label>
+              <input
+                autoFocus
+                placeholder="e.g. Net 45"
+                value={addLabel}
+                onChange={e => setAddLabel(e.target.value)}
+                onKeyDown={e => { if (e.key === "Escape") { setAdding(false); setAddLabel(""); setAddDays(""); } }}
+                className="w-full text-sm bg-white border border-blue-300 rounded-lg px-3 py-2 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <div className="w-32">
+              <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Due in (days)</label>
+              <input
+                type="number"
+                min="0"
+                placeholder="e.g. 45"
+                value={addDays}
+                onChange={e => setAddDays(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") addTerm(); if (e.key === "Escape") { setAdding(false); setAddLabel(""); setAddDays(""); } }}
+                className="w-full text-sm bg-white border border-blue-300 rounded-lg px-3 py-2 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+          </div>
+          {addDays.trim() !== "" && !isNaN(parseInt(addDays)) && (
+            <p className="text-[11px] text-blue-600 font-medium">
+              {parseInt(addDays) === 0 ? "Payment due on receipt." : `Payment due ${parseInt(addDays)} days after invoice date.`}
+            </p>
+          )}
+          <div className="flex items-center gap-2">
+            <button onClick={addTerm} disabled={!addLabel.trim()} className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors">Add term</button>
+            <button onClick={() => { setAdding(false); setAddLabel(""); setAddDays(""); }} className="px-3 py-2 text-slate-500 text-sm font-medium rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition-colors">Cancel</button>
+          </div>
         </div>
       ) : (
         <button onClick={() => setAdding(true)} className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-semibold transition-colors">

@@ -68,7 +68,7 @@ export default function Vendors() {
 
   const filtered = useMemo(() => {
     const s = debouncedSearch.toLowerCase();
-    return (vendors ?? []).filter((v: any) => {
+    const list = (vendors ?? []).filter((v: any) => {
       if (companyFilter !== "__all__" && (v.company?.trim() ?? "") !== companyFilter) return false;
       if (!s) return true;
       return (
@@ -78,6 +78,7 @@ export default function Vendors() {
         v.phone?.toLowerCase().includes(s)
       );
     });
+    return [...list].sort((a: any, b: any) => (a.name ?? "").localeCompare(b.name ?? ""));
   }, [vendors, debouncedSearch, companyFilter]);
 
   const vendorPOs = useMemo(() => {
@@ -131,7 +132,7 @@ export default function Vendors() {
   return (
     <Layout>
       <Header title="Vendors" subtitle={`${vendors?.length ?? 0} total`} />
-      <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 flex flex-col gap-4 bg-gradient-to-br from-[#eef6ff] via-[#f8fbff] to-[#edf4ff]">
+      <div className="flex-1 overflow-y-auto scrollbar-thin px-5 py-4 flex flex-col gap-4 bg-gradient-to-br from-[#eef6ff] via-[#f8fbff] to-[#edf4ff]">
 
         {/* Toolbar */}
         <div className="flex flex-wrap justify-between items-center gap-3">
