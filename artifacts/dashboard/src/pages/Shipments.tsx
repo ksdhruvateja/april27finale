@@ -1,10 +1,10 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import ShipmentModal from "@/components/ShipmentModal";
 import { useListAuctions } from "@/lib/auctions-api";
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
-import { useListShipments, useUpdateShipment, getListShipmentsQueryKey, useListCustomers, useListVendors } from "@workspace/api-client-react";
-import { Search, Plus, MoreHorizontal, Edit, Truck, FileText, BarChart2, ChevronDown, ChevronUp, ChevronRight, Package, StickyNote, MapPin, Phone, Mail, User } from "lucide-react";
+import { useListShipments, useUpdateShipment, getListShipmentsQueryKey, useListCustomers, useListVendors, useCreateCustomer, getListCustomersQueryKey } from "@workspace/api-client-react";
+import { Search, Plus, MoreHorizontal, Edit, Truck, FileText, BarChart2, ChevronDown, ChevronUp, ChevronRight, Package, StickyNote, MapPin, Phone, Mail, User, UserPlus, X, Loader2 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend, LineChart, Line, CartesianGrid } from "recharts";
 import { useQueryClient } from "@tanstack/react-query";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -33,9 +33,14 @@ export default function Shipments() {
   const [expandedShipId, setExpandedShipId] = useState<number | null>(null);
   const [companyAddresses, setCompanyAddresses] = useState<CompanyAddress[]>([]);
   const [addrPicker, setAddrPicker] = useState<{ shipment: any } | null>(null);
+  const createCustomer = useCreateCustomer();
   const [createShipOpen, setCreateShipOpen] = useState(false);
   const [createShipCustomer, setCreateShipCustomer] = useState<{ id: number; name: string } | null>(null);
   const [createShipSearch, setCreateShipSearch] = useState("");
+  const [addingNewCustomer, setAddingNewCustomer] = useState(false);
+  const [newCustForm, setNewCustForm] = useState({ name: "", company: "", phone: "", email: "" });
+  const [newCustError, setNewCustError] = useState<string | null>(null);
+  const newCustNameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchCompanyAddresses().then(setCompanyAddresses);
@@ -562,56 +567,183 @@ export default function Shipments() {
       </div>
     {/* ── Create Shipment — Customer Picker ─────────────────── */}
     {createShipOpen && !createShipCustomer && (
-      <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" onClick={() => { setCreateShipOpen(false); setCreateShipSearch(""); }}>
+      <div className="fixed inset-0 z-[80] flex items-center justify-center p-4"
+        onClick={() => { setCreateShipOpen(false); setCreateShipSearch(""); setAddingNewCustomer(false); setNewCustForm({ name: "", company: "", phone: "", email: "" }); setNewCustError(null); }}>
         <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
         <div className="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
-          <div className="px-5 py-4 border-b border-slate-100">
-            <h3 className="text-slate-800 font-bold text-base">Create Shipment</h3>
-            <p className="text-slate-400 text-xs mt-0.5">Select a customer for this shipment</p>
-          </div>
-          <div className="px-4 py-3 border-b border-slate-100">
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                autoFocus
-                value={createShipSearch}
-                onChange={e => setCreateShipSearch(e.target.value)}
-                placeholder="Search customers…"
-                className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-slate-400"
-              />
+
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+            <div>
+              <h3 className="text-slate-800 font-bold text-base">
+                {addingNewCustomer ? "Add New Customer" : "Create Shipment"}
+              </h3>
+              <p className="text-slate-400 text-xs mt-0.5">
+                {addingNewCustomer ? "Save and use for this shipment" : "Select a customer for this shipment"}
+              </p>
             </div>
-          </div>
-          <div className="max-h-64 overflow-y-auto">
-            {(customers as any[])
-              .filter((c: any) => {
-                const q = createShipSearch.toLowerCase();
-                return !q || (c.name || "").toLowerCase().includes(q) || (c.company || "").toLowerCase().includes(q);
-              })
-              .slice(0, 40)
-              .map((c: any) => (
-                <button
-                  key={c.id}
-                  onClick={() => { setCreateShipCustomer({ id: c.id, name: c.company || c.name }); setCreateShipSearch(""); }}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 text-left border-b border-slate-50 last:border-0 transition-colors"
-                >
-                  <div className="w-7 h-7 rounded-full bg-[hsl(224_50%_15%)] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                    {(c.company || c.name || "?")[0].toUpperCase()}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-slate-800 truncate">{c.company || c.name}</p>
-                    {c.company && <p className="text-xs text-slate-400 truncate">{c.name}</p>}
-                  </div>
-                </button>
-              ))}
-            {(customers as any[]).length === 0 && (
-              <p className="px-4 py-6 text-center text-sm text-slate-400">No customers found</p>
+            {addingNewCustomer && (
+              <button onClick={() => { setAddingNewCustomer(false); setNewCustError(null); setNewCustForm({ name: "", company: "", phone: "", email: "" }); }}
+                className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 transition-colors">
+                <X size={15} />
+              </button>
             )}
           </div>
-          <div className="px-4 py-3 bg-slate-50 border-t border-slate-100">
-            <button onClick={() => { setCreateShipOpen(false); setCreateShipSearch(""); }} className="w-full py-2 text-sm text-slate-500 hover:text-slate-700 font-medium transition-colors">
-              Cancel
-            </button>
-          </div>
+
+          {/* ── Search + list ── */}
+          {!addingNewCustomer && (<>
+            <div className="px-4 py-3 border-b border-slate-100">
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  autoFocus
+                  value={createShipSearch}
+                  onChange={e => setCreateShipSearch(e.target.value)}
+                  placeholder="Search customers…"
+                  className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-slate-400"
+                />
+              </div>
+            </div>
+            <div className="max-h-56 overflow-y-auto">
+              {(customers as any[])
+                .filter((c: any) => {
+                  const q = createShipSearch.toLowerCase();
+                  return !q || (c.name || "").toLowerCase().includes(q) || (c.company || "").toLowerCase().includes(q);
+                })
+                .slice(0, 40)
+                .map((c: any) => (
+                  <button key={c.id}
+                    onClick={() => { setCreateShipCustomer({ id: c.id, name: c.company || c.name }); setCreateShipSearch(""); }}
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 text-left border-b border-slate-50 last:border-0 transition-colors">
+                    <div className="w-7 h-7 rounded-full bg-[hsl(224_50%_15%)] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                      {(c.company || c.name || "?")[0].toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-slate-800 truncate">{c.company || c.name}</p>
+                      {c.company && <p className="text-xs text-slate-400 truncate">{c.name}</p>}
+                      {c.phones?.[0]?.number && (
+                        <p className="text-xs text-slate-400 truncate flex items-center gap-1 mt-0.5">
+                          <Phone size={9} className="text-slate-300" /> {c.phones[0].number}
+                        </p>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              {(customers as any[]).filter((c: any) => {
+                const q = createShipSearch.toLowerCase();
+                return !q || (c.name || "").toLowerCase().includes(q) || (c.company || "").toLowerCase().includes(q);
+              }).length === 0 && (
+                <p className="px-4 py-6 text-center text-sm text-slate-400">No customers found</p>
+              )}
+            </div>
+            <div className="px-4 py-3 border-t border-slate-100 flex flex-col gap-2">
+              <button
+                onClick={() => { setAddingNewCustomer(true); setTimeout(() => newCustNameRef.current?.focus(), 50); }}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed border-indigo-200 text-indigo-600 text-sm font-semibold hover:bg-indigo-50 hover:border-indigo-400 transition-all">
+                <UserPlus size={15} /> Add New Customer
+              </button>
+              <button onClick={() => { setCreateShipOpen(false); setCreateShipSearch(""); }}
+                className="w-full py-2 text-sm text-slate-400 hover:text-slate-600 font-medium transition-colors">
+                Cancel
+              </button>
+            </div>
+          </>)}
+
+          {/* ── Add New Customer form ── */}
+          {addingNewCustomer && (
+            <form onSubmit={async e => {
+              e.preventDefault();
+              setNewCustError(null);
+              if (!newCustForm.name.trim()) { setNewCustError("Customer name is required."); return; }
+              try {
+                const payload: any = {
+                  name: newCustForm.name.trim(),
+                  company: newCustForm.company.trim() || null,
+                  phones: newCustForm.phone.trim() ? [{ label: "Mobile", number: newCustForm.phone.trim() }] : [],
+                  emails: newCustForm.email.trim() ? [{ label: "Primary", email: newCustForm.email.trim() }] : [],
+                };
+                const created: any = await createCustomer.mutateAsync(payload);
+                queryClient.invalidateQueries({ queryKey: getListCustomersQueryKey() });
+                const displayName = created.company || created.name;
+                setCreateShipCustomer({ id: created.id, name: displayName });
+                setAddingNewCustomer(false);
+                setNewCustForm({ name: "", company: "", phone: "", email: "" });
+                setCreateShipSearch("");
+              } catch (err: any) {
+                setNewCustError(err?.response?.data?.error ?? err?.message ?? "Failed to create customer");
+              }
+            }}
+              className="px-5 py-4 flex flex-col gap-3">
+
+              {/* Name */}
+              <div>
+                <label className="text-xs font-semibold text-slate-600 mb-1 block">Full Name <span className="text-red-400">*</span></label>
+                <div className="relative">
+                  <User size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input ref={newCustNameRef} type="text" required
+                    placeholder="e.g. John Smith"
+                    value={newCustForm.name}
+                    onChange={e => setNewCustForm(f => ({ ...f, name: e.target.value }))}
+                    className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-400 transition-colors" />
+                </div>
+              </div>
+
+              {/* Company */}
+              <div>
+                <label className="text-xs font-semibold text-slate-600 mb-1 block">Company <span className="text-slate-400 font-normal">(optional)</span></label>
+                <input type="text"
+                  placeholder="e.g. Acme Corp"
+                  value={newCustForm.company}
+                  onChange={e => setNewCustForm(f => ({ ...f, company: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-400 transition-colors" />
+              </div>
+
+              {/* Phone */}
+              <div>
+                <label className="text-xs font-semibold text-slate-600 mb-1 block">Phone <span className="text-slate-400 font-normal">(optional)</span></label>
+                <div className="relative">
+                  <Phone size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input type="tel"
+                    placeholder="e.g. +1 555-000-1234"
+                    value={newCustForm.phone}
+                    onChange={e => setNewCustForm(f => ({ ...f, phone: e.target.value }))}
+                    className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-400 transition-colors" />
+                </div>
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className="text-xs font-semibold text-slate-600 mb-1 block">Email <span className="text-slate-400 font-normal">(optional)</span></label>
+                <div className="relative">
+                  <Mail size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input type="email"
+                    placeholder="e.g. john@example.com"
+                    value={newCustForm.email}
+                    onChange={e => setNewCustForm(f => ({ ...f, email: e.target.value }))}
+                    className="w-full pl-8 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-400 transition-colors" />
+                </div>
+              </div>
+
+              {newCustError && (
+                <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{newCustError}</p>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <button type="button"
+                  onClick={() => { setAddingNewCustomer(false); setNewCustError(null); setNewCustForm({ name: "", company: "", phone: "", email: "" }); }}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors">
+                  Back
+                </button>
+                <button type="submit" disabled={createCustomer.isPending}
+                  className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                  {createCustomer.isPending
+                    ? <><Loader2 size={13} className="animate-spin" /> Saving…</>
+                    : <><UserPlus size={13} /> Save & Select</>}
+                </button>
+              </div>
+            </form>
+          )}
+
         </div>
       </div>
     )}
