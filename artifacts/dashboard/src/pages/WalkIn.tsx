@@ -16,12 +16,13 @@ import {
   Search, ShoppingCart, Plus, Minus, Trash2, CheckCircle2,
   User, CreditCard, Banknote, Building2, FileCheck2, Tag,
   X, Package, Zap, Receipt, AlertCircle, Percent, StickyNote,
-  UserPlus, ChevronDown, Truck, Printer, Download, MapPin,
+  UserPlus, ChevronDown, Truck, Printer, Download, MapPin, CalendarClock,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { US_STATES } from "@/lib/usStates";
 
-type PaymentMethod = "cash" | "card" | "bank_transfer" | "check";
+type PaymentMethod = "cash" | "card" | "bank_transfer" | "check" | "net_terms";
+interface NetTerm { id: string; label: string; days?: number; }
 type CartItem = {
   productId?: number;
   description: string;
@@ -37,6 +38,7 @@ const PAYMENT_OPTIONS: { value: PaymentMethod; label: string; icon: React.Compon
   { value: "card",          label: "Credit Card",   icon: CreditCard, color: "blue"    },
   { value: "bank_transfer", label: "Bank Transfer", icon: Building2,  color: "indigo"  },
   { value: "check",         label: "Check",         icon: FileCheck2, color: "amber"   },
+  { value: "net_terms",     label: "Net Terms",     icon: CalendarClock, color: "violet" },
 ];
 
 type OrderDiscountWalkin = { type: "percent" | "fixed"; value: number };
@@ -85,6 +87,12 @@ export default function WalkIn() {
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [cart,           setCart]           = useState<CartItem[]>([]);
   const [payMethod,      setPayMethod]      = useState<PaymentMethod>("cash");
+  const [netTermsList,   setNetTermsList]   = useState<NetTerm[]>([]);
+  useEffect(() => {
+    fetch("/api/app-settings/net_terms")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.value) try { setNetTermsList(JSON.parse(d.value)); } catch {} });
+  }, []);
   const [selectedCustId, setSelectedCustId] = useState<number | null>(null);
   const [custSearch,     setCustSearch]     = useState("");
   const [custOpen,       setCustOpen]       = useState(false);
@@ -102,6 +110,8 @@ export default function WalkIn() {
     freight: number;
     paidAt: string;
     internalNote: string;
+    dueDate?: string; // set when payMethod === "net_terms"
+    netTermLabel?: string;
   } | null>(null);
   const [saving,         setSaving]         = useState(false);
   const [error,          setError]          = useState<string | null>(null);
@@ -202,6 +212,20 @@ export default function WalkIn() {
     setCart(prev => prev.filter((_, i) => i !== idx));
   }
 
+  // Compute net-terms due date for UI preview
+  const netTermsDueDate = useMemo(() => {
+    if (payMethod !== "net_terms") return null;
+    const term = netTermsList.find(t => t.id === selectedCustomer?.accountType);
+    const days = term?.days ?? 30;
+    return new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+  }, [payMethod, netTermsList, selectedCustomer]);
+
+  const netTermLabel = useMemo(() => {
+    if (payMethod !== "net_terms") return null;
+    const term = netTermsList.find(t => t.id === selectedCustomer?.accountType);
+    return term?.label ?? (selectedCustomer ? null : null);
+  }, [payMethod, netTermsList, selectedCustomer]);
+
   function clearSale() {
     setCart([]);
     setSelectedCustId(null);
@@ -258,7 +282,7 @@ export default function WalkIn() {
 
   function buildReceiptHTML(data: NonNullable<typeof success>) {
     const methodLabel: Record<PaymentMethod, string> = {
-      cash: "Cash", card: "Credit Card", bank_transfer: "Bank Transfer", check: "Check",
+      cash: "Cash", card: "Credit Card", bank_transfer: "Bank Transfer", check: "Check", net_terms: "Net Terms",
     };
     const rows = data.items.map(li => {
       const gross = li.quantity * li.unitPrice;
@@ -273,14 +297,18 @@ export default function WalkIn() {
       </tr>`;
     }).join("");
     const paidDate = new Date(data.paidAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
+    const isNetTerms = data.payMethod === "net_terms";
+    const dueDateStr = data.dueDate ? new Date(data.dueDate).toLocaleDateString("en-US", { dateStyle: "medium" }) : "";
     return `<!DOCTYPE html><html><head><meta charset="UTF-8">
-      <title>Receipt #${data.invoiceId}</title>
+      <title>${isNetTerms ? "Invoice" : "Receipt"} #${data.invoiceId}</title>
       <style>
         *{box-sizing:border-box;margin:0;padding:0}
         body{font-family:Arial,sans-serif;font-size:13px;color:#1e293b;padding:32px;max-width:600px;margin:0 auto}
         h1{font-size:20px;font-weight:900;margin-bottom:2px}
         .sub{color:#64748b;font-size:12px;margin-bottom:24px}
-        .badge{display:inline-block;background:#dcfce7;color:#166534;border:1px solid #bbf7d0;border-radius:20px;padding:3px 12px;font-size:12px;font-weight:700;margin-bottom:20px}
+        .badge{display:inline-block;border-radius:20px;padding:3px 12px;font-size:12px;font-weight:700;margin-bottom:20px}
+        .badge-paid{background:#dcfce7;color:#166534;border:1px solid #bbf7d0}
+        .badge-terms{background:#ede9fe;color:#5b21b6;border:1px solid #c4b5fd}
         table{width:100%;border-collapse:collapse;margin:16px 0}
         th{background:#f8fafc;padding:8px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;border-bottom:2px solid #e2e8f0}
         th:last-child,th:nth-child(3),th:nth-child(4){text-align:right}
@@ -291,11 +319,11 @@ export default function WalkIn() {
       </style>
     </head><body>
       <h1>Forez Corp</h1>
-      <div class="sub">Walk-in Sale Receipt · Invoice #${data.invoiceId}</div>
-      <div class="badge">✓ Paid — ${methodLabel[data.payMethod]}</div>
+      <div class="sub">${isNetTerms ? "Walk-in Invoice" : "Walk-in Sale Receipt"} · Invoice #${data.invoiceId}</div>
+      <div class="badge ${isNetTerms ? "badge-terms" : "badge-paid"}">${isNetTerms ? `📅 Net Terms${data.netTermLabel ? " — " + data.netTermLabel : ""}${dueDateStr ? " · Due " + dueDateStr : ""}` : `✓ Paid — ${methodLabel[data.payMethod]}`}</div>
       <div style="display:flex;justify-content:space-between;margin-bottom:16px">
         <div><strong>Customer</strong><br><span style="color:#475569">${data.customerName}</span></div>
-        <div style="text-align:right"><strong>Date</strong><br><span style="color:#475569">${paidDate}</span></div>
+        <div style="text-align:right"><strong>${isNetTerms ? "Invoice Date" : "Date"}</strong><br><span style="color:#475569">${paidDate}</span>${isNetTerms && dueDateStr ? `<br><strong>Due</strong><br><span style="color:#7c3aed">${dueDateStr}</span>` : ""}</div>
       </div>
       <table>
         <thead><tr>
@@ -310,7 +338,7 @@ export default function WalkIn() {
         ${data.taxTotal > 0 ? `<div class="total-row"><span>Tax</span><span>$${data.taxTotal.toFixed(2)}</span></div>` : ""}
         ${data.freight > 0 ? `<div class="total-row"><span>Freight / Shipping</span><span>$${data.freight.toFixed(2)}</span></div>` : ""}
         ${data.orderDiscAmt > 0 ? `<div class="total-row"><span>Order Discount</span><span style="color:#16a34a">−$${data.orderDiscAmt.toFixed(2)}</span></div>` : ""}
-        <div class="grand-total"><span>Total Paid</span><span>$${data.total.toFixed(2)}</span></div>
+        <div class="grand-total"><span>${isNetTerms ? "Amount Due" : "Total Paid"}</span><span>$${data.total.toFixed(2)}</span></div>
       </div></div>
       ${data.internalNote ? `<div style="margin-top:16px;padding:10px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:12px;color:#92400e"><strong>Note:</strong> ${data.internalNote}</div>` : ""}
       <div class="footer">Thank you for your business! · Forez Corp</div>
@@ -341,15 +369,25 @@ export default function WalkIn() {
 
   async function completeSale() {
     if (cart.length === 0) { setError("Add at least one item to complete a sale."); return; }
+    if (payMethod === "net_terms" && !selectedCustId) {
+      setError("Select a customer to use Net Terms — the due date is based on their payment terms.");
+      return;
+    }
     setError(null);
     setSaving(true);
     try {
-      // Capture receipt data before clearSale wipes the cart
-      const cartSnapshot = [...cart];
-      const noteSnapshot = internalNote.trim();
+      const cartSnapshot  = [...cart];
+      const noteSnapshot  = internalNote.trim();
       const methodSnapshot = payMethod;
-      const nameSnapshot = customerName;
+      const nameSnapshot  = customerName;
       const freightSnapshot = showFreight ? freight : 0;
+      const isNetTerms    = methodSnapshot === "net_terms";
+
+      // Compute net-terms due date
+      const termForSale   = isNetTerms ? netTermsList.find(t => t.id === selectedCustomer?.accountType) : undefined;
+      const termDays      = termForSale?.days ?? 30;
+      const termDueDate   = isNetTerms ? new Date(Date.now() + termDays * 86400000).toISOString().slice(0, 10) : undefined;
+      const termLabel     = termForSale?.label;
 
       let lineItems = cart.map(li => ({
         description:     li.description,
@@ -369,9 +407,9 @@ export default function WalkIn() {
         taxTotal,
         discountTotal:  itemDiscTotal,
         total,
-        status:         "paid",
-        paymentMethod:  payMethod,
-        paidAt,
+        status:         isNetTerms ? "sent" : "paid",
+        paymentMethod:  isNetTerms ? "net_terms" : payMethod,
+        ...(isNetTerms ? { dueDate: termDueDate, paymentNote: `Net terms: ${termLabel ?? "—"}` } : { paidAt }),
         notes:          noteSnapshot || undefined,
         isQuickInvoice: true,
       };
@@ -393,6 +431,8 @@ export default function WalkIn() {
         freight:       freightSnapshot,
         paidAt,
         internalNote:  noteSnapshot,
+        dueDate:       termDueDate,
+        netTermLabel:  termLabel,
       });
       clearSale();
     } catch (e: any) {
@@ -947,16 +987,15 @@ export default function WalkIn() {
                 {PAYMENT_OPTIONS.map(opt => {
                   const Icon   = opt.icon;
                   const active = payMethod === opt.value;
+                  const activeClass =
+                    opt.value === "cash"          ? "bg-emerald-50 border-emerald-300 text-emerald-700 shadow-sm"
+                    : opt.value === "card"        ? "bg-blue-50 border-blue-300 text-blue-700 shadow-sm"
+                    : opt.value === "bank_transfer"? "bg-indigo-50 border-indigo-300 text-indigo-700 shadow-sm"
+                    : opt.value === "check"       ? "bg-amber-50 border-amber-300 text-amber-700 shadow-sm"
+                                                  : "bg-violet-50 border-violet-300 text-violet-700 shadow-sm";
                   return (
                     <button key={opt.value} onClick={() => setPayMethod(opt.value)}
-                      className={`flex items-center gap-2.5 px-3 py-3 rounded-xl border text-left transition-all ${
-                        active
-                          ? opt.value === "cash"          ? "bg-emerald-50 border-emerald-300 text-emerald-700 shadow-sm"
-                          : opt.value === "card"          ? "bg-blue-50 border-blue-300 text-blue-700 shadow-sm"
-                          : opt.value === "bank_transfer" ? "bg-indigo-50 border-indigo-300 text-indigo-700 shadow-sm"
-                                                          : "bg-amber-50 border-amber-300 text-amber-700 shadow-sm"
-                          : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
-                      }`}
+                      className={`flex items-center gap-2.5 px-3 py-3 rounded-xl border text-left transition-all ${active ? activeClass : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"}`}
                     >
                       <Icon size={15} className="flex-shrink-0" />
                       <span className="text-sm font-semibold">{opt.label}</span>
@@ -965,6 +1004,34 @@ export default function WalkIn() {
                   );
                 })}
               </div>
+              {/* Net Terms due-date preview */}
+              {payMethod === "net_terms" && (
+                <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 flex items-start gap-3">
+                  <CalendarClock size={15} className="text-violet-500 mt-0.5 flex-shrink-0" />
+                  <div>
+                    {selectedCustomer ? (
+                      netTermLabel ? (
+                        <>
+                          <p className="text-sm font-semibold text-violet-800">
+                            {selectedCustomer.company || selectedCustomer.name} — {netTermLabel}
+                          </p>
+                          <p className="text-xs text-violet-600 mt-0.5">
+                            Invoice will be <span className="font-bold">sent</span> (not paid), due&nbsp;
+                            <span className="font-bold">{netTermsDueDate ? new Date(netTermsDueDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}</span>
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-sm text-amber-700 font-medium">
+                          Customer has no payment terms set — a 30-day default will be used.{" "}
+                          <span className="text-violet-700 font-semibold">Due {netTermsDueDate ? new Date(netTermsDueDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}</span>
+                        </p>
+                      )
+                    ) : (
+                      <p className="text-sm text-amber-700 font-medium">Select a customer to use Net Terms.</p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* ── Internal Note ── */}
@@ -995,10 +1062,16 @@ export default function WalkIn() {
             <button
               onClick={completeSale}
               disabled={saving || cart.length === 0}
-              className="w-full py-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-600 text-white font-black text-base tracking-wide shadow-lg hover:from-indigo-700 hover:to-blue-700 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+              className={`w-full py-4 rounded-2xl text-white font-black text-base tracking-wide shadow-lg active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 ${
+                payMethod === "net_terms"
+                  ? "bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700"
+                  : "bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700"
+              }`}
             >
               {saving ? (
                 <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Processing…</>
+              ) : payMethod === "net_terms" ? (
+                <><CalendarClock size={16} /> Create Invoice {cart.length > 0 ? `— ${formatCurrency(total)}` : ""} on Net Terms</>
               ) : (
                 <><Zap size={16} /> Charge {cart.length > 0 ? formatCurrency(total) : ""} &amp; Generate Invoice</>
               )}
@@ -1008,17 +1081,33 @@ export default function WalkIn() {
       </div>
 
       {/* Success overlay */}
-      {success && (
+      {success && (() => {
+        const isNT = success.payMethod === "net_terms";
+        return (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-6" onClick={() => setSuccess(null)}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <div className="relative z-10 bg-white rounded-2xl border border-emerald-200 shadow-2xl p-8 max-w-sm w-full text-center" onClick={e => e.stopPropagation()}>
-            <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
-              <CheckCircle2 size={32} className="text-emerald-500" />
+          <div className={`relative z-10 bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center ${isNT ? "border border-violet-200" : "border border-emerald-200"}`} onClick={e => e.stopPropagation()}>
+            <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${isNT ? "bg-violet-100" : "bg-emerald-100"}`}>
+              {isNT ? <CalendarClock size={32} className="text-violet-500" /> : <CheckCircle2 size={32} className="text-emerald-500" />}
             </div>
-            <h2 className="text-xl font-black text-slate-800 mb-1">Sale Complete!</h2>
-            <p className="text-slate-500 text-sm mb-1">Invoice #{success.invoiceId > 0 ? success.invoiceId : "—"} created &amp; marked paid</p>
+            <h2 className="text-xl font-black text-slate-800 mb-1">{isNT ? "Invoice Created!" : "Sale Complete!"}</h2>
+            <p className="text-slate-500 text-sm mb-1">
+              Invoice #{success.invoiceId > 0 ? success.invoiceId : "—"} created{isNT ? " — sent on Net Terms" : " & marked paid"}
+            </p>
             <p className="text-slate-600 text-xs mb-1">{success.customerName}</p>
-            <p className="text-3xl font-black text-emerald-600 my-4">{formatCurrency(success.total)}</p>
+            {isNT ? (
+              <div className="my-4">
+                <p className="text-2xl font-black text-violet-700">{formatCurrency(success.total)}</p>
+                <div className="mt-2 inline-flex items-center gap-2 bg-violet-50 border border-violet-200 rounded-xl px-4 py-2">
+                  <CalendarClock size={14} className="text-violet-500" />
+                  <span className="text-sm font-semibold text-violet-700">
+                    {success.netTermLabel ?? "Net Terms"} — Due {success.dueDate ? new Date(success.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <p className="text-3xl font-black text-emerald-600 my-4">{formatCurrency(success.total)}</p>
+            )}
 
             {/* Print / Download row */}
             <div className="flex gap-2 mb-3">
@@ -1026,7 +1115,7 @@ export default function WalkIn() {
                 onClick={printReceipt}
                 className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold text-sm hover:bg-slate-50 flex items-center justify-center gap-2 transition-colors"
               >
-                <Printer size={14} className="text-slate-500" /> Print Receipt
+                <Printer size={14} className="text-slate-500" /> {isNT ? "Print Invoice" : "Print Receipt"}
               </button>
               <button
                 onClick={downloadReceipt}
@@ -1052,7 +1141,8 @@ export default function WalkIn() {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
     </Layout>
   );
 }

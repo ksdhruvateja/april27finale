@@ -1,4 +1,4 @@
-import { useState, useRef, Fragment, useMemo } from "react";
+import { useState, useRef, Fragment, useMemo, useEffect } from "react";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useListAuctions } from "@/lib/auctions-api";
 import Layout from "@/components/Layout";
@@ -15,7 +15,8 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import ShipmentModal from "@/components/ShipmentModal";
 import InvoicePoModal from "@/components/InvoicePoModal";
 
-type PaymentMethod = "stripe" | "bank_transfer" | "check" | "cash";
+type PaymentMethod = "stripe" | "bank_transfer" | "check" | "cash" | "net_terms";
+interface NetTerm { id: string; label: string; days?: number; }
 
 const INVOICE_STATUSES: { value: string; label: string; cls: string }[] = [
   { value: "draft",        label: "Draft",        cls: "text-slate-500  bg-slate-50  border-slate-200" },
@@ -27,10 +28,11 @@ const INVOICE_STATUSES: { value: string; label: string; cls: string }[] = [
 ];
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string; desc: string }[] = [
-  { value: "stripe",        label: "Credit Card",   desc: "Process via Stripe" },
-  { value: "bank_transfer", label: "Bank Transfer", desc: "ACH / wire transfer" },
-  { value: "check",         label: "Check",         desc: "Physical check" },
-  { value: "cash",          label: "Cash",          desc: "Cash payment" },
+  { value: "cash",          label: "Cash",          desc: "Cash payment"            },
+  { value: "stripe",        label: "Credit Card",   desc: "Process via Stripe"      },
+  { value: "bank_transfer", label: "Bank Transfer", desc: "ACH / wire transfer"     },
+  { value: "check",         label: "Check",         desc: "Physical check"          },
+  { value: "net_terms",     label: "Net Terms",     desc: "Bill per customer terms" },
 ];
 
 interface InvoiceData {
@@ -100,6 +102,12 @@ export default function Invoices() {
   const payInvoice = usePayInvoice();
   const updateInvoice = useUpdateInvoice();
   const queryClient = useQueryClient();
+  const [netTermsList, setNetTermsList] = useState<NetTerm[]>([]);
+  useEffect(() => {
+    fetch("/api/app-settings/net_terms")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.value) try { setNetTermsList(JSON.parse(d.value)); } catch {} });
+  }, []);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [dateFilterType, setDateFilterType] = useState<DateFilter>("none");
@@ -502,19 +510,32 @@ export default function Invoices() {
 
   const confirmPay = () => {
     if (!payDialog) return;
+    const invalidate = () => {
+      queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
+      queryClient.invalidateQueries({ queryKey: ["accounting-pnl"] });
+      queryClient.invalidateQueries({ queryKey: ["accounting-ar"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard/stats"] });
+      setPayDialog(null);
+      setViewInvoice(null);
+    };
+    if (selectedMethod === "net_terms") {
+      const inv = (invoices as any[])?.find(i => i.id === payDialog.id);
+      const cust = (customers as any[])?.find(c => c.id === inv?.customerId);
+      const term = netTermsList.find(t => t.id === cust?.accountType);
+      const days = term?.days ?? 30;
+      const dueDate = new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+      updateInvoice.mutate({
+        id: payDialog.id,
+        data: { status: "sent", dueDate, paymentMethod: "net_terms", paymentNote: `Net terms: ${term?.label ?? cust?.accountType ?? "—"}` } as any,
+      }, { onSuccess: invalidate });
+      return;
+    }
     const noteParts: string[] = [];
     if (payDate) noteParts.push(`Date: ${payDate}`);
     if (earlyDiscount) noteParts.push(`Early discount: ${earlyDiscount}%`);
     if (payNote) noteParts.push(payNote);
     payInvoice.mutate({ id: payDialog.id, data: { paymentMethod: selectedMethod, paymentNote: noteParts.join(" | ") || undefined } }, {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
-        queryClient.invalidateQueries({ queryKey: ["accounting-pnl"] });
-        queryClient.invalidateQueries({ queryKey: ["accounting-ar"] });
-        queryClient.invalidateQueries({ queryKey: ["dashboard/stats"] });
-        setPayDialog(null);
-        setViewInvoice(null);
-      }
+      onSuccess: invalidate,
     });
   };
 
@@ -1365,62 +1386,102 @@ export default function Invoices() {
       {poInvoice && <InvoicePoModal invoice={poInvoice} onClose={() => setPoInvoice(null)} />}
 
       {/* Pay Dialog */}
-      {payDialog && (
+      {payDialog && (() => {
+        const inv = (invoices as any[])?.find(i => i.id === payDialog.id);
+        const cust = (customers as any[])?.find(c => c.id === inv?.customerId);
+        const custTerm = netTermsList.find(t => t.id === cust?.accountType);
+        const netDays = custTerm?.days ?? 30;
+        const netDueDate = new Date(Date.now() + netDays * 86400000).toISOString().slice(0, 10);
+        const isNetTerms = selectedMethod === "net_terms";
+        return (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" onClick={() => setPayDialog(null)}>
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
           <div className="relative z-10 bg-white rounded-2xl border border-slate-200 shadow-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
             <h3 className="text-slate-800 font-bold text-base mb-4">Record Payment</h3>
             <div className="flex flex-col gap-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">Payment Date</label>
-                  <input type="date" value={payDate} onChange={e => setPayDate(e.target.value)}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-400" />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">Early Discount %</label>
-                  <div className="relative">
-                    <input type="number" min="0" max="100" step="0.5" value={earlyDiscount} onChange={e => setEarlyDiscount(e.target.value)}
-                      placeholder="0"
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2 pr-7 text-sm text-slate-800 focus:outline-none focus:border-blue-400" />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">%</span>
-                  </div>
-                  {earlyDiscount && Number(earlyDiscount) > 0 && (() => {
-                    const inv = invoices?.find((i: any) => i.id === payDialog.id) as any;
-                    const total = Number(inv?.total ?? 0);
-                    const disc = (total * Number(earlyDiscount)) / 100;
-                    return <p className="text-[11px] text-emerald-600 mt-1 font-semibold">Saves {formatCurrency(disc)} → Pay {formatCurrency(total - disc)}</p>;
-                  })()}
-                </div>
-              </div>
               <div>
                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 block">Payment Method</label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   {PAYMENT_METHODS.map(m => (
                     <button key={m.value} onClick={() => setSelectedMethod(m.value)}
-                      className={`flex flex-col items-start p-3 rounded-xl border text-left transition-all ${selectedMethod === m.value ? "border-[hsl(224_50%_25%)] bg-[hsl(224_50%_97%)]" : "border-slate-200 hover:border-slate-300 bg-white"}`}>
-                      <span className={`text-sm font-semibold ${selectedMethod === m.value ? "text-[hsl(224_50%_20%)]" : "text-slate-700"}`}>{m.label}</span>
+                      className={`flex flex-col items-start p-3 rounded-xl border text-left transition-all ${
+                        selectedMethod === m.value
+                          ? m.value === "net_terms"
+                            ? "border-violet-400 bg-violet-50"
+                            : "border-[hsl(224_50%_25%)] bg-[hsl(224_50%_97%)]"
+                          : "border-slate-200 hover:border-slate-300 bg-white"
+                      }`}>
+                      <span className={`text-sm font-semibold ${selectedMethod === m.value ? m.value === "net_terms" ? "text-violet-700" : "text-[hsl(224_50%_20%)]" : "text-slate-700"}`}>{m.label}</span>
                       <span className="text-xs text-slate-400 mt-0.5">{m.desc}</span>
                     </button>
                   ))}
                 </div>
               </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">Note (optional)</label>
-                <input type="text" value={payNote} onChange={e => setPayNote(e.target.value)} placeholder="e.g. Check #1234"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-400" />
-              </div>
+
+              {isNetTerms ? (
+                /* Net Terms info panel */
+                <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 flex flex-col gap-1.5">
+                  <p className="text-xs font-bold text-violet-700 uppercase tracking-wider mb-1">Payment Schedule</p>
+                  {custTerm ? (
+                    <>
+                      <p className="text-sm text-violet-900">
+                        <span className="font-semibold">{cust?.company || cust?.name || inv?.customerName}</span>
+                        {" "}is billed on <span className="font-bold">{custTerm.label}</span>
+                        {custTerm.days !== undefined && ` (${custTerm.days === 0 ? "due on receipt" : `${custTerm.days} days`})`}
+                      </p>
+                      <p className="text-sm text-violet-700 font-semibold">Due date → {new Date(netDueDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</p>
+                      <p className="text-xs text-violet-500 mt-0.5">Invoice will be set to <span className="font-bold">Sent</span> with this due date. No payment is recorded yet.</p>
+                    </>
+                  ) : (
+                    <p className="text-sm text-amber-700">
+                      {cust ? "This customer has no payment terms set. A 30-day default will be used." : "No customer linked — 30-day default will be used."}
+                      <span className="block font-semibold mt-0.5">Due date → {new Date(netDueDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+                    </p>
+                  )}
+                </div>
+              ) : (
+                /* Cash/card/transfer/check — show date + early discount */
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">Payment Date</label>
+                      <input type="date" value={payDate} onChange={e => setPayDate(e.target.value)}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-400" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">Early Discount %</label>
+                      <div className="relative">
+                        <input type="number" min="0" max="100" step="0.5" value={earlyDiscount} onChange={e => setEarlyDiscount(e.target.value)}
+                          placeholder="0"
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2 pr-7 text-sm text-slate-800 focus:outline-none focus:border-blue-400" />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">%</span>
+                      </div>
+                      {earlyDiscount && Number(earlyDiscount) > 0 && (() => {
+                        const total = Number(inv?.total ?? 0);
+                        const disc = (total * Number(earlyDiscount)) / 100;
+                        return <p className="text-[11px] text-emerald-600 mt-1 font-semibold">Saves {formatCurrency(disc)} → Pay {formatCurrency(total - disc)}</p>;
+                      })()}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">Note (optional)</label>
+                    <input type="text" value={payNote} onChange={e => setPayNote(e.target.value)} placeholder="e.g. Check #1234"
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-400" />
+                  </div>
+                </>
+              )}
             </div>
             <div className="flex gap-3 mt-5">
               <button onClick={() => setPayDialog(null)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50">Cancel</button>
-              <button onClick={confirmPay} disabled={payInvoice.isPending}
-                className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50">
-                {payInvoice.isPending ? "Saving…" : "Confirm Payment"}
+              <button onClick={confirmPay} disabled={payInvoice.isPending || updateInvoice.isPending}
+                className={`flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 ${isNetTerms ? "bg-violet-600 hover:bg-violet-700" : "bg-emerald-600 hover:bg-emerald-700"}`}>
+                {(payInvoice.isPending || updateInvoice.isPending) ? "Saving…" : isNetTerms ? "Apply Net Terms" : "Confirm Payment"}
               </button>
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
       {/* ── Batch Pay Overlay ──────────────────────────────────────── */}
       {batchPayOpen && (() => {
         const batchInvoices = (filtered ?? []).filter(i => selectedIds.has(i.id));
