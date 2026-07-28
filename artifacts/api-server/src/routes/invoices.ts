@@ -115,12 +115,46 @@ router.post("/invoices/:id/pay", async (req, res): Promise<void> => {
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const parsed = PayInvoiceBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-  const [inv] = await db.update(invoicesTable).set({
+
+  // Fetch current invoice to get the live total
+  const [current] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, params.data.id));
+  if (!current) { res.status(404).json({ error: "Invoice not found" }); return; }
+
+  const currentTotal    = Number(current.total ?? 0);
+  const currentDiscount = Number(current.discountTotal ?? 0);
+
+  // Compute early pay discount
+  let earlyDiscAmt = 0;
+  const earlyPct  = parsed.data.earlyDiscountPercent ?? null;
+  const earlyAmt  = parsed.data.earlyDiscountAmount  ?? null;
+  if (earlyPct != null && earlyPct > 0) {
+    earlyDiscAmt = Math.round(currentTotal * earlyPct / 100 * 100) / 100;
+  } else if (earlyAmt != null && earlyAmt > 0) {
+    earlyDiscAmt = Math.min(earlyAmt, currentTotal); // can't discount more than total
+  }
+
+  // Build payment note — prepend early discount info if applicable
+  const noteParts: string[] = [];
+  if (earlyDiscAmt > 0) {
+    const pctStr = earlyPct != null ? `${earlyPct}%—` : "";
+    noteParts.push(`Early pay discount: ${pctStr}$${earlyDiscAmt.toFixed(2)}`);
+  }
+  if (parsed.data.paymentNote) noteParts.push(parsed.data.paymentNote);
+
+  const updateFields: Record<string, unknown> = {
     status: "paid",
     paymentMethod: parsed.data.paymentMethod,
-    paymentNote: parsed.data.paymentNote ?? null,
+    paymentNote: noteParts.join(" | ") || null,
     paidAt: new Date(),
-  }).where(eq(invoicesTable.id, params.data.id)).returning();
+  };
+
+  // Apply discount to stored totals so every downstream consumer sees correct numbers
+  if (earlyDiscAmt > 0) {
+    updateFields.discountTotal = String(Math.round((currentDiscount + earlyDiscAmt) * 100) / 100);
+    updateFields.total         = String(Math.round((currentTotal - earlyDiscAmt) * 100) / 100);
+  }
+
+  const [inv] = await db.update(invoicesTable).set(updateFields).where(eq(invoicesTable.id, params.data.id)).returning();
   if (!inv) { res.status(404).json({ error: "Invoice not found" }); return; }
   res.json(await withCustomerName(inv));
 });

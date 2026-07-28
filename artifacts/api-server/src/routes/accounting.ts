@@ -26,20 +26,50 @@ router.get("/accounting/general-ledger", async (_req, res): Promise<void> => {
 
   const entries: object[] = [];
 
+  // Helper: parse early pay discount amount from paymentNote
+  // Format written by /pay route: "Early pay discount: 5%—$250.00 | …"
+  function parseEarlyDiscount(note: string | null | undefined): number {
+    if (!note) return 0;
+    const m = note.match(/Early pay discount:[^$]*\$([0-9]+(?:\.[0-9]+)?)/);
+    return m ? Number(m[1]) : 0;
+  }
+
   for (const inv of invoices) {
+    const earlyDisc = parseEarlyDiscount(inv.paymentNote);
+    // For the debit (AR entry) we show the gross amount before the early-pay discount
+    // so readers can reconcile. The gross = stored total + early discount.
+    const grossTotal = num(inv.total) + (inv.status === "paid" ? earlyDisc : 0);
+
     entries.push({
       id: `INV-${inv.id}`,
       date: inv.createdAt,
       type: "invoice",
       description: `Invoice to ${customerMap[inv.customerId] ?? "Customer #" + inv.customerId}`,
       party: customerMap[inv.customerId] ?? null,
-      debit: num(inv.total),
+      debit: grossTotal,
       credit: 0,
-      balance: num(inv.total),
+      balance: grossTotal,
       status: inv.status,
       ref: inv.invoiceNumber ?? `INV-${inv.id.toString().padStart(4, "0")}`,
     });
     if (inv.status === "paid") {
+      // Early pay discount entry (reduces AR — treated as a contra-revenue adjustment)
+      if (earlyDisc > 0) {
+        entries.push({
+          id: `INV-DISC-${inv.id}`,
+          date: inv.paidAt ?? inv.createdAt,
+          type: "early_pay_discount",
+          description: `Early pay discount – ${customerMap[inv.customerId] ?? "Customer"}`,
+          party: customerMap[inv.customerId] ?? null,
+          debit: 0,
+          credit: earlyDisc,
+          balance: -earlyDisc,
+          status: "paid",
+          ref: inv.invoiceNumber ?? `INV-${inv.id.toString().padStart(4, "0")}`,
+          discountAmount: earlyDisc,
+        });
+      }
+      // Cash receipt for the net amount actually collected
       entries.push({
         id: `INV-PAY-${inv.id}`,
         date: inv.paidAt ?? inv.createdAt,

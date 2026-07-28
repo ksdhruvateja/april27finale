@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
 export type UserRole = "developer" | "admin" | "sales" | "shipper" | "accountant" | "viewer" | "custom";
 
@@ -49,8 +49,24 @@ export function checkAccess(role: UserRole, path: string, customPermissions?: Cu
   return allowed.some(p => path === p || (p !== "/" && path.startsWith(p)));
 }
 
+const STORAGE_KEY = "forez_current_user";
+
 export function RoleProvider({ children }: { children: ReactNode }) {
-  const [currentUser, setCurrentUserState] = useState<CurrentUser | null>(null);
+  const [currentUser, setCurrentUserState] = useState<CurrentUser | null>(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) return JSON.parse(raw) as CurrentUser;
+    } catch {}
+    return null;
+  });
+
+  useEffect(() => {
+    if (currentUser) {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(currentUser)); } catch {}
+    } else {
+      try { localStorage.removeItem(STORAGE_KEY); } catch {}
+    }
+  }, [currentUser]);
 
   const setCurrentUser = (user: CurrentUser | null) => {
     setCurrentUserState(user);

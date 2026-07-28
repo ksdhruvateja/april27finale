@@ -21,10 +21,12 @@ const STATUS_MAP: Record<string, string> = {
 };
 
 const METHOD_LABELS: Record<string, string> = {
+  cash:          "Cash",
+  credit_card:   "Credit Card",
+  bank_transfer: "Bank Transfer",
+  check:         "Check",
   wire_transfer: "Wire",
-  ach: "ACH",
-  check: "Check",
-  cash: "Cash",
+  ach:           "ACH",
 };
 
 function BillCard({
@@ -336,15 +338,33 @@ export default function Bills() {
           onClose={() => setShowCheque(false)}
         />
       )}
-      {showBulkPay && selectedBills.length > 0 && (
-        <BulkPayBillModal
-          bills={selectedBills.map(b => ({ id: b.id, vendorName: b.vendorName, total: b.total, dueDate: (b as any).dueDate }))}
-          onClose={() => {
-            setShowBulkPay(false);
-            setSelectedIds(new Set());
-          }}
-        />
-      )}
+      {showBulkPay && selectedBills.length > 0 && (() => {
+        // Build preferred-method map from most-recent paid bill per vendor
+        const preferredMethods: Record<number, string> = {};
+        const paidWithMethod = (bills ?? []).filter(b => b.status === "paid" && (b as any).paymentMethod && (b as any).vendorId);
+        // Sort newest first so first match = most recent
+        const sorted = [...paidWithMethod].sort((a, b) => b.id - a.id);
+        sorted.forEach(b => {
+          const vid = (b as any).vendorId as number;
+          if (!preferredMethods[vid]) preferredMethods[vid] = (b as any).paymentMethod;
+        });
+        return (
+          <BulkPayBillModal
+            bills={selectedBills.map(b => ({
+              id: b.id,
+              vendorId: (b as any).vendorId as number,
+              vendorName: b.vendorName,
+              total: b.total,
+              dueDate: (b as any).dueDate,
+            }))}
+            preferredMethods={preferredMethods}
+            onClose={() => {
+              setShowBulkPay(false);
+              setSelectedIds(new Set());
+            }}
+          />
+        );
+      })()}
     </Layout>
   );
 }

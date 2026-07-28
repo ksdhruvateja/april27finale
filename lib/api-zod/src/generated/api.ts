@@ -1207,6 +1207,8 @@ export const PayInvoiceParams = zod.object({
 export const PayInvoiceBody = zod.object({
   paymentMethod: zod.enum(["stripe", "bank_transfer", "check", "cash"]),
   paymentNote: zod.string().nullish(),
+  earlyDiscountPercent: zod.number().min(0).max(100).nullish(),
+  earlyDiscountAmount: zod.number().min(0).nullish(),
 });
 
 export const payInvoiceResponseLineItemsItemTaxPercentDefault = 0;
@@ -1643,7 +1645,7 @@ export const PayBillParams = zod.object({
 });
 
 export const PayBillBody = zod.object({
-  paymentMethod: zod.enum(["wire_transfer", "ach", "check", "cash"]),
+  paymentMethod: zod.enum(["wire_transfer", "ach", "check", "cash", "credit_card", "bank_transfer"]),
   paymentNote: zod.string().nullish(),
   bankAccountId: zod.number().nullish(),
   checkNumber: zod.string().nullish(),

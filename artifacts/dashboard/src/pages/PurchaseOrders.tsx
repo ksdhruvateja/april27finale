@@ -24,23 +24,25 @@ interface PriceAdjustDialog {
 }
 
 const PO_STATUS_STYLES: Record<string, string> = {
-  received:  "text-emerald-700 bg-emerald-50 border-emerald-200",
-  sent:      "text-blue-700   bg-blue-50   border-blue-200",
-  cancelled: "text-slate-400  bg-slate-50  border-slate-200",
-  draft:     "text-slate-500  bg-slate-50  border-slate-200",
-  pending:   "text-amber-700  bg-amber-50  border-amber-200",
-  fulfilled: "text-indigo-700 bg-indigo-50 border-indigo-200",
-  shipped:   "text-sky-700    bg-sky-50    border-sky-200",
-  overdue:   "text-red-600    bg-red-50    border-red-200",
+  received:  "text-emerald-700 bg-emerald-50  border-emerald-200",
+  billed:    "text-violet-700  bg-violet-50   border-violet-200",
+  sent:      "text-blue-700   bg-blue-50    border-blue-200",
+  cancelled: "text-slate-400  bg-slate-50   border-slate-200",
+  draft:     "text-slate-500  bg-slate-50   border-slate-200",
+  pending:   "text-amber-700  bg-amber-50   border-amber-200",
+  fulfilled: "text-indigo-700 bg-indigo-50  border-indigo-200",
+  shipped:   "text-sky-700    bg-sky-50     border-sky-200",
+  overdue:   "text-red-600    bg-red-50     border-red-200",
 };
 
-type PoStatusFilter = "all" | "draft" | "pending" | "received" | "fulfilled" | "shipped" | "overdue";
+type PoStatusFilter = "all" | "draft" | "pending" | "received" | "billed" | "fulfilled" | "shipped" | "overdue";
 
 const FILTER_TABS: { value: PoStatusFilter; label: string }[] = [
   { value: "all",       label: "All"       },
   { value: "draft",     label: "Draft"     },
   { value: "pending",   label: "Pending"   },
   { value: "received",  label: "Received"  },
+  { value: "billed",    label: "Billed"    },
   { value: "fulfilled", label: "Fulfilled" },
   { value: "shipped",   label: "Shipped"   },
   { value: "overdue",   label: "Overdue"   },
@@ -48,7 +50,7 @@ const FILTER_TABS: { value: PoStatusFilter; label: string }[] = [
 
 function getEffectivePoStatus(po: any): string {
   const { status, expectedDate } = po;
-  if (status === "received" || status === "fulfilled" || status === "cancelled") return status;
+  if (status === "received" || status === "billed" || status === "fulfilled" || status === "cancelled") return status;
   if (expectedDate && new Date(expectedDate).getTime() < Date.now()) return "overdue";
   return status ?? "draft";
 }
@@ -103,7 +105,7 @@ export default function PurchaseOrders() {
   const { data: vendors } = useListVendors();
 
   const STATUS_DOT_COLORS: Record<string,string> = {
-    received:"#10b981", sent:"#3b82f6", draft:"#94a3b8",
+    received:"#10b981", billed:"#7c3aed", sent:"#3b82f6", draft:"#94a3b8",
     pending:"#f59e0b", fulfilled:"#6366f1", shipped:"#0ea5e9",
     overdue:"#ef4444", cancelled:"#cbd5e1",
   };
@@ -621,6 +623,7 @@ export default function PurchaseOrders() {
                 tab.value === "all"       ? "bg-[hsl(224_50%_15%)] text-white shadow-sm"
                 : tab.value === "overdue" ? "bg-red-500 text-white shadow-sm"
                 : tab.value === "received"? "bg-emerald-600 text-white shadow-sm"
+                : tab.value === "billed"  ? "bg-violet-600 text-white shadow-sm"
                 : tab.value === "fulfilled"? "bg-indigo-600 text-white shadow-sm"
                 : tab.value === "shipped" ? "bg-sky-600 text-white shadow-sm"
                 : tab.value === "pending" ? "bg-amber-500 text-white shadow-sm"
@@ -681,6 +684,7 @@ export default function PurchaseOrders() {
                         { value: "sent",      label: "Sent",      dot: "#3b82f6" },
                         { value: "shipped",   label: "Shipped",   dot: "#0ea5e9" },
                         { value: "received",  label: "Received",  dot: "#10b981" },
+                        { value: "billed",    label: "Billed",    dot: "#7c3aed" },
                         { value: "fulfilled", label: "Fulfilled", dot: "#6366f1" },
                         { value: "cancelled", label: "Cancelled", dot: "#cbd5e1" },
                       ].map(s => (
@@ -777,7 +781,7 @@ export default function PurchaseOrders() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="start" className="bg-white border border-slate-200 shadow-xl rounded-xl p-1 min-w-[180px] z-50">
                             <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider px-2 py-1.5">Change Status</p>
-                            {(["draft","pending","sent","received","fulfilled","shipped","cancelled"] as const).map(s => (
+                            {(["draft","pending","sent","received","billed","fulfilled","shipped","cancelled"] as const).map(s => (
                               <DropdownMenuItem key={s} onClick={() => { handleInlineStatusChange(po, s); setShowCustomInput(null); }}
                                 className={`flex items-center gap-2 cursor-pointer text-xs font-medium capitalize rounded-lg px-2 py-1.5 transition-colors ${s === (po.status ?? "draft") ? "bg-slate-50 text-slate-800 font-semibold" : "text-slate-600 hover:bg-slate-50"}`}>
                                 <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: STATUS_DOT_COLORS[s] ?? "#94a3b8" }} />
@@ -788,7 +792,7 @@ export default function PurchaseOrders() {
                             {/* Custom tag section */}
                             <div className="border-t border-slate-100 mt-1 pt-1">
                               {/* Show current custom status if any */}
-                              {po.status && !["draft","pending","sent","received","fulfilled","shipped","cancelled","overdue"].includes(po.status) && showCustomInput !== po.id && (
+                              {po.status && !["draft","pending","sent","received","billed","fulfilled","shipped","cancelled","overdue"].includes(po.status) && showCustomInput !== po.id && (
                                 <div className="flex items-center gap-1.5 px-2 py-1.5 bg-violet-50 rounded-lg mb-0.5">
                                   <Tag size={10} className="text-violet-500 flex-shrink-0" />
                                   <span className="text-xs font-semibold text-violet-700 flex-1 capitalize">{po.status}</span>
@@ -852,7 +856,7 @@ export default function PurchaseOrders() {
                             <DropdownMenuItem onClick={() => handleCreateShipment(po)} className="gap-2 cursor-pointer text-sm hover:bg-slate-50 focus:bg-slate-50">
                               <Truck size={13} /> Create Shipment
                             </DropdownMenuItem>
-                            {po.status !== "received" && po.status !== "cancelled" && (
+                            {po.status !== "received" && po.status !== "billed" && po.status !== "cancelled" && (
                               <DropdownMenuItem onClick={() => handleConvert(po.id)} className="gap-2 cursor-pointer text-sm hover:bg-slate-50 focus:bg-slate-50"><CreditCard size={13} /> Convert to Bill</DropdownMenuItem>
                             )}
                             <DropdownMenuItem onClick={() => setEditPO(po)} className="gap-2 cursor-pointer text-sm hover:bg-slate-50 focus:bg-slate-50"><Edit size={13} /> Edit</DropdownMenuItem>
@@ -999,7 +1003,7 @@ export default function PurchaseOrders() {
               </button>
             </div>
             <div className="grid grid-cols-2 gap-2 mb-5">
-              {(["draft","pending","sent","received","fulfilled","shipped","cancelled"] as const).map(s => {
+              {(["draft","pending","sent","received","billed","fulfilled","shipped","cancelled"] as const).map(s => {
                 const isActive = newStatus === s;
                 return (
                   <button key={s} onClick={() => setNewStatus(s)}

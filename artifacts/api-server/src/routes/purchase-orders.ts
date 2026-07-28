@@ -153,7 +153,7 @@ router.post("/purchase-orders/:id/convert", async (req, res): Promise<void> => {
     notes: po.notes,
     internalNote: po.internalNote,
   }).returning();
-  await db.update(purchaseOrdersTable).set({ status: "received" }).where(eq(purchaseOrdersTable.id, po.id));
+  await db.update(purchaseOrdersTable).set({ status: "billed" }).where(eq(purchaseOrdersTable.id, po.id));
   const [vendor] = await db.select({ name: vendorsTable.name }).from(vendorsTable).where(eq(vendorsTable.id, bill.vendorId));
   res.status(201).json({ ...bill, vendorName: vendor?.name ?? "Unknown", lineItems: bill.lineItems as object[], subtotal: Number(bill.subtotal), taxTotal: Number(bill.taxTotal), total: Number(bill.total) });
 });

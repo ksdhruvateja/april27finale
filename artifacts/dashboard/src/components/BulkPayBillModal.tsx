@@ -4,79 +4,187 @@ import { usePayBill, getListBillsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatCurrency } from "@/lib/utils";
 import {
-  X, Building2, Zap, Wallet, CheckSquare, CheckCircle2,
-  AlertCircle, Loader2, CreditCard,
+  X, Building2, Wallet, CheckSquare, CheckCircle2,
+  AlertCircle, Loader2, CreditCard, ChevronRight, ArrowRight,
 } from "lucide-react";
 
-interface BillItem { id: number; vendorName: string; total: number; dueDate?: string; }
+// ─── Types ──────────────────────────────────────────────────────────────────
+
+export interface BillItem {
+  id: number;
+  vendorId: number;
+  vendorName: string;
+  total: number;
+  dueDate?: string;
+}
 
 interface Props {
   bills: BillItem[];
+  preferredMethods: Record<number, string>; // vendorId → method string
   onClose: () => void;
 }
 
-type Method = "wire_transfer" | "ach" | "check" | "cash";
+type Method = "cash" | "credit_card" | "bank_transfer" | "check";
 
-const METHODS: { id: Method; label: string; icon: ReactNode; desc: string; color: string }[] = [
-  { id: "wire_transfer", label: "Wire Transfer", icon: <Building2 size={20} />, desc: "Bank wire", color: "border-blue-300 text-blue-700 bg-blue-50 hover:bg-blue-100" },
-  { id: "ach",           label: "ACH / Dwolla",  icon: <Zap size={20} />,       desc: "ACH transfer", color: "border-violet-300 text-violet-700 bg-violet-50 hover:bg-violet-100" },
-  { id: "check",         label: "Check",         icon: <CheckSquare size={20} />, desc: "Paper check", color: "border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100" },
-  { id: "cash",          label: "Cash",          icon: <Wallet size={20} />,     desc: "Cash payment", color: "border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100" },
+const VALID_METHODS: Method[] = ["cash", "credit_card", "bank_transfer", "check"];
+const isValidMethod = (m: string | undefined | null): m is Method =>
+  !!m && VALID_METHODS.includes(m as Method);
+
+const METHODS: { id: Method; label: string; icon: ReactNode; desc: string; color: string; ring: string }[] = [
+  {
+    id: "cash",
+    label: "Cash",
+    icon: <Wallet size={20} />,
+    desc: "Pay with cash",
+    color: "border-emerald-300 bg-emerald-50 text-emerald-700",
+    ring: "ring-emerald-400",
+  },
+  {
+    id: "credit_card",
+    label: "Credit Card",
+    icon: <CreditCard size={20} />,
+    desc: "Pay by card",
+    color: "border-blue-300 bg-blue-50 text-blue-700",
+    ring: "ring-blue-400",
+  },
+  {
+    id: "bank_transfer",
+    label: "Bank Transfer",
+    icon: <Building2 size={20} />,
+    desc: "Transfer from bank",
+    color: "border-indigo-300 bg-indigo-50 text-indigo-700",
+    ring: "ring-indigo-400",
+  },
+  {
+    id: "check",
+    label: "Check",
+    icon: <CheckSquare size={20} />,
+    desc: "Paper check",
+    color: "border-amber-300 bg-amber-50 text-amber-700",
+    ring: "ring-amber-400",
+  },
 ];
 
+const METHOD_COLORS: Record<Method, string> = {
+  cash:          "text-emerald-700 bg-emerald-50 border-emerald-200",
+  credit_card:   "text-blue-700    bg-blue-50    border-blue-200",
+  bank_transfer: "text-indigo-700  bg-indigo-50  border-indigo-200",
+  check:         "text-amber-700   bg-amber-50   border-amber-200",
+};
+
 interface BankAccount {
-  id: number; name: string;
-  bankName: string | null; accountNumber: string | null;
-  routingNumber: string | null; accountType: string;
+  id: number;
+  name: string;
+  bankName: string | null;
+  accountNumber: string | null;
+  routingNumber: string | null;
+  accountType: string;
 }
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
+const inp = "w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-indigo-400 transition-colors";
 
-const inp = "w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-slate-400 transition-colors";
+// ─── Per-vendor state ────────────────────────────────────────────────────────
 
-type Status = "idle" | "progress" | "done";
-interface PayResult { billId: number; vendorName: string; total: number; ok: boolean; error?: string; }
+interface VendorGroup {
+  vendorId: number;
+  vendorName: string;
+  bills: BillItem[];
+  total: number;
+}
 
-export default function BulkPayBillModal({ bills, onClose }: Props) {
+interface VendorPayState {
+  method: Method;
+  bankAccountId: string;
+  checkNumberBase: string;
+  checkDate: string;
+  note: string;
+}
+
+interface PayResult {
+  billId: number;
+  vendorName: string;
+  total: number;
+  ok: boolean;
+  error?: string;
+}
+
+// ─── Component ──────────────────────────────────────────────────────────────
+
+export default function BulkPayBillModal({ bills, preferredMethods, onClose }: Props) {
   const payBill = usePayBill();
   const queryClient = useQueryClient();
 
-  const [step, setStep] = useState<"method" | "details">("method");
-  const [method, setMethod] = useState<Method | null>(null);
-  const [bankAccountId, setBankAccountId] = useState("");
-  const [checkNumberBase, setCheckNumberBase] = useState("1001");
-  const [checkDate, setCheckDate] = useState(todayISO());
-  const [note, setNote] = useState("");
-  const [status, setStatus] = useState<Status>("idle");
-  const [results, setResults] = useState<PayResult[]>([]);
-  const [currentIdx, setCurrentIdx] = useState<number | null>(null);
+  // Group bills by vendor (preserve insertion order = original selection order)
+  const groups: VendorGroup[] = [];
+  const groupMap = new Map<number, VendorGroup>();
+  for (const b of bills) {
+    if (!groupMap.has(b.vendorId)) {
+      const g: VendorGroup = { vendorId: b.vendorId, vendorName: b.vendorName, bills: [], total: 0 };
+      groups.push(g);
+      groupMap.set(b.vendorId, g);
+    }
+    const g = groupMap.get(b.vendorId)!;
+    g.bills.push(b);
+    g.total += b.total;
+  }
 
-  const totalAmount = bills.reduce((s, b) => s + b.total, 0);
+  // Per-vendor configurable state, pre-seeded with preferred method
+  const [vendorStates, setVendorStates] = useState<Record<number, VendorPayState>>(() => {
+    const init: Record<number, VendorPayState> = {};
+    for (const g of groups) {
+      const preferred = preferredMethods[g.vendorId];
+      init[g.vendorId] = {
+        method: isValidMethod(preferred) ? preferred : "bank_transfer",
+        bankAccountId: "",
+        checkNumberBase: "1001",
+        checkDate: todayISO(),
+        note: "",
+      };
+    }
+    return init;
+  });
+
+  const [currentStep, setCurrentStep] = useState(0); // which vendor we're on
+  const [processing, setProcessing] = useState(false);
+  const [allResults, setAllResults] = useState<PayResult[]>([]);
+  const [done, setDone] = useState(false);
 
   const { data: bankAccounts = [] } = useQuery<BankAccount[]>({
     queryKey: ["bank-accounts"],
     queryFn: () => fetch("/api/bank-accounts").then(r => r.json()),
   });
 
-  const selectedAccount = bankAccounts.find(a => String(a.id) === bankAccountId);
+  const group = groups[currentStep];
+  const vs = group ? vendorStates[group.vendorId] : null;
 
-  const processPayments = async () => {
-    if (!method) return;
-    setStatus("progress");
+  const updateVs = (patch: Partial<VendorPayState>) => {
+    if (!group) return;
+    setVendorStates(prev => ({
+      ...prev,
+      [group.vendorId]: { ...prev[group.vendorId], ...patch },
+    }));
+  };
+
+  const needsBankAccount = vs && (vs.method === "bank_transfer" || vs.method === "check");
+  const canProceed = vs && (!needsBankAccount || !!vs.bankAccountId);
+
+  const processVendor = async () => {
+    if (!group || !vs) return;
+    setProcessing(true);
     const res: PayResult[] = [];
-    for (let i = 0; i < bills.length; i++) {
-      const b = bills[i];
-      setCurrentIdx(i);
-      const checkNum = method === "check" ? String(Number(checkNumberBase) + i) : null;
+    for (let i = 0; i < group.bills.length; i++) {
+      const b = group.bills[i];
+      const checkNum = vs.method === "check" ? String(Number(vs.checkNumberBase) + i) : null;
       try {
         await payBill.mutateAsync({
           id: b.id,
           data: {
-            paymentMethod: method,
-            paymentNote: note || null,
-            bankAccountId: bankAccountId ? Number(bankAccountId) : null,
+            paymentMethod: vs.method,
+            paymentNote: vs.note || null,
+            bankAccountId: vs.bankAccountId ? Number(vs.bankAccountId) : null,
             checkNumber: checkNum,
-            checkDate: method === "check" && checkDate ? new Date(checkDate).toISOString() : null,
+            checkDate: vs.method === "check" && vs.checkDate ? new Date(vs.checkDate).toISOString() : null,
           } as any,
         });
         res.push({ billId: b.id, vendorName: b.vendorName, total: b.total, ok: true });
@@ -85,17 +193,127 @@ export default function BulkPayBillModal({ bills, onClose }: Props) {
         res.push({ billId: b.id, vendorName: b.vendorName, total: b.total, ok: false, error: msg });
       }
     }
-    setCurrentIdx(null);
-    setResults(res);
-    setStatus("done");
-    queryClient.invalidateQueries({ queryKey: getListBillsQueryKey() });
+    // Invalidate after each vendor so the list updates live
+    await queryClient.invalidateQueries({ queryKey: getListBillsQueryKey() });
+    setAllResults(prev => [...prev, ...res]);
+    setProcessing(false);
+
+    if (currentStep + 1 >= groups.length) {
+      setDone(true);
+    } else {
+      setCurrentStep(s => s + 1);
+    }
   };
 
-  const succeeded = results.filter(r => r.ok).length;
-  const failed    = results.filter(r => !r.ok).length;
+  const grandTotal = bills.reduce((s, b) => s + b.total, 0);
+  const succeeded  = allResults.filter(r => r.ok).length;
+  const failed     = allResults.filter(r => !r.ok).length;
+
+  // ── Done summary ────────────────────────────────────────────────────────
+  if (done) {
+    return (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
+        <div className="relative z-10 w-full max-w-lg bg-white rounded-2xl border border-slate-200 shadow-2xl flex flex-col max-h-[90vh]">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-100">
+            <div className="flex items-center gap-2.5">
+              <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${failed === 0 ? "bg-emerald-500" : "bg-amber-500"}`}>
+                {failed === 0
+                  ? <CheckCircle2 size={16} className="text-white" />
+                  : <AlertCircle size={16} className="text-white" />}
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-800 text-base">Payment Complete</h3>
+                <p className="text-xs text-slate-400">
+                  {succeeded} of {bills.length} bill{bills.length !== 1 ? "s" : ""} paid across {groups.length} vendor{groups.length !== 1 ? "s" : ""}
+                </p>
+              </div>
+            </div>
+            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 transition-colors">
+              <X size={16} />
+            </button>
+          </div>
+
+          {/* Results grouped by vendor */}
+          <div className="flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-3">
+            {groups.map(g => {
+              const gResults = allResults.filter(r => g.bills.some(b => b.id === r.billId));
+              const gOk = gResults.every(r => r.ok);
+              const vm = vendorStates[g.vendorId];
+              return (
+                <div key={g.vendorId} className={`rounded-xl border overflow-hidden ${gOk ? "border-emerald-200" : "border-red-200"}`}>
+                  <div className={`px-3 py-2 flex items-center justify-between ${gOk ? "bg-emerald-50" : "bg-red-50"}`}>
+                    <div className="flex items-center gap-2">
+                      {gOk
+                        ? <CheckCircle2 size={13} className="text-emerald-600 flex-shrink-0" />
+                        : <AlertCircle  size={13} className="text-red-500 flex-shrink-0" />}
+                      <span className="font-semibold text-sm text-slate-800">{g.vendorName}</span>
+                      {isValidMethod(vm?.method) && (
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border capitalize ${METHOD_COLORS[vm.method]}`}>
+                          {METHODS.find(m => m.id === vm.method)?.label}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-xs font-bold text-slate-700">{formatCurrency(g.total)}</span>
+                  </div>
+                  <div className="divide-y divide-slate-100">
+                    {gResults.map(r => (
+                      <div key={r.billId} className="flex items-center gap-2 px-3 py-2 text-sm">
+                        {r.ok
+                          ? <CheckCircle2 size={12} className="text-emerald-500 flex-shrink-0" />
+                          : <AlertCircle  size={12} className="text-red-500 flex-shrink-0" />}
+                        <span className="font-mono text-[10px] text-slate-400">BILL-{String(r.billId).padStart(4, "0")}</span>
+                        <span className="flex-1 text-slate-600">{r.vendorName}</span>
+                        <span className="font-semibold">{formatCurrency(r.total)}</span>
+                        {!r.ok && <span className="text-xs text-red-500 truncate max-w-[90px]" title={r.error}>{r.error}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="px-6 pb-5 pt-3 border-t border-slate-100">
+            <button onClick={onClose}
+              className="w-full py-2.5 rounded-xl bg-[hsl(224_50%_15%)] text-white text-sm font-semibold hover:bg-[hsl(224_50%_20%)] transition-colors">
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Processing spinner ───────────────────────────────────────────────────
+  if (processing) {
+    return (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
+        <div className="relative z-10 w-full max-w-sm bg-white rounded-2xl border border-slate-200 shadow-2xl px-8 py-10 flex flex-col items-center gap-4">
+          <Loader2 size={32} className="text-indigo-500 animate-spin" />
+          <div className="text-center">
+            <p className="font-semibold text-slate-800">
+              Paying {group?.bills.length} bill{(group?.bills.length ?? 0) !== 1 ? "s" : ""}…
+            </p>
+            <p className="text-sm text-slate-500 mt-1">{group?.vendorName}</p>
+          </div>
+          <div className="w-full bg-slate-100 rounded-full h-1.5">
+            <div className="bg-indigo-500 h-1.5 rounded-full transition-all"
+              style={{ width: `${((currentStep) / groups.length) * 100}%` }} />
+          </div>
+          <p className="text-xs text-slate-400">Vendor {currentStep + 1} of {groups.length}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Per-vendor wizard step ───────────────────────────────────────────────
+  if (!group || !vs) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" onClick={status === "idle" ? onClose : undefined}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
       <div className="relative z-10 w-full max-w-lg bg-white rounded-2xl border border-slate-200 shadow-2xl flex flex-col max-h-[90vh]"
         onClick={e => e.stopPropagation()}>
@@ -107,202 +325,210 @@ export default function BulkPayBillModal({ bills, onClose }: Props) {
               <CreditCard size={15} className="text-white" />
             </div>
             <div>
-              <h3 className="font-bold text-slate-800 text-base">Pay {bills.length} Bill{bills.length !== 1 ? "s" : ""}</h3>
-              <p className="text-xs text-slate-400">Total: <span className="font-semibold text-slate-700">{formatCurrency(totalAmount)}</span></p>
+              <h3 className="font-bold text-slate-800 text-base">
+                Settling Bills — {group.vendorName}
+              </h3>
+              <p className="text-xs text-slate-400">
+                Vendor {currentStep + 1} of {groups.length} · {group.bills.length} bill{group.bills.length !== 1 ? "s" : ""} · {formatCurrency(group.total)}
+              </p>
             </div>
           </div>
-          {status !== "progress" && (
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 transition-colors">
-              <X size={16} />
-            </button>
-          )}
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 transition-colors">
+            <X size={16} />
+          </button>
         </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto">
-
-          {/* ── Results view (done) ── */}
-          {status === "done" && (
-            <div className="px-6 py-5 flex flex-col gap-4">
-              <div className={`flex items-center gap-3 p-4 rounded-xl border ${failed === 0 ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-200"}`}>
-                {failed === 0
-                  ? <CheckCircle2 size={20} className="text-emerald-600 flex-shrink-0" />
-                  : <AlertCircle size={20} className="text-amber-600 flex-shrink-0" />}
-                <div>
-                  <p className="font-semibold text-sm">{succeeded} of {bills.length} bills paid successfully</p>
-                  {failed > 0 && <p className="text-xs text-amber-700 mt-0.5">{failed} failed — see details below</p>}
+        {/* Vendor progress pills */}
+        {groups.length > 1 && (
+          <div className="px-6 pt-3 pb-1 flex items-center gap-1.5 flex-wrap flex-shrink-0">
+            {groups.map((g, i) => {
+              const isPast    = i < currentStep;
+              const isCurrent = i === currentStep;
+              return (
+                <div key={g.vendorId}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all ${
+                    isPast    ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                    : isCurrent ? "bg-[hsl(224_50%_15%)] border-[hsl(224_50%_15%)] text-white shadow-sm"
+                    : "bg-slate-50 border-slate-200 text-slate-400"
+                  }`}>
+                  {isPast && <CheckCircle2 size={10} />}
+                  {g.vendorName}
                 </div>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                {results.map(r => (
-                  <div key={r.billId} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border text-sm ${r.ok ? "bg-emerald-50/60 border-emerald-100" : "bg-red-50 border-red-200"}`}>
-                    {r.ok
-                      ? <CheckCircle2 size={14} className="text-emerald-500 flex-shrink-0" />
-                      : <AlertCircle size={14} className="text-red-500 flex-shrink-0" />}
-                    <span className="flex-1 font-medium text-slate-700">{r.vendorName}</span>
-                    <span className="font-mono text-xs text-slate-500">BILL-{String(r.billId).padStart(4, "0")}</span>
-                    <span className="font-semibold">{formatCurrency(r.total)}</span>
-                    {!r.ok && <span className="text-xs text-red-600 truncate max-w-[120px]" title={r.error}>{r.error}</span>}
+              );
+            })}
+          </div>
+        )}
+
+        {/* Body — scrollable */}
+        <div className="flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-4">
+
+          {/* Bills for this vendor */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden">
+            <div className="px-3 py-2 border-b border-slate-200 flex items-center justify-between">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Bills to settle</p>
+              <p className="text-xs font-bold text-slate-700">{formatCurrency(group.total)}</p>
+            </div>
+            <div className="max-h-28 overflow-y-auto divide-y divide-slate-100">
+              {group.bills.map(b => (
+                <div key={b.id} className="flex items-center justify-between px-3 py-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[10px] text-slate-400">BILL-{String(b.id).padStart(4, "0")}</span>
                   </div>
-                ))}
-              </div>
-              <button onClick={onClose}
-                className="w-full py-2.5 rounded-xl bg-[hsl(224_50%_15%)] text-white text-sm font-semibold hover:bg-[hsl(224_50%_20%)] transition-colors">
-                Done
-              </button>
-            </div>
-          )}
-
-          {/* ── Progress view ── */}
-          {status === "progress" && (
-            <div className="px-6 py-8 flex flex-col items-center gap-4">
-              <Loader2 size={32} className="text-indigo-500 animate-spin" />
-              <div className="text-center">
-                <p className="font-semibold text-slate-800">Processing payments…</p>
-                {currentIdx !== null && (
-                  <p className="text-sm text-slate-500 mt-1">
-                    {currentIdx + 1} of {bills.length} — {bills[currentIdx]?.vendorName}
-                  </p>
-                )}
-              </div>
-              <div className="w-full bg-slate-100 rounded-full h-2">
-                <div
-                  className="bg-indigo-500 h-2 rounded-full transition-all"
-                  style={{ width: `${((currentIdx ?? 0) / bills.length) * 100}%` }}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* ── Method selection ── */}
-          {status === "idle" && step === "method" && (
-            <div className="px-6 py-5 flex flex-col gap-4">
-              {/* Bills summary */}
-              <div className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden">
-                <div className="px-3 py-2 border-b border-slate-200 flex items-center justify-between">
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Selected Bills</p>
-                  <p className="text-xs font-bold text-slate-700">{formatCurrency(totalAmount)} total</p>
+                  <span className="font-semibold text-slate-800">{formatCurrency(b.total)}</span>
                 </div>
-                <div className="max-h-36 overflow-y-auto divide-y divide-slate-100">
-                  {bills.map(b => (
-                    <div key={b.id} className="flex items-center justify-between px-3 py-2 text-sm">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-[10px] text-slate-400">BILL-{String(b.id).padStart(4, "0")}</span>
-                        <span className="text-slate-700 font-medium">{b.vendorName}</span>
-                      </div>
-                      <span className="font-semibold text-slate-800">{formatCurrency(b.total)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <p className="text-sm font-semibold text-slate-600">Choose payment method</p>
-              <div className="grid grid-cols-2 gap-2.5">
-                {METHODS.map(m => (
-                  <button key={m.id} onClick={() => { setMethod(m.id); setStep("details"); }}
-                    className={`flex flex-col items-center gap-2 py-4 rounded-xl border-2 transition-all ${m.color}`}>
+              ))}
+            </div>
+          </div>
+
+          {/* Payment method */}
+          <div>
+            <div className="flex items-center gap-2 mb-2.5">
+              <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">Payment Method</p>
+              {isValidMethod(preferredMethods[group.vendorId]) && (
+                <span className="text-[10px] text-indigo-500 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded-full font-semibold">
+                  ★ Preferred
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {METHODS.map(m => {
+                const isSelected = vs.method === m.id;
+                const isPreferred = preferredMethods[group.vendorId] === m.id;
+                return (
+                  <button key={m.id}
+                    onClick={() => updateVs({ method: m.id })}
+                    className={`relative flex flex-col items-center gap-1.5 py-3.5 rounded-xl border-2 transition-all text-sm font-semibold ${
+                      isSelected
+                        ? m.color + " ring-2 ring-offset-1 " + m.ring + " shadow-sm"
+                        : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50"
+                    }`}>
+                    {isPreferred && (
+                      <span className="absolute top-1.5 right-1.5 text-[9px] font-bold text-indigo-500 bg-indigo-50 border border-indigo-200 px-1 py-0 rounded-full leading-4">
+                        preferred
+                      </span>
+                    )}
                     {m.icon}
-                    <span className="font-semibold text-sm">{m.label}</span>
-                    <span className="text-[11px] opacity-70">{m.desc}</span>
+                    <span>{m.label}</span>
+                    <span className="text-[10px] font-normal opacity-60">{m.desc}</span>
                   </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Bank account picker */}
+          {needsBankAccount && (
+            <div>
+              <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Pay From — Bank Account *</label>
+              <select value={vs.bankAccountId} onChange={e => updateVs({ bankAccountId: e.target.value })} className={inp}>
+                <option value="">Select bank account…</option>
+                {bankAccounts.map(a => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}{a.bankName ? ` — ${a.bankName}` : ""}{a.accountNumber ? ` ···${a.accountNumber.slice(-4)}` : ""}
+                  </option>
+                ))}
+              </select>
+              {bankAccounts.length === 0 && (
+                <p className="text-[11px] text-amber-600 mt-1">No bank accounts found. Add them in Banking first.</p>
+              )}
+            </div>
+          )}
+
+          {/* Check fields */}
+          {vs.method === "check" && (
+            <div className="flex flex-col gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <p className="text-xs font-semibold text-amber-700">
+                Check numbers auto-increment from the base number below
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Starting Check # *</label>
+                  <input type="text" value={vs.checkNumberBase}
+                    onChange={e => updateVs({ checkNumberBase: e.target.value })}
+                    placeholder="e.g. 1001" className={inp} />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Check Date *</label>
+                  <input type="date" value={vs.checkDate}
+                    onChange={e => updateVs({ checkDate: e.target.value })} className={inp} />
+                </div>
+              </div>
+              <div className="text-[11px] text-amber-700 flex flex-col gap-0.5">
+                {group.bills.map((b, i) => (
+                  <div key={b.id} className="flex justify-between">
+                    <span>BILL-{String(b.id).padStart(4, "0")}</span>
+                    <span className="font-mono">Check #{Number(vs.checkNumberBase) + i}</span>
+                  </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* ── Details step ── */}
-          {status === "idle" && step === "details" && method && (
-            <div className="px-6 py-5 flex flex-col gap-4">
-              {/* Summary */}
-              <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm">
-                <span className="text-slate-500">Paying {bills.length} bill{bills.length !== 1 ? "s" : ""} via <span className="font-semibold text-slate-700">{METHODS.find(m2 => m2.id === method)?.label}</span></span>
-                <span className="font-bold text-slate-800">{formatCurrency(totalAmount)}</span>
-              </div>
-
-              {/* Bank account — shown for wire, ach, check */}
-              {(method === "wire_transfer" || method === "ach" || method === "check") && (
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Pay From — Bank Account{method !== "cash" ? " *" : ""}</label>
-                  <select value={bankAccountId} onChange={e => setBankAccountId(e.target.value)} className={inp}>
-                    <option value="">Select bank account…</option>
-                    {bankAccounts.map(a => (
-                      <option key={a.id} value={a.id}>
-                        {a.name}{a.bankName ? ` — ${a.bankName}` : ""}{a.accountNumber ? ` ···${a.accountNumber.slice(-4)}` : ""}
-                      </option>
-                    ))}
-                  </select>
-                  {bankAccounts.length === 0 && <p className="text-[11px] text-amber-600 mt-1">No bank accounts found. Add them in Banking first.</p>}
-                </div>
-              )}
-
-              {/* Check-specific fields */}
-              {method === "check" && (
-                <div className="flex flex-col gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
-                  <p className="text-xs font-semibold text-amber-700">Check Numbers will auto-increment starting from the base number</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Starting Check # *</label>
-                      <input type="text" value={checkNumberBase} onChange={e => setCheckNumberBase(e.target.value)} placeholder="e.g. 1001" className={inp} />
-                    </div>
-                    <div>
-                      <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Check Date *</label>
-                      <input type="date" value={checkDate} onChange={e => setCheckDate(e.target.value)} className={inp} />
-                    </div>
-                  </div>
-                  <div className="text-[11px] text-amber-700">
-                    {bills.map((b, i) => (
-                      <div key={b.id} className="flex justify-between">
-                        <span>{b.vendorName} (BILL-{String(b.id).padStart(4, "0")})</span>
-                        <span className="font-mono">Check #{Number(checkNumberBase) + i}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Cash confirmation banner */}
-              {method === "cash" && (
-                <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
-                  <Wallet size={18} className="text-emerald-600 flex-shrink-0" />
-                  <p className="text-sm text-emerald-800">All {bills.length} bills will be marked as paid with cash immediately.</p>
-                </div>
-              )}
-
-              {/* Note */}
-              <div>
-                <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Payment Note (applied to all bills)</label>
-                <textarea rows={2} value={note} onChange={e => setNote(e.target.value)}
-                  placeholder="e.g. Batch payment — April 2026"
-                  className={inp + " resize-none"} />
-              </div>
+          {/* Credit card info */}
+          {vs.method === "credit_card" && (
+            <div className="flex items-center gap-3 p-3.5 bg-blue-50 border border-blue-200 rounded-xl">
+              <CreditCard size={16} className="text-blue-600 flex-shrink-0" />
+              <p className="text-sm text-blue-800">
+                {group.bills.length} bill{group.bills.length !== 1 ? "s" : ""} will be recorded as paid by credit card.
+              </p>
             </div>
           )}
+
+          {/* Cash info */}
+          {vs.method === "cash" && (
+            <div className="flex items-center gap-3 p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl">
+              <Wallet size={16} className="text-emerald-600 flex-shrink-0" />
+              <p className="text-sm text-emerald-800">
+                {group.bills.length} bill{group.bills.length !== 1 ? "s" : ""} will be marked as paid with cash.
+              </p>
+            </div>
+          )}
+
+          {/* Note */}
+          <div>
+            <label className="text-xs font-semibold text-slate-600 mb-1.5 block">
+              Payment Note <span className="font-normal text-slate-400">(optional)</span>
+            </label>
+            <textarea rows={2} value={vs.note}
+              onChange={e => updateVs({ note: e.target.value })}
+              placeholder={`e.g. Batch payment to ${group.vendorName}`}
+              className={inp + " resize-none"} />
+          </div>
         </div>
 
         {/* Footer */}
-        {status === "idle" && (
-          <div className="px-6 pb-5 pt-3 border-t border-slate-100 flex gap-3 flex-shrink-0">
-            {step === "details" ? (
+        <div className="px-6 pb-5 pt-3 border-t border-slate-100 flex gap-3 flex-shrink-0">
+          <button onClick={onClose}
+            className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors">
+            Cancel
+          </button>
+          <button
+            onClick={processVendor}
+            disabled={!canProceed}
+            className="flex-1 py-2.5 rounded-xl bg-[hsl(224_50%_15%)] text-white text-sm font-semibold hover:bg-[hsl(224_50%_20%)] transition-colors disabled:opacity-40 flex items-center justify-center gap-2">
+            {currentStep + 1 < groups.length ? (
               <>
-                <button onClick={() => setStep("method")}
-                  className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors">
-                  ← Back
-                </button>
-                <button
-                  onClick={processPayments}
-                  disabled={
-                    (method === "wire_transfer" || method === "ach" || method === "check") && !bankAccountId
-                  }
-                  className="flex-1 py-2.5 rounded-xl bg-[hsl(224_50%_15%)] text-white text-sm font-semibold hover:bg-[hsl(224_50%_20%)] transition-colors disabled:opacity-40 flex items-center justify-center gap-2"
-                >
-                  <CreditCard size={14} /> Pay {bills.length} Bill{bills.length !== 1 ? "s" : ""} · {formatCurrency(totalAmount)}
-                </button>
+                Pay {formatCurrency(group.total)} &amp; Continue
+                <ArrowRight size={14} />
               </>
             ) : (
-              <button onClick={onClose}
-                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors">
-                Cancel
-              </button>
+              <>
+                <CreditCard size={14} />
+                Pay {formatCurrency(group.total)} · Finish
+              </>
             )}
+          </button>
+        </div>
+
+        {/* Grand total footer hint */}
+        {groups.length > 1 && (
+          <div className="px-6 pb-4 flex items-center justify-between text-xs text-slate-400 -mt-1 flex-shrink-0">
+            <span>
+              {groups.slice(0, currentStep).reduce((s, g) => s + g.total, 0) > 0
+                ? `${formatCurrency(groups.slice(0, currentStep).reduce((s, g) => s + g.total, 0))} settled so far`
+                : ""}
+            </span>
+            <span>Grand total: <span className="font-semibold text-slate-600">{formatCurrency(grandTotal)}</span></span>
           </div>
         )}
       </div>

@@ -51,6 +51,8 @@ interface Props {
   onMarkPaid?: (id: number) => void;
   onMarkPending?: (id: number) => void;
   onCreatePO?: () => void;
+  /** Override the overlay z-index (default "z-50"). Pass e.g. "z-[100]" when opened above another overlay. */
+  overlayZIndex?: string;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; bg: string; text: string; border: string }> = {
@@ -89,7 +91,7 @@ const escapeHtml = (value: string) =>
 
 const nl2br = (value: string) => escapeHtml(value).replace(/\r?\n/g, "<br/>");
 
-export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPending, onCreatePO }: Props) {
+export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPending, onCreatePO, overlayZIndex = "z-50" }: Props) {
   const printRef = useRef<HTMLDivElement>(null);
   const { data: customers } = useListCustomers();
   const [companyAddresses, setCompanyAddresses] = useState<CompanyAddress[]>([]);
@@ -358,7 +360,7 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
         </div>
       </div>
     )}
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div className={`fixed inset-0 ${overlayZIndex} flex items-center justify-center p-4`} onClick={onClose}>
       <div className="absolute inset-0 bg-slate-950" />
       <div
         className="relative z-10 w-full max-w-3xl max-h-[92vh] overflow-y-auto scrollbar-hide rounded-2xl border border-white/12"
@@ -523,16 +525,22 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
 
           {/* Notes */}
           {invoice.notes && (
-            <div className="bg-white/4 border border-white/8 rounded-xl p-4">
-              <p className="text-white/35 text-[10px] uppercase tracking-widest mb-1.5">Notes</p>
-              <p className="text-white/65 text-sm leading-relaxed">{invoice.notes}</p>
+            <div className="bg-blue-900/40 border border-blue-400/40 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                <p className="text-blue-300 text-[10px] font-bold uppercase tracking-widest">Customer Notes</p>
+              </div>
+              <p className="text-blue-100 text-sm leading-relaxed whitespace-pre-wrap">{invoice.notes}</p>
             </div>
           )}
 
           {invoice.internalNote && (
-            <div className="bg-amber-500/10 border border-amber-400/30 rounded-xl p-4">
-              <p className="text-amber-300 text-[10px] uppercase tracking-widest mb-1.5">Internal Notes (Software Only)</p>
-              <p className="text-amber-100/80 text-sm leading-relaxed whitespace-pre-wrap">{invoice.internalNote}</p>
+            <div className="bg-amber-400/15 border-2 border-amber-400/50 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                <p className="text-amber-300 text-[10px] font-bold uppercase tracking-widest">⚠ Internal Note — Staff Only</p>
+              </div>
+              <p className="text-amber-100 text-sm leading-relaxed whitespace-pre-wrap">{invoice.internalNote}</p>
             </div>
           )}
 
