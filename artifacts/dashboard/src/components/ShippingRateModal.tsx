@@ -8,7 +8,7 @@ import {
   X, Printer, Home, Users, MapPin, Car,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
-import { printShippingSlip } from "@/lib/print-slip";
+import { printShippingSlip, fetchCompanyAddresses, CompanyAddress } from "@/lib/print-slip";
 
 // BUSINESS is now loaded dynamically via useCompanyProfile() inside the component
 
@@ -149,12 +149,19 @@ export default function ShippingRateModal({ customerId, invoiceId, customerName,
   const [bookingResult, setBookingResult] = useState<BookingResult | null>(null);
   const [createdShipment, setCreatedShipment] = useState<any>(null);
   const [printingSlip, setPrintingSlip] = useState(false);
+  const [companyAddresses, setCompanyAddresses] = useState<CompanyAddress[]>([]);
+  const [addrPickerOpen, setAddrPickerOpen] = useState(false);
+  const [pendingPrintShip, setPendingPrintShip] = useState<any>(null);
 
   useEffect(() => {
     fetch(`/api/customers/${customerId}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data) setCustomer(data); });
   }, [customerId]);
+
+  useEffect(() => {
+    fetchCompanyAddresses().then(setCompanyAddresses);
+  }, []);
 
   const toAddress = {
     name: customer?.company || customer?.name || customerName,
@@ -195,34 +202,44 @@ export default function ShippingRateModal({ customerId, invoiceId, customerName,
 
   const selectedRate = ratesData?.rates.find(r => r.courierId === selectedCourierId) ?? null;
 
-  const handlePrintSlip = useCallback(async (ship: any) => {
+  const executePrintSlip = useCallback(async (ship: any, fromAddr?: CompanyAddress | null) => {
     setPrintingSlip(true);
     try {
-      await printShippingSlip(ship);
+      await printShippingSlip(ship, fromAddr);
     } finally {
       setPrintingSlip(false);
     }
   }, []);
 
-  const handlePrintPreviewLabel = useCallback(async () => {
-    setPrintingSlip(true);
-    try {
-      await printShippingSlip({
-        id: invoiceId ?? 0,
-        customerId,
-        invoiceId: invoiceId ?? null,
-        carrier: shippingType === "inhouse" ? "In-House Delivery"
-          : shippingType === "pickup" ? "Pickup"
-          : selectedRate?.courierName ?? "Carrier (TBD)",
-        trackingNumber: bookingResult?.trackingNumber ?? null,
-        notes: specialInstructions || simpleNote || null,
-        status: bookingResult ? "pending" : "preparing",
-        shippedAt: null,
-      });
-    } finally {
-      setPrintingSlip(false);
+  const handlePrintSlip = useCallback((ship: any) => {
+    if (companyAddresses.length >= 1) {
+      setPendingPrintShip(ship);
+      setAddrPickerOpen(true);
+    } else {
+      executePrintSlip(ship, null);
     }
-  }, [customerId, invoiceId, shippingType, selectedRate, bookingResult, specialInstructions, simpleNote]);
+  }, [companyAddresses, executePrintSlip]);
+
+  const handlePrintPreviewLabel = useCallback(() => {
+    const previewShip = {
+      id: invoiceId ?? 0,
+      customerId,
+      invoiceId: invoiceId ?? null,
+      carrier: shippingType === "inhouse" ? "In-House Delivery"
+        : shippingType === "pickup" ? "Pickup"
+        : selectedRate?.courierName ?? "Carrier (TBD)",
+      trackingNumber: bookingResult?.trackingNumber ?? null,
+      notes: specialInstructions || simpleNote || null,
+      status: bookingResult ? "pending" : "preparing",
+      shippedAt: null,
+    };
+    if (companyAddresses.length >= 1) {
+      setPendingPrintShip(previewShip);
+      setAddrPickerOpen(true);
+    } else {
+      executePrintSlip(previewShip, null);
+    }
+  }, [customerId, invoiceId, shippingType, selectedRate, bookingResult, specialInstructions, simpleNote, companyAddresses, executePrintSlip]);
 
   const handleCreate = async () => {
     if (!selectedRate) return;
@@ -352,6 +369,41 @@ export default function ShippingRateModal({ customerId, invoiceId, customerName,
   return (
     <div className="fixed inset-0 z-[60] flex justify-end">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+
+      {/* Address picker overlay */}
+      {addrPickerOpen && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center p-4" onClick={() => setAddrPickerOpen(false)}>
+          <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-4">
+              <MapPin size={16} className="text-slate-600" />
+              <h3 className="text-slate-900 font-bold text-base">Choose Print Address</h3>
+            </div>
+            <div className="flex flex-col gap-2">
+              {companyAddresses.map(a => (
+                <button key={a.id}
+                  onClick={() => {
+                    setAddrPickerOpen(false);
+                    if (pendingPrintShip) { executePrintSlip(pendingPrintShip, a); setPendingPrintShip(null); }
+                  }}
+                  className="text-left px-4 py-3 rounded-xl border border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                  <p className="text-sm font-semibold text-slate-800">{a.name}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{a.line1}{a.line2 ? `, ${a.line2}` : ""}<br/>{[a.city, a.state, a.zip].filter(Boolean).join(", ")}</p>
+                </button>
+              ))}
+              <button
+                onClick={() => {
+                  setAddrPickerOpen(false);
+                  if (pendingPrintShip) { executePrintSlip(pendingPrintShip, null); setPendingPrintShip(null); }
+                }}
+                className="text-left px-4 py-3 rounded-xl border border-dashed border-slate-200 hover:border-slate-400 hover:bg-slate-50 transition-colors">
+                <p className="text-sm font-semibold text-slate-500">Use profile default address</p>
+              </button>
+            </div>
+            <button onClick={() => setAddrPickerOpen(false)} className="mt-4 w-full text-center text-sm text-slate-400 hover:text-slate-600 transition-colors">Cancel</button>
+          </div>
+        </div>
+      )}
+
       <div
         className="relative z-10 w-full max-w-lg bg-white border-l border-slate-200 shadow-2xl flex flex-col h-full"
         onClick={e => e.stopPropagation()}

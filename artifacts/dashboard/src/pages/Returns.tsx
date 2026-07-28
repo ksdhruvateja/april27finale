@@ -944,7 +944,7 @@ export default function Returns() {
         )}
 
         {/* Table */}
-        <div className="glass-card flex-1 min-h-0 flex flex-col overflow-hidden">
+        <div className="glass-card flex-1 min-h-0 flex flex-col" style={{ minHeight: 0 }}>
           {isLoading ? (
             <div className="p-10 flex justify-center">
               <div className="animate-spin w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full" />
@@ -958,7 +958,7 @@ export default function Returns() {
               <p className="text-slate-400 text-xs">Create a new record using the button above</p>
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto min-h-0">
+            <div className="flex-1 overflow-y-auto min-h-0" style={{ minHeight: 0 }}>
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10">
                 <tr style={{ background: "rgba(239,246,255,0.97)" }}>

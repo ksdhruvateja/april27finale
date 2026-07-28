@@ -1,11 +1,12 @@
-import { useState, useMemo, ReactNode } from "react";
+import { useState, useMemo, ReactNode, useEffect } from "react";
 import { useCompanyProfile } from "@/lib/companyProfile";
+import { fetchCompanyAddresses, CompanyAddress } from "@/lib/print-slip";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useListAuctions } from "@/lib/auctions-api";
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
 import { useListPurchaseOrders, useDeletePurchaseOrder, useConvertPurchaseOrderToBill, useUpdatePurchaseOrder, getListPurchaseOrdersQueryKey, useListVendors, useListBills, useDeleteBill, getListBillsQueryKey, useListShipments } from "@workspace/api-client-react";
-import { Search, Plus, MoreHorizontal, Edit, Trash2, CreditCard, Truck, RefreshCw, BarChart2, ChevronDown, ChevronUp, CheckCircle2, Pencil, Tag, ChevronRight, Save, Calculator, X as XIcon, Percent, DollarSign, Package, Printer, AlertCircle, ArrowRight } from "lucide-react";
+import { Search, Plus, MoreHorizontal, Edit, Trash2, CreditCard, Truck, RefreshCw, BarChart2, ChevronDown, ChevronUp, CheckCircle2, Pencil, Tag, ChevronRight, Save, Calculator, X as XIcon, Percent, DollarSign, Package, Printer, AlertCircle, ArrowRight, MapPin } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from "recharts";
 import { useQueryClient } from "@tanstack/react-query";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -1357,10 +1358,24 @@ function ReceiveItemsModal({ po, onClose, onSaved }: ReceiveItemsModalProps) {
   const [qtyMap, setQtyMap] = useState<Record<number, string>>(() => {
     const init: Record<number, string> = {};
     for (const li of undeliveredLines) {
-      init[li.idx] = String(li.ordered - li.prevReceived);
+      init[li.idx] = "0";
     }
     return init;
   });
+
+  const receiveAll = () => {
+    const next: Record<number, string> = {};
+    for (const li of undeliveredLines) next[li.idx] = String(li.ordered - li.prevReceived);
+    setQtyMap(next);
+  };
+
+  const clearAll = () => {
+    const next: Record<number, string> = {};
+    for (const li of undeliveredLines) next[li.idx] = "0";
+    setQtyMap(next);
+  };
+
+  const receivingCount = undeliveredLines.filter(li => (parseFloat(qtyMap[li.idx] ?? "0") || 0) > 0).length;
 
   type Step = "receive" | "backorder-confirm" | "backorder-done";
   const [step, setStep]       = useState<Step>("receive");
@@ -1386,10 +1401,14 @@ function ReceiveItemsModal({ po, onClose, onSaved }: ReceiveItemsModalProps) {
     setSaving(true);
     setError(null);
     try {
-      const items = undeliveredLines.map(li => ({
-        lineIndex: li.idx,
-        qty: li.prevReceived + Math.min(parseFloat(qtyMap[li.idx] ?? "0") || 0, li.ordered - li.prevReceived),
-      }));
+      // Only send lines where user actually entered a qty > 0
+      const items = undeliveredLines
+        .filter(li => (parseFloat(qtyMap[li.idx] ?? "0") || 0) > 0)
+        .map(li => ({
+          lineIndex: li.idx,
+          qty: li.prevReceived + Math.min(parseFloat(qtyMap[li.idx] ?? "0") || 0, li.ordered - li.prevReceived),
+        }));
+      if (items.length === 0) { setError("Enter a quantity for at least one item."); setSaving(false); return; }
       const res = await fetch(`${baseUrl}/api/purchase-orders/${po.id}/receive`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1473,61 +1492,120 @@ function ReceiveItemsModal({ po, onClose, onSaved }: ReceiveItemsModalProps) {
             </div>
 
             <form onSubmit={handlePostReceipt}>
-              <div className="px-6 py-4 flex flex-col gap-3 max-h-[60vh] overflow-y-auto">
+              <div className="px-6 py-4 flex flex-col gap-3 max-h-[62vh] overflow-y-auto">
                 {undeliveredLines.length === 0 ? (
                   <p className="text-sm text-slate-500 text-center py-4">All items already fully received.</p>
                 ) : (
                   <>
-                    <p className="text-xs text-slate-500">
-                      Enter qty received. Any shortfall will be flagged as backordered and you can carry it forward to a new PO automatically.
-                    </p>
+                    {/* Quick-action bar */}
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-slate-500">
+                        Set qty for each item you received. Items left at <span className="font-semibold">0</span> will be skipped.
+                      </p>
+                      <div className="flex gap-2 flex-shrink-0 ml-3">
+                        <button type="button" onClick={receiveAll}
+                          className="px-3 py-1.5 rounded-lg bg-orange-600 text-white text-xs font-semibold hover:bg-orange-700 transition-colors">
+                          Receive All
+                        </button>
+                        <button type="button" onClick={clearAll}
+                          className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 text-xs font-medium hover:bg-slate-50 transition-colors">
+                          Clear
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Column headers */}
                     <div className="grid text-[10px] font-semibold uppercase tracking-wider text-slate-400 px-3"
-                      style={{ gridTemplateColumns: "1fr 72px 72px 90px" }}>
+                      style={{ gridTemplateColumns: "1fr 60px 60px 100px" }}>
                       <span>Item</span>
                       <span className="text-right">Ordered</span>
                       <span className="text-right">Prev Rcvd</span>
-                      <span className="text-right">Receiving</span>
+                      <span className="text-right">Receiving Now</span>
                     </div>
+
                     {undeliveredLines.map(li => {
                       const maxRemaining = li.ordered - li.prevReceived;
                       const enteredRaw = parseFloat(qtyMap[li.idx] ?? "0") || 0;
                       const entered = Math.min(enteredRaw, maxRemaining);
                       const bo = maxRemaining - entered;
+                      const isSkipped = entered === 0;
+                      const isFull = entered === maxRemaining;
                       return (
-                        <div key={li.idx} className="grid items-center gap-3 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2.5"
-                          style={{ gridTemplateColumns: "1fr 72px 72px 90px" }}>
-                          <div>
-                            <p className="text-sm text-slate-800 font-medium truncate">{li.description || `Item ${li.idx + 1}`}</p>
-                            {bo > 0 && (
-                              <span className="text-[10px] font-semibold text-orange-600 bg-orange-50 border border-orange-200 rounded px-1.5 py-0.5 mt-0.5 inline-block">
-                                {bo} will backorder
+                        <div key={li.idx}
+                          className={`grid items-center gap-2 rounded-xl px-3 py-2.5 border transition-colors ${
+                            isSkipped ? "bg-slate-50 border-slate-100" :
+                            isFull    ? "bg-emerald-50 border-emerald-200" :
+                                        "bg-orange-50 border-orange-200"
+                          }`}
+                          style={{ gridTemplateColumns: "1fr 60px 60px 100px" }}>
+                          <div className="min-w-0">
+                            <p className={`text-sm font-medium truncate ${isSkipped ? "text-slate-400" : "text-slate-800"}`}>
+                              {li.description || `Item ${li.idx + 1}`}
+                            </p>
+                            {isSkipped && <span className="text-[10px] font-semibold text-slate-400">Not receiving</span>}
+                            {!isSkipped && bo > 0 && (
+                              <span className="text-[10px] font-semibold text-orange-600 bg-orange-100 border border-orange-200 rounded px-1.5 py-0.5 mt-0.5 inline-block">
+                                {bo} backorder
                               </span>
+                            )}
+                            {isFull && (
+                              <span className="text-[10px] font-semibold text-emerald-600">✓ Fully received</span>
                             )}
                           </div>
                           <span className="text-sm text-slate-500 text-right">{li.ordered}</span>
-                          <span className="text-sm text-slate-400 text-right">{li.prevReceived}</span>
-                          <input
-                            type="number" min="0" max={maxRemaining} step="1"
-                            value={qtyMap[li.idx] ?? ""}
-                            onChange={e => setQtyMap(m => ({ ...m, [li.idx]: e.target.value }))}
-                            className="w-full text-right border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-semibold text-slate-800 focus:outline-none focus:border-orange-400 transition-colors"
-                          />
+                          <span className="text-sm text-slate-400 text-right">{li.prevReceived > 0 ? li.prevReceived : "—"}</span>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="number" min="0" max={maxRemaining} step="1"
+                              value={qtyMap[li.idx] ?? ""}
+                              onChange={e => setQtyMap(m => ({ ...m, [li.idx]: e.target.value }))}
+                              className={`w-full text-right border rounded-lg px-2 py-1.5 text-sm font-semibold focus:outline-none transition-colors ${
+                                isSkipped ? "border-slate-200 text-slate-400 bg-white focus:border-orange-400" :
+                                isFull    ? "border-emerald-300 text-emerald-700 bg-white focus:border-emerald-400" :
+                                            "border-orange-300 text-orange-700 bg-white focus:border-orange-400"
+                              }`}
+                            />
+                            {!isFull && (
+                              <button type="button" title={`Receive all ${maxRemaining}`}
+                                onClick={() => setQtyMap(m => ({ ...m, [li.idx]: String(maxRemaining) }))}
+                                className="flex-shrink-0 w-6 h-6 rounded-md bg-slate-100 hover:bg-orange-100 text-slate-400 hover:text-orange-600 flex items-center justify-center transition-colors text-[10px] font-bold">
+                                ↑
+                              </button>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
                   </>
                 )}
 
+                {/* Summary */}
+                {undeliveredLines.length > 0 && (
+                  <div className="flex items-center gap-3 rounded-xl bg-slate-50 border border-slate-200 px-4 py-2.5 text-xs text-slate-600">
+                    <span className="font-semibold text-emerald-700">{receivingCount} item{receivingCount !== 1 ? "s" : ""} receiving</span>
+                    <span className="text-slate-300">·</span>
+                    <span>{undeliveredLines.length - receivingCount} skipped</span>
+                    {backordered.filter(b => b.backorderQty > 0 && (parseFloat(qtyMap[b.idx] ?? "0") || 0) > 0).length > 0 && (
+                      <>
+                        <span className="text-slate-300">·</span>
+                        <span className="text-orange-600 font-semibold">
+                          {backordered.filter(b => (parseFloat(qtyMap[b.idx] ?? "0") || 0) > 0).length} partial → backorder
+                        </span>
+                      </>
+                    )}
+                  </div>
+                )}
+
                 {/* Backorder preview banner */}
-                {backordered.length > 0 && (
+                {backordered.filter(b => (parseFloat(qtyMap[b.idx] ?? "0") || 0) > 0).length > 0 && (
                   <div className="flex items-start gap-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
                     <AlertCircle size={15} className="text-orange-500 mt-0.5 flex-shrink-0" />
                     <div>
                       <p className="text-sm font-semibold text-orange-800">
-                        {backordered.length} line{backordered.length > 1 ? "s" : ""} will be backordered
+                        {backordered.filter(b => (parseFloat(qtyMap[b.idx] ?? "0") || 0) > 0).length} line{backordered.filter(b => (parseFloat(qtyMap[b.idx] ?? "0") || 0) > 0).length > 1 ? "s" : ""} will be partially backordered
                       </p>
                       <p className="text-xs text-orange-600 mt-0.5">
-                        After posting, you'll be asked whether to auto-create a backorder PO (<span className="font-mono font-bold">{poRef}-BO</span>).
+                        After posting, you can auto-create a backorder PO (<span className="font-mono font-bold">{poRef}-BO</span>) for the outstanding qty.
                       </p>
                     </div>
                   </div>
@@ -1542,11 +1620,11 @@ function ReceiveItemsModal({ po, onClose, onSaved }: ReceiveItemsModalProps) {
                   Cancel
                 </button>
                 {undeliveredLines.length > 0 && (
-                  <button type="submit" disabled={saving}
+                  <button type="submit" disabled={saving || receivingCount === 0}
                     className="flex-1 py-2.5 rounded-xl bg-orange-600 text-white text-sm font-semibold hover:bg-orange-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
                     {saving
                       ? <><div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Saving…</>
-                      : <><Package size={14} /> Post Receipt</>
+                      : <><Package size={14} /> Post Receipt{receivingCount > 0 ? ` (${receivingCount})` : ""}</>
                     }
                   </button>
                 )}
@@ -1645,6 +1723,16 @@ interface PrintPODialogProps {
 function PrintPODialog({ po, onClose }: PrintPODialogProps) {
   const profile = useCompanyProfile();
   const [includePromiseDate, setIncludePromiseDate] = useState(true);
+  const [companyAddresses, setCompanyAddresses] = useState<CompanyAddress[]>([]);
+  const [selectedAddr, setSelectedAddr] = useState<CompanyAddress | null>(null);
+  const [addrPickerOpen, setAddrPickerOpen] = useState(false);
+
+  useEffect(() => {
+    fetchCompanyAddresses().then(addrs => {
+      setCompanyAddresses(addrs);
+      if (addrs.length === 1) setSelectedAddr(addrs[0]);
+    });
+  }, []);
   const lineItems: Array<{ description: string; quantity: number; unitPrice: number; taxPercent: number; discountPercent: number }> =
     (po.lineItems ?? []).map((li: any) => ({
       ...li,
@@ -1670,7 +1758,7 @@ function PrintPODialog({ po, onClose }: PrintPODialogProps) {
     ? new Date(po.expectedDate).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
     : null;
 
-  const handlePrint = () => {
+  const doPrint = () => {
     const printContent = document.getElementById("po-print-document");
     if (!printContent) return;
     const win = window.open("", "_blank", "width=900,height=700");
@@ -1708,9 +1796,43 @@ function PrintPODialog({ po, onClose }: PrintPODialogProps) {
     setTimeout(() => { win.print(); }, 400);
   };
 
+  const handlePrint = () => {
+    if (companyAddresses.length >= 1 && !selectedAddr) {
+      setAddrPickerOpen(true);
+    } else {
+      doPrint();
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+
+      {/* Address picker overlay */}
+      {addrPickerOpen && (
+        <div className="relative z-20 w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center gap-2 mb-4">
+            <MapPin size={16} className="text-slate-600" />
+            <h3 className="text-slate-900 font-bold text-base">Choose Print Address</h3>
+          </div>
+          <div className="flex flex-col gap-2">
+            {companyAddresses.map(a => (
+              <button key={a.id} onClick={() => { setSelectedAddr(a); setAddrPickerOpen(false); setTimeout(doPrint, 50); }}
+                className="text-left px-4 py-3 rounded-xl border border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                <p className="text-sm font-semibold text-slate-800">{a.name}</p>
+                <p className="text-xs text-slate-500 mt-0.5">{a.line1}{a.line2 ? `, ${a.line2}` : ""}<br/>{[a.city, a.state, a.zip].filter(Boolean).join(", ")}</p>
+              </button>
+            ))}
+            <button onClick={() => { setSelectedAddr(null); setAddrPickerOpen(false); setTimeout(doPrint, 50); }}
+              className="text-left px-4 py-3 rounded-xl border border-dashed border-slate-200 hover:border-slate-400 hover:bg-slate-50 transition-colors">
+              <p className="text-sm font-semibold text-slate-500">Use profile default address</p>
+            </button>
+          </div>
+          <button onClick={() => setAddrPickerOpen(false)} className="mt-4 w-full text-center text-sm text-slate-400 hover:text-slate-600 transition-colors">Cancel</button>
+        </div>
+      )}
+
+      {!addrPickerOpen && (
       <div className="relative z-10 w-full max-w-sm bg-white rounded-2xl border border-slate-200 shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center gap-3 px-6 pt-6 pb-4 border-b border-slate-100">
           <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
@@ -1743,6 +1865,25 @@ function PrintPODialog({ po, onClose }: PrintPODialogProps) {
             </div>
           </div>
 
+          {/* Company address selector */}
+          {companyAddresses.length > 0 && (
+            <button onClick={() => setAddrPickerOpen(true)}
+              className="flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-colors text-left">
+              <MapPin size={14} className="text-slate-400 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                {selectedAddr ? (
+                  <>
+                    <p className="text-sm font-semibold text-slate-700">{selectedAddr.name}</p>
+                    <p className="text-xs text-slate-400 truncate">{selectedAddr.line1}, {[selectedAddr.city, selectedAddr.state, selectedAddr.zip].filter(Boolean).join(", ")}</p>
+                  </>
+                ) : (
+                  <p className="text-sm font-semibold text-slate-500">Choose print address…</p>
+                )}
+              </div>
+              <ChevronRight size={13} className="text-slate-300 flex-shrink-0" />
+            </button>
+          )}
+
           {/* Promise date toggle */}
           <label className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-colors ${includePromiseDate ? "bg-blue-50 border-blue-200" : "bg-white border-slate-200 hover:border-slate-300"}`}>
             <input type="checkbox" className="w-4 h-4 accent-blue-600" checked={includePromiseDate} onChange={e => setIncludePromiseDate(e.target.checked)} />
@@ -1762,12 +1903,25 @@ function PrintPODialog({ po, onClose }: PrintPODialogProps) {
           </button>
         </div>
       </div>
+      )}
 
       {/* Hidden print document — rendered off-screen */}
       <div id="po-print-document" style={{ display: "none" }}>
         <div className="header">
           <div className="company-block">
-            <h1>{profile.name}</h1>
+            <h1>{selectedAddr?.name ?? profile.name}</h1>
+            {selectedAddr ? (
+              <>
+                <p>{selectedAddr.line1}{selectedAddr.line2 ? `, ${selectedAddr.line2}` : ""}</p>
+                <p>{[selectedAddr.city, selectedAddr.state, selectedAddr.zip].filter(Boolean).join(", ")}</p>
+                {selectedAddr.phone && <p>{selectedAddr.phone}</p>}
+              </>
+            ) : (
+              <>
+                {profile.line1 && <p>{profile.line1}</p>}
+                {profile.line2 && <p>{profile.line2}</p>}
+              </>
+            )}
             <p>Purchase Order</p>
           </div>
           <div className="vendor-block">

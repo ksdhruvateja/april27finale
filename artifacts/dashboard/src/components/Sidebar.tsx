@@ -7,6 +7,7 @@ import { Link, useLocation } from "wouter";
 import { useEffect, useRef } from "react";
 import brandLogo from "@assets/image_1785249843852.png";
 import { useRole, UserRole, checkAccess } from "@/context/RoleContext";
+import { useCompanyProfile } from "@/lib/companyProfile";
 
 const navGroups = [
   {
@@ -80,6 +81,7 @@ export default function Sidebar({ embedded }: SidebarProps) {
   const [location] = useLocation();
   const { currentUser, setCurrentUser } = useRole();
   const role = (currentUser?.role ?? "viewer") as UserRole;
+  const companyProfile = useCompanyProfile();
   const navScrollRef = useRef<HTMLDivElement>(null);
   const SCROLL_KEY = "sidebar-nav-scroll-top";
 
@@ -109,10 +111,10 @@ export default function Sidebar({ embedded }: SidebarProps) {
         <img src={brandLogo} alt="Logo" className="w-9 h-9 object-contain flex-shrink-0" />
         <div className="min-w-0">
           <div className="text-[14px] font-black leading-none tracking-tight text-slate-900">
-            Forz Corp
+            {companyProfile.name}
           </div>
           <div className="text-[10px] mt-0.5 font-semibold tracking-wide uppercase text-slate-500">
-            Buisness Dasboard
+            Business Dashboard
           </div>
         </div>
       </div>

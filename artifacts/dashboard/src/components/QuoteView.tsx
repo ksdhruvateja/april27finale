@@ -279,10 +279,10 @@ export default function QuoteView({ quote, onClose, onDecline, onStatusChange }:
   }
 
   function handlePrint(_download = false) {
-    if (companyAddresses.length > 1) {
+    if (companyAddresses.length >= 1) {
       setAddrPickerOpen(true);
     } else {
-      doPrint(companyAddresses[0] ?? null, _download);
+      doPrint(null, _download);
     }
   }
 
@@ -304,6 +304,10 @@ export default function QuoteView({ quote, onClose, onDecline, onStatusChange }:
                 <p className="text-xs text-slate-500 mt-0.5">{a.line1}{a.line2 ? `, ${a.line2}` : ""}<br/>{[a.city,a.state,a.zip].filter(Boolean).join(", ")}</p>
               </button>
             ))}
+            <button onClick={() => { setAddrPickerOpen(false); doPrint(null); }}
+              className="text-left px-4 py-3 rounded-xl border border-dashed border-slate-200 hover:border-slate-400 hover:bg-slate-50 transition-colors">
+              <p className="text-sm font-semibold text-slate-500">Use profile default address</p>
+            </button>
           </div>
           <button onClick={() => setAddrPickerOpen(false)} className="mt-4 w-full text-center text-sm text-slate-400 hover:text-slate-600 transition-colors">Cancel</button>
         </div>

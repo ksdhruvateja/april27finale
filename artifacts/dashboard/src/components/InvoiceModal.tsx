@@ -7,7 +7,7 @@ import CustomerModal from "./CustomerModal";
 import CustomerCombobox from "./CustomerCombobox";
 import SalesLeadQuickModal from "./SalesLeadQuickModal";
 
-interface Props { onClose: () => void; initial?: any; }
+interface Props { onClose: () => void; initial?: any; onTakePayment?: (invoiceId: number, total: number) => void; }
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const dateStr = (v: string | null | undefined) => v ? new Date(v).toISOString().slice(0, 10) : "";
@@ -15,7 +15,7 @@ const initItems = (raw: any[]): LineItem[] =>
   raw?.length ? raw.map(i => ({ ...i, taxPercent: i.taxPercent ?? 0, discountPercent: i.discountPercent ?? 0 }))
     : [{ description: "", quantity: 1, unitPrice: 0 }];
 
-export default function InvoiceModal({ onClose, initial }: Props) {
+export default function InvoiceModal({ onClose, initial, onTakePayment }: Props) {
   const create = useCreateInvoice();
   const update = useUpdateInvoice();
   const { data: customers } = useListCustomers();
@@ -51,6 +51,7 @@ export default function InvoiceModal({ onClose, initial }: Props) {
   const [salesLeadOpen, setSalesLeadOpen] = useState(false);
   const [showSendPrompt, setShowSendPrompt] = useState(false);
   const [sendStatus, setSendStatus] = useState<"idle" | "sending-email" | "sending-text" | "sent-email" | "sent-text">("idle");
+  const [createdInvoice, setCreatedInvoice] = useState<{ id: number; total: number } | null>(null);
   const salesLeadRef = useRef<HTMLDivElement>(null);
 
   const taxRateMap = useMemo(() => {
@@ -166,11 +167,15 @@ export default function InvoiceModal({ onClose, initial }: Props) {
       createdAt: invoiceDate ? new Date(invoiceDate).toISOString() : undefined,
     } as any;
 
-    const onSuccess = () => {
+    const onSuccess = (data: any) => {
       queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
       queryClient.invalidateQueries({ queryKey: ["accounting-pnl"] });
       queryClient.invalidateQueries({ queryKey: ["accounting-ar"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      if (!isEditing) {
+        const inv = data?.data ?? data;
+        if (inv?.id) setCreatedInvoice({ id: Number(inv.id), total: Number(inv.total ?? 0) });
+      }
       setShowSendPrompt(true);
     };
 
@@ -222,6 +227,14 @@ export default function InvoiceModal({ onClose, initial }: Props) {
                   {sendStatus === "sending-text" ? "Sending…" : sendStatus === "sent-text" ? "✓ Text Sent" : `Send via Text · ${custPhone}`}
                 </button>
               ) : <span className="text-xs text-slate-400 italic self-center">No phone on file</span>}
+              {onTakePayment && createdInvoice && (
+                <button type="button"
+                  onClick={() => { onTakePayment(createdInvoice.id, createdInvoice.total); onClose(); }}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold border bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-700 transition-all">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+                  Take Payment
+                </button>
+              )}
               <button type="button" onClick={onClose} className="ml-auto px-4 py-2 rounded-xl border border-slate-200 text-slate-500 text-sm font-medium hover:bg-slate-50 transition-colors">
                 Close
               </button>

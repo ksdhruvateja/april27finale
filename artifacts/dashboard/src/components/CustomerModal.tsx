@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useCreateCustomer, useUpdateCustomer, getListCustomersQueryKey, useListSalesLeads, useListCustomers } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import Modal, { LightFormField, LightFormInput, LightFormSelect, LightFormTextarea, LightSubmitBar } from "./Modal";
+import SalesLeadQuickModal from "./SalesLeadQuickModal";
 import { Plus, X, ShieldCheck, ShieldOff, Phone, AlertCircle } from "lucide-react";
 import { US_STATES } from "@/lib/usStates";
 
@@ -150,6 +151,8 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
       ...(allCustomers as any[]).map((c: any) => c.name).filter(Boolean),
     ])).sort()
   , [salesLeads, allCustomers]);
+
+  const [showAddSalesLead, setShowAddSalesLead] = useState(false);
 
   const [form, setForm] = useState({
     name: customer?.name ?? "",

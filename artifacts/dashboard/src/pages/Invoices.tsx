@@ -1190,7 +1190,7 @@ export default function Invoices() {
         )}
       </div>
 
-      {showModal && <InvoiceModal onClose={() => setShowModal(false)} />}
+      {showModal && <InvoiceModal onClose={() => setShowModal(false)} onTakePayment={(id) => { setShowModal(false); setPayDialog({ id }); setSelectedMethod("bank_transfer"); setPayNote(""); setPayDate(new Date().toISOString().slice(0, 10)); setEarlyDiscount(""); }} />}
       {editInvoice && <InvoiceModal onClose={() => setEditInvoice(null)} initial={editInvoice} />}
       {viewInvoice && (
         <InvoiceView
