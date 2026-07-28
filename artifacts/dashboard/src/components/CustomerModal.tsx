@@ -144,7 +144,7 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
       });
   }, []);
 
-  const { data: salesLeads = [] } = useListSalesLeads();
+  const { data: salesLeads = [] } = useListSalesLeads({ query: { refetchOnMount: true, staleTime: 0 } });
   const { data: allCustomers = [] } = useListCustomers();
 
   // Build autocomplete list from salesRep values already saved on existing customers
@@ -212,15 +212,27 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
 
+  // Deduplicate leads by full name (keep highest id = most recent)
+  const uniqueLeads = useMemo(() => {
+    const seen = new Map<string, any>();
+    for (const l of (salesLeads as any[])) {
+      const key = `${l.firstName ?? ""} ${l.lastName ?? ""}`.trim().toLowerCase();
+      if (!seen.has(key) || l.id > seen.get(key).id) seen.set(key, l);
+    }
+    return Array.from(seen.values()).sort((a, b) =>
+      `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)
+    );
+  }, [salesLeads]);
+
   // Must be after form state ─────────────────────────────────────────────────
   const nameSuggestions = useMemo(() => {
     const q = form.name.trim().toLowerCase();
     if (!q) return [];
-    return (salesLeads as any[]).filter((l: any) => {
+    return uniqueLeads.filter((l: any) => {
       const full = `${l.firstName ?? ""} ${l.lastName ?? ""}`.toLowerCase();
       return full.includes(q);
-    }).slice(0, 6);
-  }, [salesLeads, form.name]);
+    }).slice(0, 8);
+  }, [uniqueLeads, form.name]);
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const name = e.target.value;
@@ -240,8 +252,7 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
   };
 
   /** Inline add-lead form submission */
-  const handleAddLeadSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAddLeadSubmit = async () => {
     setAddLeadError(null);
     const firstName = addLeadForm.firstName.trim();
     const lastName  = addLeadForm.lastName.trim();
@@ -415,7 +426,7 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
                   Sales Leads
                 </span>
                 <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${showLeadsPanel ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"}`}>
-                  {(salesLeads as any[]).length}
+                  {uniqueLeads.length}
                 </span>
               </div>
               {showLeadsPanel
@@ -441,7 +452,7 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
 
                 {/* Lead list */}
                 <div className="max-h-44 overflow-y-auto divide-y divide-slate-50">
-                  {(salesLeads as any[])
+                  {uniqueLeads
                     .filter((l: any) => {
                       const q = leadsSearch.toLowerCase();
                       const full = `${l.firstName ?? ""} ${l.lastName ?? ""}`.toLowerCase();
@@ -489,7 +500,7 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
                     </button>
                   </div>
                 ) : (
-                  <form onSubmit={handleAddLeadSubmit} className="px-4 py-3 border-t border-slate-100 flex flex-col gap-3"
+                  <div className="px-4 py-3 border-t border-slate-100 flex flex-col gap-3"
                     style={{ background: "hsl(224 50% 97%)" }}>
                     <div className="flex items-center justify-between mb-0.5">
                       <p className="text-xs font-semibold text-[hsl(224_50%_25%)] flex items-center gap-1.5">
@@ -538,13 +549,16 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
                         className="flex-1 py-1.5 rounded-lg border border-slate-200 text-slate-600 text-xs font-medium hover:bg-white transition-colors">
                         Cancel
                       </button>
-                      <button type="submit" disabled={createLead.isPending}
+                      <button
+                        type="button"
+                        disabled={createLead.isPending}
+                        onClick={() => handleAddLeadSubmit()}
                         className="flex-1 py-1.5 rounded-lg text-white text-xs font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
                         style={{ background: "hsl(224 50% 15%)" }}>
                         {createLead.isPending ? "Saving…" : <><UserPlus size={12} /> Save & Select</>}
                       </button>
                     </div>
-                  </form>
+                  </div>
                 )}
               </div>
             )}
