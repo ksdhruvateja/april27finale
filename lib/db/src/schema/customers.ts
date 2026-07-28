@@ -17,6 +17,7 @@ export const customersTable = pgTable("customers", {
   country: text("country"),
   billingAddress: jsonb("billing_address"),
   shippingAddress: jsonb("shipping_address"),
+  companyAddresses: jsonb("company_addresses").default([]),
   taxExempt: boolean("tax_exempt").notNull().default(false),
   accountType: text("account_type"),
   creditLimit: numeric("credit_limit", { precision: 12, scale: 2 }),

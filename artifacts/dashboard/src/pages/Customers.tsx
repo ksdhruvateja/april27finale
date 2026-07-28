@@ -107,9 +107,27 @@ function CustomerViewModal({ customer, onClose, creditAvailable }: { customer: C
               {customer.taxExempt ? "Tax Exempt" : "Taxable"}
             </div>
           )}
+          {/* Company Addresses */}
+          {Array.isArray((customer as any).companyAddresses) && (customer as any).companyAddresses.length > 0 && (
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1"><MapPin size={11} /> Company Addresses</p>
+              <div className="flex flex-col gap-2">
+                {(customer as any).companyAddresses.map((addr: any) => (
+                  <div key={addr.id} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                    <span className="inline-block text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 border border-indigo-200 rounded px-2 py-0.5 mb-1.5">
+                      {addr.type}
+                    </span>
+                    <p className="text-sm text-slate-700">
+                      {[addr.address, [addr.city, addr.state, addr.zipCode].filter(Boolean).join(", ")].filter(Boolean).join(" · ")}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {customer.salesRep && (
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Sales Rep</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Sales Lead</p>
               <p className="text-sm text-slate-700">{customer.salesRep}</p>
             </div>
           )}

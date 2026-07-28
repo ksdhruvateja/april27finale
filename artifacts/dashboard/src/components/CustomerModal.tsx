@@ -18,6 +18,15 @@ const DEFAULT_NET_TERMS: NetTerm[] = [
 interface AddressObj { address?: string; city?: string; state?: string; zipCode?: string; country?: string; }
 interface PhoneEntry { label: string; number: string; }
 interface EmailEntry { label: string; email: string; }
+interface CompanyAddress {
+  id: string;
+  type: string;       // "Warehouse" | "Office" | custom
+  address: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  country?: string;
+}
 
 interface CustomerData {
   id: number;
@@ -34,6 +43,7 @@ interface CustomerData {
   country?: string | null;
   billingAddress?: AddressObj | null;
   shippingAddress?: AddressObj | null;
+  companyAddresses?: CompanyAddress[] | null;
   taxExempt?: boolean;
   accountType?: string | null;
   creditLimit?: number | string | null;
@@ -43,6 +53,9 @@ interface CustomerData {
   taxNumber?: string | null;
   notes?: string | null;
 }
+
+const PRESET_ADDRESS_TYPES = ["Warehouse", "Office", "Showroom", "Distribution Center", "Retail"];
+const nanoid = () => Math.random().toString(36).slice(2, 10);
 
 interface Props {
   onClose: () => void;
@@ -129,13 +142,7 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
   }, []);
 
   const { data: salesLeads = [] } = useListSalesLeads();
-  const { data: customers = [] } = useListCustomers();
-  const allRepNames = Array.from(
-    new Set([
-      ...salesLeads.map((lead: any) => `${lead.firstName} ${lead.lastName}`).filter(Boolean),
-      ...customers.map((c: any) => c.name).filter(Boolean)
-    ])
-  ).sort();
+  useListCustomers(); // keep cache warm
 
   const [form, setForm] = useState({
     name: customer?.name ?? "",
@@ -152,6 +159,10 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
 
   const [phones, setPhones] = useState<PhoneEntry[]>(parsePhones(customer));
   const [emails, setEmails] = useState<EmailEntry[]>(parseEmails(customer));
+
+  const [companyAddresses, setCompanyAddresses] = useState<CompanyAddress[]>(
+    (customer?.companyAddresses as CompanyAddress[]) ?? []
+  );
 
   const [billingAddress, setBillingAddress] = useState<AddressObj>(
     (customer?.billingAddress as AddressObj) ?? { address: customer?.address ?? "", city: customer?.city ?? "", state: customer?.state ?? "", zipCode: customer?.zipCode ?? "", country: "US" }
@@ -209,6 +220,7 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
       shippingAddress: sameAsBilling
         ? (Object.values(billingAddress).some(Boolean) ? billingAddress : null)
         : (Object.values(shippingAddress).some(Boolean) ? shippingAddress : null),
+      companyAddresses: companyAddresses.filter(a => a.address.trim()),
       address: billingAddress.address || null,
       city: billingAddress.city || null,
       state: billingAddress.state || null,
@@ -237,6 +249,7 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
   const isPending = isEdit ? update.isPending : create.isPending;
 
   return (
+    <>
     <Modal
       title={isEdit ? "Edit Customer" : "Add Customer"}
       subtitle={isEdit ? "Update customer information" : "Create a new customer record"}
@@ -414,6 +427,9 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
             )}
           </div>
 
+          {/* Company Addresses */}
+          <CompanyAddressesEditor addresses={companyAddresses} onChange={setCompanyAddresses} />
+
           {/* Other */}
           <div className="flex gap-3">
             <div className="flex-1">
@@ -434,5 +450,208 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
         </div>
       </form>
     </Modal>
+    {showAddSalesLead && (
+      <SalesLeadQuickModal
+        onClose={() => setShowAddSalesLead(false)}
+        onCreated={(fullName) => setForm(f => ({ ...f, salesRep: fullName }))}
+      />
+    )}
+    </>
+  );
+}
+
+// ─── CompanyAddressesEditor ────────────────────────────────────────────────────
+
+const TYPE_COLORS: Record<string, string> = {
+  Warehouse: "bg-amber-50 border-amber-200 text-amber-700",
+  Office: "bg-blue-50 border-blue-200 text-blue-700",
+  Showroom: "bg-violet-50 border-violet-200 text-violet-700",
+  "Distribution Center": "bg-orange-50 border-orange-200 text-orange-700",
+  "Retail": "bg-emerald-50 border-emerald-200 text-emerald-700",
+};
+const typeColor = (t: string) => TYPE_COLORS[t] ?? "bg-indigo-50 border-indigo-200 text-indigo-700";
+
+function CompanyAddressesEditor({
+  addresses,
+  onChange,
+}: {
+  addresses: CompanyAddress[];
+  onChange: (a: CompanyAddress[]) => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const blank = (): CompanyAddress => ({
+    id: nanoid(),
+    type: "Warehouse",
+    address: "",
+    city: "",
+    state: "",
+    zipCode: "",
+    country: "US",
+  });
+
+  const [draft, setDraft] = useState<CompanyAddress>(blank);
+  const [customType, setCustomType] = useState("");
+  const [typeMode, setTypeMode] = useState<"preset" | "custom">("preset");
+
+  const startAdd = () => {
+    setDraft(blank());
+    setCustomType("");
+    setTypeMode("preset");
+    setEditingId(null);
+    setAdding(true);
+  };
+
+  const startEdit = (addr: CompanyAddress) => {
+    const isPreset = PRESET_ADDRESS_TYPES.includes(addr.type);
+    setDraft({ ...addr });
+    setCustomType(isPreset ? "" : addr.type);
+    setTypeMode(isPreset ? "preset" : "custom");
+    setEditingId(addr.id);
+    setAdding(true);
+  };
+
+  const cancel = () => { setAdding(false); setEditingId(null); };
+
+  const save = () => {
+    const finalType = typeMode === "custom" ? (customType.trim() || "Custom") : draft.type;
+    const entry: CompanyAddress = { ...draft, type: finalType };
+    if (!entry.address.trim()) return;
+    if (editingId) {
+      onChange(addresses.map(a => a.id === editingId ? entry : a));
+    } else {
+      onChange([...addresses, entry]);
+    }
+    setAdding(false);
+    setEditingId(null);
+  };
+
+  const remove = (id: string) => onChange(addresses.filter(a => a.id !== id));
+
+  const setF = (k: keyof CompanyAddress) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    setDraft(d => ({ ...d, [k]: e.target.value }));
+
+  return (
+    <div className="flex flex-col gap-2">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          Company Addresses
+        </p>
+        {!adding && (
+          <button type="button" onClick={startAdd}
+            className="flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 border border-indigo-200 rounded-lg px-2.5 py-1 transition-colors hover:bg-indigo-100">
+            <Plus size={11} /> Add Address
+          </button>
+        )}
+      </div>
+
+      {/* Existing address cards */}
+      {addresses.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {addresses.map(addr => (
+            <div key={addr.id} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 flex items-start gap-3">
+              <div className="flex-1 min-w-0">
+                <span className={`inline-block text-[10px] font-bold uppercase tracking-wider rounded px-2 py-0.5 border mb-1.5 ${typeColor(addr.type)}`}>
+                  {addr.type}
+                </span>
+                <p className="text-sm text-slate-700 truncate">{addr.address}</p>
+                {(addr.city || addr.state || addr.zipCode) && (
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {[addr.city, addr.state, addr.zipCode].filter(Boolean).join(", ")}
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
+                <button type="button" onClick={() => startEdit(addr)}
+                  className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors text-xs">✏️</button>
+                <button type="button" onClick={() => remove(addr.id)}
+                  className="p-1 rounded hover:bg-red-50 text-slate-300 hover:text-red-500 transition-colors">
+                  <X size={13} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add / Edit form */}
+      {adding && (
+        <div className="rounded-xl border-2 border-indigo-200 bg-indigo-50/40 p-4 flex flex-col gap-3">
+          <p className="text-xs font-bold text-indigo-700">{editingId ? "Edit Address" : "New Address"}</p>
+
+          {/* Type selector */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Address Type</label>
+            <div className="flex flex-wrap gap-1.5">
+              {PRESET_ADDRESS_TYPES.map(t => (
+                <button key={t} type="button"
+                  onClick={() => { setTypeMode("preset"); setDraft(d => ({ ...d, type: t })); }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                    typeMode === "preset" && draft.type === t
+                      ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                      : "bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600"
+                  }`}>
+                  {t}
+                </button>
+              ))}
+              <button type="button"
+                onClick={() => setTypeMode("custom")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                  typeMode === "custom"
+                    ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                    : "bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600"
+                }`}>
+                Custom…
+              </button>
+            </div>
+            {typeMode === "custom" && (
+              <LightFormInput
+                autoFocus
+                placeholder="e.g. Fulfillment Hub, HQ, R&D Lab…"
+                value={customType}
+                onChange={e => setCustomType(e.target.value)}
+              />
+            )}
+          </div>
+
+          {/* Address fields */}
+          <LightFormField label="Street Address" required>
+            <LightFormInput placeholder="123 Main St" value={draft.address} onChange={setF("address")} required />
+          </LightFormField>
+          <div className="grid grid-cols-3 gap-3">
+            <LightFormField label="City">
+              <LightFormInput placeholder="New York" value={draft.city ?? ""} onChange={setF("city")} />
+            </LightFormField>
+            <LightFormField label="State">
+              <select
+                value={draft.state ?? ""}
+                onChange={setF("state")}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-blue-400 transition-colors"
+              >
+                <option value="">Select…</option>
+                {US_STATES.map(s => <option key={s.code} value={s.code}>{s.code} – {s.name}</option>)}
+              </select>
+            </LightFormField>
+            <LightFormField label="ZIP">
+              <LightFormInput placeholder="10001" value={draft.zipCode ?? ""} onChange={setF("zipCode")} />
+            </LightFormField>
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={save}
+              className="flex-1 py-2 rounded-lg bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700 transition-colors">
+              {editingId ? "Save Changes" : "Add Address"}
+            </button>
+            <button type="button" onClick={cancel}
+              className="px-4 py-2 rounded-lg border border-slate-200 text-slate-500 text-xs font-medium hover:bg-slate-50 transition-colors">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
