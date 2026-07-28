@@ -162,7 +162,7 @@ function CustomerViewModal({ customer, onClose, creditAvailable, creditRecords }
           )}
           {customer.salesRep && (
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Sales Rep</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Sales Lead</p>
               <p className="text-sm text-slate-700">{customer.salesRep}</p>
             </div>
           )}

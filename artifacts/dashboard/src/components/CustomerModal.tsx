@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useCreateCustomer, useUpdateCustomer, getListCustomersQueryKey, useListSalesLeads, useListCustomers } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import Modal, { LightFormField, LightFormInput, LightFormSelect, LightFormTextarea, LightSubmitBar } from "./Modal";
 import { Plus, X, ShieldCheck, ShieldOff, Phone, AlertCircle } from "lucide-react";
+import SalesLeadQuickModal from "./SalesLeadQuickModal";
 import { US_STATES } from "@/lib/usStates";
 
 interface NetTerm { id: string; label: string; days?: number; }
@@ -130,12 +131,9 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
 
   const { data: salesLeads = [] } = useListSalesLeads();
   const { data: customers = [] } = useListCustomers();
-  const allRepNames = Array.from(
-    new Set([
-      ...salesLeads.map((lead: any) => `${lead.firstName} ${lead.lastName}`).filter(Boolean),
-      ...customers.map((c: any) => c.name).filter(Boolean)
-    ])
-  ).sort();
+  const [showAddSalesLead, setShowAddSalesLead] = useState(false);
+  const [salesLeadOpen, setSalesLeadOpen] = useState(false);
+  const salesLeadRef = useRef<HTMLDivElement>(null);
 
   const [form, setForm] = useState({
     name: customer?.name ?? "",
@@ -237,6 +235,7 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
   const isPending = isEdit ? update.isPending : create.isPending;
 
   return (
+    <>
     <Modal
       title={isEdit ? "Edit Customer" : "Add Customer"}
       subtitle={isEdit ? "Update customer information" : "Create a new customer record"}
@@ -348,18 +347,65 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
             <LightFormField label="EIN Number">
               <LightFormInput placeholder="e.g. 12-3456789" value={form.taxNumber} onChange={set("taxNumber")} />
             </LightFormField>
-            <LightFormField label="Sales Rep">
-              <div className="relative">
-                <LightFormInput
-                  type="text"
-                  list="salesRepList"
-                  placeholder="Type name or select..."
-                  value={form.salesRep}
-                  onChange={set("salesRep")}
-                />
-                <datalist id="salesRepList">
-                  {allRepNames.map(rep => <option key={rep} value={rep} />)}
-                </datalist>
+            <LightFormField label="Sales Lead">
+              <div ref={salesLeadRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setSalesLeadOpen(o => !o)}
+                  onBlur={e => { if (!salesLeadRef.current?.contains(e.relatedTarget as Node)) setSalesLeadOpen(false); }}
+                  className="w-full flex items-center justify-between border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-blue-400 transition-colors text-left"
+                >
+                  <span className={form.salesRep ? "text-slate-800 font-medium" : "text-slate-400"}>
+                    {form.salesRep || "— None —"}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    {form.salesRep && (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onMouseDown={e => { e.stopPropagation(); setForm(f => ({ ...f, salesRep: "" })); setSalesLeadOpen(false); }}
+                        className="text-slate-300 hover:text-slate-500 text-xs leading-none px-1 cursor-pointer"
+                      >✕</span>
+                    )}
+                    <svg className={`w-3.5 h-3.5 text-slate-400 transition-transform ${salesLeadOpen ? "rotate-180" : ""}`} viewBox="0 0 16 16" fill="currentColor"><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>
+                  </div>
+                </button>
+                {salesLeadOpen && (
+                  <div className="absolute left-0 right-0 top-full mt-1 z-[200] bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden">
+                    <div className="max-h-52 overflow-y-auto">
+                      <button type="button" onMouseDown={() => { setForm(f => ({ ...f, salesRep: "" })); setSalesLeadOpen(false); }}
+                        className="w-full text-left px-3 py-2.5 text-sm text-slate-400 hover:bg-slate-50 border-b border-slate-100 transition-colors">
+                        — None —
+                      </button>
+                      {(salesLeads as any[]).length === 0 && (
+                        <p className="px-3 py-3 text-xs text-slate-400 text-center">No sales leads yet</p>
+                      )}
+                      {(salesLeads as any[]).map((lead: any) => {
+                        const fullName = `${lead.firstName} ${lead.lastName}`.trim();
+                        const isSelected = form.salesRep === fullName;
+                        return (
+                          <button key={lead.id} type="button"
+                            onMouseDown={() => { setForm(f => ({ ...f, salesRep: fullName })); setSalesLeadOpen(false); }}
+                            className={`w-full text-left px-3 py-2.5 flex items-center gap-2 text-sm hover:bg-indigo-50 border-b border-slate-50 last:border-0 transition-colors ${isSelected ? "bg-indigo-50 font-semibold text-indigo-700" : "text-slate-800"}`}>
+                            <span className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-500 flex-shrink-0">
+                              {(lead.firstName?.[0] ?? "?").toUpperCase()}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <p className="truncate">{fullName}</p>
+                              {lead.email && <p className="text-[10px] text-slate-400 truncate">{lead.email}</p>}
+                            </div>
+                            {isSelected && <span className="text-indigo-500 text-xs">✓</span>}
+                          </button>
+                        );
+                      })}
+                      <button type="button"
+                        onMouseDown={() => { setSalesLeadOpen(false); setShowAddSalesLead(true); }}
+                        className="w-full text-left px-3 py-2.5 text-sm text-indigo-600 font-semibold hover:bg-indigo-50 border-t border-slate-100 transition-colors flex items-center gap-2">
+                        <Plus size={13} /> Add New Sales Lead
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </LightFormField>
           </div>
@@ -434,5 +480,12 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
         </div>
       </form>
     </Modal>
+    {showAddSalesLead && (
+      <SalesLeadQuickModal
+        onClose={() => setShowAddSalesLead(false)}
+        onCreated={(fullName) => setForm(f => ({ ...f, salesRep: fullName }))}
+      />
+    )}
+    </>
   );
 }
