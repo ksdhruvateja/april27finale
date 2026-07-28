@@ -155,6 +155,13 @@
   .scrollbar-hide::-webkit-scrollbar { display: none; }
   .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
+  /* Visible thin scrollbar */
+  .scrollbar-thin { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+  .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; border-radius: 999px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
   /* Pill / chip */
   .chip {
     display: inline-flex; align-items: center; gap: 6px;

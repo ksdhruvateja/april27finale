@@ -42,6 +42,8 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState(0);
   const [receivablesFilter, setReceivablesFilter] = useState(0);
   const [payablesFilter, setPayablesFilter] = useState(0);
+  const [overduesType, setOverduesType] = useState<"all" | "invoices" | "bills">("all");
+  const [overduesAge, setOverduesAge] = useState<"any" | "1-30" | "31-60" | "60+">("any");
   const [, setLocation] = useLocation();
 
   const debouncedSearch = useDebounce(search, 250);
@@ -274,7 +276,7 @@ export default function Dashboard() {
         onSearchChange={setSearch}
       />
 
-      <div className={`flex-1 scrollbar-hide px-4 md:px-5 ${isOverview ? "pb-4 pt-4 gap-3 overflow-hidden" : "pb-8 pt-5 gap-5 overflow-y-auto"} flex flex-col bg-[hsl(220_25%_97%)] ${activeTab === 3 ? "!overflow-y-auto !pb-8 !pt-5 !gap-4" : ""}`}>
+      <div className={`flex-1 scrollbar-thin px-4 md:px-5 ${isOverview ? "pb-4 pt-4 gap-3 overflow-hidden" : "pb-8 pt-5 gap-5 overflow-y-auto"} flex flex-col bg-[hsl(220_25%_97%)] ${activeTab === 3 ? "!overflow-y-auto !pb-8 !pt-5 !gap-4" : ""}`}>
         {searchResults ? (
           <div className="flex flex-col gap-4">
             {journeys.length > 0 && journeys.map((j: any) => (
@@ -748,20 +750,66 @@ export default function Dashboard() {
 
             {activeTab === 3 && (() => {
               const now = new Date();
-              const overdueInvoices = (invoices ?? []).filter((inv: any) => {
+              const ageDayFilter = (dueDate: string | null | undefined) => {
+                if (overduesAge === "any") return true;
+                if (!dueDate) return overduesAge === "60+";
+                const daysOverdue = Math.floor((now.getTime() - new Date(dueDate).getTime()) / 86400000);
+                if (overduesAge === "1-30")  return daysOverdue >= 1  && daysOverdue <= 30;
+                if (overduesAge === "31-60") return daysOverdue >= 31 && daysOverdue <= 60;
+                if (overduesAge === "60+")   return daysOverdue > 60;
+                return true;
+              };
+              const allOverdueInvoices = (invoices ?? []).filter((inv: any) => {
                 if (inv.status === "paid" || inv.status === "cancelled") return false;
                 if (inv.status === "overdue") return true;
                 return inv.dueDate && new Date(inv.dueDate) < now;
               });
-              const overdueBills = (bills ?? []).filter((bill: any) => {
+              const allOverdueBills = (bills ?? []).filter((bill: any) => {
                 if (bill.status === "paid") return false;
                 if (bill.status === "overdue") return true;
                 return bill.dueDate && new Date(bill.dueDate) < now;
               });
+              const overdueInvoices = (overduesType === "bills" ? [] : allOverdueInvoices).filter((inv: any) => ageDayFilter(inv.dueDate));
+              const overdueBills    = (overduesType === "invoices" ? [] : allOverdueBills).filter((bill: any) => ageDayFilter(bill.dueDate));
               const totalArOverdue = overdueInvoices.reduce((s: number, inv: any) => s + Number(inv.total ?? 0), 0);
               const totalApOverdue = overdueBills.reduce((s: number, bill: any) => s + Number(bill.amount ?? bill.total ?? 0), 0);
               return (
                 <div className="flex flex-col gap-4">
+                  {/* Filter bar */}
+                  <div className="glass-card px-4 py-3 flex flex-wrap items-center gap-3">
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Filter</span>
+                    <div className="flex items-center gap-1.5">
+                      {(["all", "invoices", "bills"] as const).map(t => (
+                        <button
+                          key={t}
+                          onClick={() => setOverduesType(t)}
+                          className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${overduesType === t ? "bg-slate-800 text-white border-slate-800" : "bg-white text-slate-500 border-slate-200 hover:border-slate-400"}`}
+                        >
+                          {t === "all" ? "All types" : t === "invoices" ? "Invoices only" : "Bills only"}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="w-px h-4 bg-slate-200 hidden sm:block" />
+                    <div className="flex items-center gap-1.5">
+                      {([["any","Any age"],["1-30","1–30 days"],["31-60","31–60 days"],["60+","60+ days"]] as const).map(([v, label]) => (
+                        <button
+                          key={v}
+                          onClick={() => setOverduesAge(v)}
+                          className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${overduesAge === v ? "bg-rose-600 text-white border-rose-600" : "bg-white text-slate-500 border-slate-200 hover:border-rose-300"}`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {(overduesType !== "all" || overduesAge !== "any") && (
+                      <button
+                        onClick={() => { setOverduesType("all"); setOverduesAge("any"); }}
+                        className="ml-auto flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600"
+                      >
+                        <X size={11} /> Clear
+                      </button>
+                    )}
+                  </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="rounded-xl bg-rose-50 border border-rose-200 p-4 flex flex-col gap-1">
                       <p className="text-xs text-rose-600 font-semibold uppercase tracking-wide">Overdue Receivables (AR)</p>

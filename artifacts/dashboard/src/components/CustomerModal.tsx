@@ -5,14 +5,14 @@ import Modal, { LightFormField, LightFormInput, LightFormSelect, LightFormTextar
 import { Plus, X, ShieldCheck, ShieldOff, Phone, AlertCircle } from "lucide-react";
 import { US_STATES } from "@/lib/usStates";
 
-interface NetTerm { id: string; label: string; }
+interface NetTerm { id: string; label: string; days?: number; }
 const DEFAULT_NET_TERMS: NetTerm[] = [
-  { id: "net30",        label: "Net 30" },
-  { id: "net60",        label: "Net 60" },
-  { id: "net90",        label: "Net 90" },
-  { id: "cash",         label: "Cash" },
-  { id: "cash_advance", label: "Cash Advance" },
-  { id: "cod",          label: "COD" },
+  { id: "net30",        label: "Net 30",       days: 30 },
+  { id: "net60",        label: "Net 60",       days: 60 },
+  { id: "net90",        label: "Net 90",       days: 90 },
+  { id: "cash",         label: "Cash",         days: 0  },
+  { id: "cash_advance", label: "Cash Advance", days: 0  },
+  { id: "cod",          label: "COD",          days: 0  },
 ];
 
 interface AddressObj { address?: string; city?: string; state?: string; zipCode?: string; country?: string; }

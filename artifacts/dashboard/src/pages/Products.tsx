@@ -866,14 +866,16 @@ export default function Products() {
 
   const filtered = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase();
-    if (!q) return products ?? [];
-    return (products ?? []).filter((p: any) => {
-      const inv = inventoryMap[p.id];
-      return [
-        p.name, p.sku, p.description, p.category,
-        String(p.id ?? ""), String(inv?.quantity ?? ""),
-      ].some(v => String(v ?? "").toLowerCase().includes(q));
-    });
+    const list = q
+      ? (products ?? []).filter((p: any) => {
+          const inv = inventoryMap[p.id];
+          return [
+            p.name, p.sku, p.description, p.category,
+            String(p.id ?? ""), String(inv?.quantity ?? ""),
+          ].some(v => String(v ?? "").toLowerCase().includes(q));
+        })
+      : (products ?? []);
+    return [...list].sort((a: any, b: any) => (a.name ?? "").localeCompare(b.name ?? ""));
   }, [products, inventoryMap, debouncedSearch]);
 
   const handleDelete = (id: number) => {
@@ -1043,7 +1045,7 @@ export default function Products() {
   return (
     <Layout>
       <Header title="Products & Inventory" subtitle={`${products?.length ?? 0} products`} />
-      <div className="flex-1 overflow-y-auto scrollbar-hide px-5 py-4 flex flex-col gap-4 bg-[hsl(220_25%_97%)]">
+      <div className="flex-1 overflow-y-auto scrollbar-thin px-5 py-4 flex flex-col gap-4 bg-[hsl(220_25%_97%)]">
         <div className="flex justify-between items-center gap-3">
           <div className="relative flex-1 max-w-md flex items-center gap-2">
             <div className="relative flex-1">
