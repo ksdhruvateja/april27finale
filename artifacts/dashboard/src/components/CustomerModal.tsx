@@ -145,12 +145,12 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
   const { data: salesLeads = [] } = useListSalesLeads();
   const { data: allCustomers = [] } = useListCustomers();
 
+  // Build autocomplete list from salesRep values already saved on existing customers
   const allRepNames = useMemo(() =>
-    Array.from(new Set([
-      ...(salesLeads as any[]).map((l: any) => [l.firstName, l.lastName].filter(Boolean).join(" ")).filter(Boolean),
-      ...(allCustomers as any[]).map((c: any) => c.name).filter(Boolean),
-    ])).sort()
-  , [salesLeads, allCustomers]);
+    Array.from(new Set(
+      (allCustomers as any[]).map((c: any) => c.salesRep).filter(Boolean)
+    )).sort()
+  , [allCustomers]);
 
   const [showAddSalesLead, setShowAddSalesLead] = useState(false);
 
