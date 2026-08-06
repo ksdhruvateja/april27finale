@@ -646,20 +646,6 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
             <LightFormField label="EIN Number">
               <LightFormInput placeholder="e.g. 12-3456789" value={form.taxNumber} onChange={set("taxNumber")} />
             </LightFormField>
-            <LightFormField label="Sales Rep">
-              <div className="relative">
-                <LightFormInput
-                  type="text"
-                  list="salesRepList"
-                  placeholder="Type name or select..."
-                  value={form.salesRep}
-                  onChange={set("salesRep")}
-                />
-                <datalist id="salesRepList">
-                  {allRepNames.map(rep => <option key={rep} value={rep} />)}
-                </datalist>
-              </div>
-            </LightFormField>
           </div>
 
           {/* Tax Exempt Toggle */}
