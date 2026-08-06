@@ -197,7 +197,10 @@ export default function Sidebar({ embedded }: SidebarProps) {
               </div>
             </div>
             <button
-              onClick={() => setCurrentUser(null)}
+              onClick={async () => {
+                try { await fetch("/api/auth/logout", { method: "POST", credentials: "include" }); } catch {}
+                setCurrentUser(null);
+              }}
               title="Sign out"
               className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 transition-all text-slate-400 hover:text-blue-600"
             >

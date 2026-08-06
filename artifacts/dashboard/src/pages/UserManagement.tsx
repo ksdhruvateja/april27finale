@@ -76,6 +76,31 @@ const DEFAULT_CUSTOM: CustomPermissions = {
   hidePrices: false,
 };
 
+/** Build a CustomPermissions preset from a named role. */
+function makePresetPerms(role: UserRole): CustomPermissions {
+  const all = ALL_MODULES.map(m => m.path);
+  if (role === "developer" || role === "admin") {
+    return { allowedPaths: all, moduleEditPaths: all, readOnly: false, hidePrices: false };
+  }
+  if (role === "viewer") {
+    const vp = ["/", "/auctions", "/quotes", "/invoices", "/purchase-orders", "/shipments", "/tickets", "/history", "/documents"];
+    return { allowedPaths: vp, moduleEditPaths: [], readOnly: true, hidePrices: false };
+  }
+  if (role === "shipper") {
+    const sp = ["/purchase-orders", "/shipments", "/documents"];
+    return { allowedPaths: sp, moduleEditPaths: sp, readOnly: false, hidePrices: true };
+  }
+  if (role === "accountant") {
+    const ap = ["/", "/auctions", "/customers", "/invoices", "/walk-in", "/vendors", "/purchase-orders", "/bills", "/tax-rates", "/accounting", "/banking", "/tickets", "/history", "/documents"];
+    return { allowedPaths: ap, moduleEditPaths: ap, readOnly: false, hidePrices: false };
+  }
+  if (role === "sales") {
+    const slp = ["/", "/auctions", "/customers", "/quotes", "/invoices", "/walk-in", "/purchase-orders", "/products", "/shipments", "/sales-leads", "/tickets", "/returns-refunds", "/history", "/documents"];
+    return { allowedPaths: slp, moduleEditPaths: slp, readOnly: false, hidePrices: false };
+  }
+  return DEFAULT_CUSTOM;
+}
+
 const GROUP_COLORS: Record<string, string> = {
   MAIN:       "#6366f1",
   SALES:      "#10b981",
@@ -270,7 +295,7 @@ export default function UserManagement() {
   const [editName, setEditName]   = useState("");
   const [editCustomPerms, setEditCustomPerms] = useState<CustomPermissions>(DEFAULT_CUSTOM);
   const [form, setForm] = useState({ email: "", name: "", role: "viewer" as UserRole, password: "" });
-  const [customPerms, setCustomPerms] = useState<CustomPermissions>(DEFAULT_CUSTOM);
+  const [customPerms, setCustomPerms] = useState<CustomPermissions>(() => makePresetPerms("viewer"));
   const [error, setError]   = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -288,8 +313,8 @@ export default function UserManagement() {
   const handleAdd = async () => {
     if (!form.email) { setError("Email is required."); return; }
     if (!form.password) { setError("Password is required."); return; }
-    if (form.role === "custom" && customPerms.allowedPaths.length === 0) {
-      setError("Select at least one module for a custom role.");
+    if (customPerms.allowedPaths.length === 0) {
+      setError("Select at least one module to grant access to.");
       return;
     }
     setSaving(true); setError("");
@@ -299,10 +324,8 @@ export default function UserManagement() {
       role: form.role,
       password: form.password,
       invitedBy: currentUser?.email,
+      customPermissions: JSON.stringify(customPerms),
     };
-    if (form.role === "custom") {
-      body.customPermissions = JSON.stringify(customPerms);
-    }
     const res = await fetch("/api/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -312,19 +335,18 @@ export default function UserManagement() {
     if (!res.ok) { setError(data.error ?? "Failed to add user."); setSaving(false); return; }
     setAdding(false);
     setForm({ email: "", name: "", role: "viewer", password: "" });
-    setCustomPerms(DEFAULT_CUSTOM);
+    setCustomPerms(makePresetPerms("viewer"));
     load();
     setSaving(false);
   };
 
   const handleEdit = async (id: number) => {
     setSaving(true);
-    const body: any = { role: editRole, name: editName };
-    if (editRole === "custom") {
-      body.customPermissions = JSON.stringify(editCustomPerms);
-    } else {
-      body.customPermissions = null;
-    }
+    const body: any = {
+      role: editRole,
+      name: editName,
+      customPermissions: JSON.stringify(editCustomPerms),
+    };
     await fetch(`/api/users/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -346,9 +368,13 @@ export default function UserManagement() {
     setEditRole(u.role as UserRole);
     setEditName(u.name ?? "");
     try {
-      setEditCustomPerms(u.customPermissions ? JSON.parse(u.customPermissions) : DEFAULT_CUSTOM);
+      setEditCustomPerms(
+        u.customPermissions
+          ? JSON.parse(u.customPermissions)
+          : makePresetPerms(u.role as UserRole)
+      );
     } catch {
-      setEditCustomPerms(DEFAULT_CUSTOM);
+      setEditCustomPerms(makePresetPerms(u.role as UserRole));
     }
   };
 
@@ -446,81 +472,7 @@ export default function UserManagement() {
             </button>
           </div>
 
-          {/* Add form */}
-          {adding && (
-            <div className="px-6 py-4" style={{ background: "rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-              <div className="flex flex-wrap items-end gap-3 mb-0">
-                <div className="flex flex-col gap-1 flex-1 min-w-[180px]">
-                  <label className="text-[11px] font-black uppercase tracking-wider" style={{ color: "rgba(71,85,105,0.85)" }}>Email *</label>
-                  <input
-                    type="email"
-                    placeholder="user@company.com"
-                    value={form.email}
-                    onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                    className="input-light"
-                    style={{ fontSize: 13 }}
-                  />
-                </div>
-                <div className="flex flex-col gap-1 min-w-[140px]">
-                  <label className="text-[11px] font-black uppercase tracking-wider" style={{ color: "rgba(71,85,105,0.85)" }}>Name</label>
-                  <input
-                    type="text"
-                    placeholder="Full name"
-                    value={form.name}
-                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                    className="input-light"
-                    style={{ fontSize: 13 }}
-                  />
-                </div>
-                <div className="flex flex-col gap-1 min-w-[140px]">
-                  <label className="text-[11px] font-black uppercase tracking-wider" style={{ color: "rgba(71,85,105,0.85)" }}>Password *</label>
-                  <input
-                    type="password"
-                    placeholder="Min. 4 chars"
-                    value={form.password}
-                    onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                    className="input-light"
-                    style={{ fontSize: 13 }}
-                  />
-                </div>
-                <div className="flex flex-col gap-1 min-w-[160px]">
-                  <label className="text-[11px] font-black uppercase tracking-wider" style={{ color: "rgba(71,85,105,0.85)" }}>Role</label>
-                  <select
-                    value={form.role}
-                    onChange={e => setForm(f => ({ ...f, role: e.target.value as UserRole }))}
-                    className="input-light"
-                    style={{ fontSize: 13 }}
-                  >
-                    {availableRoles.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                  </select>
-                </div>
-                <div className="flex items-center gap-2 pb-0.5">
-                  <button
-                    onClick={handleAdd}
-                    disabled={saving}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-bold text-white"
-                    style={{ background: "linear-gradient(135deg,#3b82f6,#2563eb)", boxShadow: "0 3px 10px rgba(59,130,246,0.30)" }}
-                  >
-                    <Check size={13} /> {saving ? "Saving…" : "Add"}
-                  </button>
-                  <button
-                    onClick={() => { setAdding(false); setError(""); }}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-bold"
-                    style={{ background: "rgba(148,163,184,0.18)", color: "#475569" }}
-                  >
-                    <X size={13} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Custom permissions picker */}
-              {form.role === "custom" && (
-                <CustomPermPicker value={customPerms} onChange={setCustomPerms} />
-              )}
-
-              {error && <p className="mt-2 text-[12px] font-bold" style={{ color: "#f87171" }}>{error}</p>}
-            </div>
-          )}
+          {/* Add form is now a modal — rendered outside the card below */}
 
           {/* User rows */}
           {loading ? (
@@ -576,7 +528,11 @@ export default function UserManagement() {
                       {editingId === u.id ? (
                         <select
                           value={editRole}
-                          onChange={e => setEditRole(e.target.value as UserRole)}
+                          onChange={e => {
+                            const r = e.target.value as UserRole;
+                            setEditRole(r);
+                            setEditCustomPerms(makePresetPerms(r));
+                          }}
                           className="input-light"
                           style={{ fontSize: 12, padding: "4px 10px" }}
                         >
@@ -648,8 +604,8 @@ export default function UserManagement() {
                     </div>
                   </div>
 
-                  {/* Inline custom permission picker when editing a custom role user */}
-                  {editingId === u.id && editRole === "custom" && (
+                  {/* Permission picker — always shown when editing */}
+                  {editingId === u.id && (
                     <div className="px-6 pb-5">
                       <CustomPermPicker value={editCustomPerms} onChange={setEditCustomPerms} />
                     </div>
@@ -660,6 +616,126 @@ export default function UserManagement() {
           )}
         </div>
       </div>
+
+      {/* ── Add User Modal ─────────────────────────────────────────────── */}
+      {adding && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)" }}>
+          <div
+            className="w-full max-w-2xl rounded-2xl flex flex-col overflow-hidden"
+            style={{ background: "#fff", boxShadow: "0 32px 80px rgba(0,0,0,0.25)", maxHeight: "92vh" }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: "1px solid #e5e7eb" }}>
+              <div>
+                <h2 className="text-[16px] font-black" style={{ color: "#0f172a" }}>Add New User</h2>
+                <p className="text-[11.5px] font-semibold mt-0.5" style={{ color: "#64748b" }}>Set credentials, role, and module-level access</p>
+              </div>
+              <button
+                onClick={() => { setAdding(false); setError(""); }}
+                className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-slate-100"
+                style={{ color: "#64748b" }}
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            {/* Scrollable body */}
+            <div className="overflow-y-auto flex-1 px-6 py-5">
+              {/* Basic fields */}
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-black uppercase tracking-wider" style={{ color: "#475569" }}>Full Name</label>
+                  <input
+                    type="text"
+                    placeholder="Jane Smith"
+                    value={form.name}
+                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                    className="rounded-xl px-3 py-2.5 text-[13px] font-semibold border outline-none transition-colors focus:border-blue-400"
+                    style={{ background: "#f8fafc", border: "1px solid #e2e8f0", color: "#0f172a" }}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-black uppercase tracking-wider" style={{ color: "#475569" }}>Email Address *</label>
+                  <input
+                    type="email"
+                    placeholder="jane@company.com"
+                    value={form.email}
+                    onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                    className="rounded-xl px-3 py-2.5 text-[13px] font-semibold border outline-none transition-colors focus:border-blue-400"
+                    style={{ background: "#f8fafc", border: "1px solid #e2e8f0", color: "#0f172a" }}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-black uppercase tracking-wider" style={{ color: "#475569" }}>Password *</label>
+                  <input
+                    type="password"
+                    placeholder="Min. 4 characters"
+                    value={form.password}
+                    onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                    className="rounded-xl px-3 py-2.5 text-[13px] font-semibold border outline-none transition-colors focus:border-blue-400"
+                    style={{ background: "#f8fafc", border: "1px solid #e2e8f0", color: "#0f172a" }}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-black uppercase tracking-wider" style={{ color: "#475569" }}>Role / Template</label>
+                  <select
+                    value={form.role}
+                    onChange={e => {
+                      const r = e.target.value as UserRole;
+                      setForm(f => ({ ...f, role: r }));
+                      setCustomPerms(makePresetPerms(r));
+                    }}
+                    className="rounded-xl px-3 py-2.5 text-[13px] font-semibold border outline-none transition-colors focus:border-blue-400"
+                    style={{ background: "#f8fafc", border: "1px solid #e2e8f0", color: "#0f172a" }}
+                  >
+                    {availableRoles.map(r => <option key={r.value} value={r.value}>{r.label} — {r.desc}</option>)}
+                  </select>
+                  <p className="text-[10.5px] font-semibold" style={{ color: "#94a3b8" }}>
+                    Selecting a role pre-fills the permissions below. You can customise them freely.
+                  </p>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="flex items-center gap-3 mb-4">
+                <div className="h-px flex-1" style={{ background: "#e5e7eb" }} />
+                <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: "#94a3b8" }}>Module Access</span>
+                <div className="h-px flex-1" style={{ background: "#e5e7eb" }} />
+              </div>
+
+              {/* Permission picker */}
+              <CustomPermPicker value={customPerms} onChange={setCustomPerms} />
+
+              {error && (
+                <div className="mt-3 px-3 py-2.5 rounded-xl text-[12px] font-bold" style={{ background: "#fef2f2", border: "1px solid #fca5a5", color: "#b91c1c" }}>
+                  {error}
+                </div>
+              )}
+            </div>
+
+            {/* Modal footer */}
+            <div className="flex items-center justify-end gap-3 px-6 py-4" style={{ borderTop: "1px solid #e5e7eb" }}>
+              <button
+                onClick={() => { setAdding(false); setError(""); }}
+                className="px-4 py-2 rounded-xl text-[13px] font-bold transition-colors hover:bg-slate-100"
+                style={{ color: "#475569" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAdd}
+                disabled={saving}
+                className="flex items-center gap-2 px-5 py-2 rounded-xl text-[13px] font-bold text-white transition-all hover:scale-105 disabled:opacity-60 disabled:cursor-not-allowed"
+                style={{ background: "linear-gradient(135deg,#3b82f6,#2563eb)", boxShadow: "0 4px 14px rgba(59,130,246,0.35)" }}
+              >
+                <Check size={13} />
+                {saving ? "Creating…" : "Create User"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }

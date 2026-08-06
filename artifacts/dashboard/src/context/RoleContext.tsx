@@ -77,6 +77,39 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     return null;
   });
 
+  // On mount: verify the server-side session cookie is still valid.
+  // If the cookie has expired or been revoked, force re-login.
+  useEffect(() => {
+    const stored = (() => {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        return raw ? JSON.parse(raw) as CurrentUser : null;
+      } catch { return null; }
+    })();
+    if (!stored) return; // not logged in — nothing to verify
+
+    fetch("/api/auth/me", { credentials: "include" })
+      .then(r => {
+        if (r.status === 401) {
+          // Cookie expired / revoked — clear local state and force re-login
+          setCurrentUserState(null);
+          try { localStorage.removeItem(STORAGE_KEY); } catch {}
+        } else if (r.ok) {
+          // Sync fresh user data from the server token (picks up role/perm changes)
+          r.json().then((data: CurrentUser) => {
+            let customPermissions: import("./RoleContext").CustomPermissions | undefined;
+            if (data.role === "custom" && (data as any).customPermissions) {
+              try { customPermissions = typeof (data as any).customPermissions === "string"
+                ? JSON.parse((data as any).customPermissions) : (data as any).customPermissions; } catch {}
+            }
+            setCurrentUserState({ ...data, customPermissions });
+          }).catch(() => {});
+        }
+      })
+      .catch(() => {}); // network failure — keep existing state
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (currentUser) {
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(currentUser)); } catch {}

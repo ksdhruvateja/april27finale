@@ -162,13 +162,13 @@ export default function QuoteView({ quote, onClose, onDecline, onStatusChange }:
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:'Helvetica Neue',Arial,sans-serif;background:#fff;color:#1f2937;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:13px;line-height:1.5}
   .page{max-width:860px;margin:0 auto;padding:36px 48px}
-  .doc-hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:20px;border-bottom:2.5px solid #0d2044;margin-bottom:26px}
-  .co-left{display:flex;align-items:flex-start;gap:14px}
-  .co-logo{width:52px;height:52px;object-fit:contain;border-radius:8px;flex-shrink:0}
-  .co-name{font-size:17px;font-weight:800;color:#0d2044;letter-spacing:-0.3px;line-height:1.2}
-  .co-addr{font-size:11px;color:#6b7280;margin-top:5px;line-height:1.7}
+  .doc-hdr{text-align:center;padding-bottom:18px;border-bottom:2.5px solid #0d2044;margin-bottom:0}
+  .co-logo{width:80px;height:80px;object-fit:contain;border-radius:10px;display:block;margin:0 auto 10px}
+  .co-name{font-size:21px;font-weight:800;color:#0d2044;letter-spacing:-0.3px;line-height:1.2}
+  .co-addr{font-size:11px;color:#6b7280;margin-top:5px;line-height:1.65}
+  .doc-meta{display:flex;justify-content:space-between;align-items:flex-start;padding:18px 0 20px;border-bottom:1px solid #e5e7eb;margin-bottom:24px}
+  .doc-type{font-size:28px;font-weight:900;color:#0d2044;letter-spacing:-0.5px;line-height:1}
   .doc-right{text-align:right}
-  .doc-type{font-size:28px;font-weight:900;color:#0d2044;letter-spacing:-0.3px;line-height:1;margin-bottom:12px}
   .mrow{display:flex;justify-content:flex-end;align-items:baseline;gap:14px;line-height:2.1}
   .mlbl{font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap}
   .mval{font-size:12.5px;font-weight:700;color:#111827;min-width:110px;text-align:right}
@@ -211,20 +211,43 @@ export default function QuoteView({ quote, onClose, onDecline, onStatusChange }:
   .validity{margin-top:20px;padding:12px 16px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;font-size:12px;color:#1e40af}
   .doc-footer{margin-top:40px;padding-top:14px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center}
   .foot-l,.foot-r{font-size:10px;color:#9ca3af}
-  @media print{body{padding:0}@page{margin:22px 36px;size:A4}}
+  @media print{body{padding:0}#ptoolbar,#ptoolbar-spacer{display:none!important}@page{margin:22px 36px;size:A4}}
 </style></head><body>
+  <div id="ptoolbar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#1e293b;color:#f1f5f9;display:flex;align-items:center;gap:10px;padding:10px 20px;font-family:'Helvetica Neue',Arial,sans-serif;font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,0.3)">
+    <span style="font-weight:700;color:#94a3b8;flex:1">📄 Quote Preview</span>
+    <span id="editHint" style="font-size:11px;color:#60a5fa;display:none;margin-right:8px">✦ Click any text field to edit</span>
+    <button id="editBtn" onclick="toggleEdit()" style="background:#334155;color:#f1f5f9;border:1px solid #475569;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:12px;font-weight:600">✏️ Edit Content</button>
+    <button onclick="window.print()" style="background:#0d2044;color:#fff;border:1px solid #1e3a6e;border-radius:6px;padding:6px 16px;cursor:pointer;font-size:12px;font-weight:700">🖨️ Print</button>
+  </div>
+  <div id="ptoolbar-spacer" style="height:52px"></div>
+  <script>
+    var _editing=false,_els=[];
+    function toggleEdit(){
+      _editing=!_editing;
+      var btn=document.getElementById('editBtn');
+      var hint=document.getElementById('editHint');
+      if(_editing){
+        btn.textContent='✓ Done Editing';btn.style.background='#059669';btn.style.borderColor='#10b981';hint.style.display='inline';
+        document.querySelectorAll('.addr-name,.addr-text,.notes-box p,.foot-l,.foot-r,.iname,.idesc,.validity').forEach(function(el){
+          el.contentEditable='true';el.style.outline='2px dashed #60a5fa';el.style.borderRadius='3px';el.style.minHeight='1em';_els.push(el);
+        });
+      } else {
+        btn.textContent='✏️ Edit Content';btn.style.background='#334155';btn.style.borderColor='#475569';hint.style.display='none';
+        _els.forEach(function(el){el.contentEditable='false';el.style.outline='';el.style.borderRadius='';});_els=[];
+      }
+    }
+  </script>
 <div class="page">
 
   <div class="doc-hdr">
-    <div class="co-left">
-      <img src="${logoSrc}" class="co-logo" alt="${fromName}"/>
-      <div>
-        <div class="co-name">${fromName}</div>
-        <div class="co-addr">${fromLine1}<br/>${fromLine2}${fromPhone ? `<br/>${fromPhone}` : ""}</div>
-      </div>
-    </div>
+    <img src="${logoSrc}" class="co-logo" alt="${fromName}"/>
+    <div class="co-name">${fromName}</div>
+    <div class="co-addr">${fromLine1} · ${fromLine2}${fromPhone ? ` · ${fromPhone}` : ""}</div>
+  </div>
+
+  <div class="doc-meta">
+    <div class="doc-type">QUOTE</div>
     <div class="doc-right">
-      <div class="doc-type">QUOTATION</div>
       <div class="mrow"><span class="mlbl">Quote No.</span><span class="mval">${quoteNum}</span></div>
       <div class="mrow"><span class="mlbl">Date Issued</span><span class="mval">${formatDate(quote.createdAt)}</span></div>
       ${quote.expiresAt ? `<div class="mrow"><span class="mlbl">Valid Until</span><span class="mval${isExpired ? " alert" : ""}">${formatDate(quote.expiresAt)}</span></div>` : ""}
@@ -293,7 +316,7 @@ export default function QuoteView({ quote, onClose, onDecline, onStatusChange }:
 </div></body></html>`);
     w.document.close();
     w.focus();
-    setTimeout(() => { w.print(); }, 400);
+    // User prints via the toolbar Print button
   }
 
   function handlePrint(_download = false) {
