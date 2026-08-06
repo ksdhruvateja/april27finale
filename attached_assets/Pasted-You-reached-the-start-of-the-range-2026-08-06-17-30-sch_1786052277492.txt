@@ -1,0 +1,87 @@
+You reached the start of the range
+2026-08-06 17:30
+scheduling build on Metal builder "production-builderv3-us-east4-ddgb"
+unpacking archive
+12.9 MB
+58ms
+uploading snapshot
+9 MB
+148ms
+
+internal
+load build definition from Dockerfile
+0ms
+
+internal
+load metadata for docker.io/library/node:22-slim
+35s
+
+internal
+load .dockerignore
+0ms
+
+1
+FROM docker.io/library/node:22-slim@sha256:d649c27dae7ba0137b3cef5dd75baa422c08dc3d9e3fc0c23dfb172dc3cc6436
+12ms
+
+internal
+load build context
+0ms
+
+3
+WORKDIR /app cached
+23ms
+
+2
+RUN corepack disable && npm install -g pnpm@10.26.1 cached
+0ms
+
+4
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.json tsconfig.base.json ./
+1s
+
+5
+COPY lib/ ./lib/
+207ms
+
+6
+COPY artifacts/ ./artifacts/
+139ms
+
+7
+COPY scripts/ ./scripts/
+125ms
+
+8
+RUN pnpm install --frozen-lockfile --prod=false
+5s
+Done in 4s using pnpm v10.26.1
+
+9
+RUN pnpm run build:railway
+4s
+> workspace@0.0.0 build:railway /app
+> pnpm --filter @workspace/dashboard run build && pnpm --filter @workspace/api-server run build
+> @workspace/dashboard@0.0.0 build /app/artifacts/dashboard
+> vite build --config vite.config.ts
+vite v7.3.1 building client environment for production...
+transforming...
+src/components/ui/dropdown-menu.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.
+
+✓ 1873 modules transformed.
+✗ Build failed in 2.40s
+error during build:
+[vite:asset] Could not load /app/attached_assets/image_1785249843852.png (imported by src/components/QuoteView.tsx): ENOENT: no such file or directory, open '/app/attached_assets/image_1785249843852.png'
+
+    at async open (node:internal/fs/promises:639:25)
+    at async Object.readFile (node:internal/fs/promises:1252:14)
+    at async fileToBuiltUrl (file:///app/node_modules/.pnpm/vite@7.3.1_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_tsx@4.21.0_yaml@2.8.2/node_modules/vite/dist/node/chunks/config.js:8777:18)
+    at async Object.handler (file:///app/node_modules/.pnpm/vite@7.3.1_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_tsx@4.21.0_yaml@2.8.2/node_modules/vite/dist/node/chunks/config.js:8671:17)
+    at async PluginDriver.hookFirstAndGetPlugin (file:///app/node_modules/.pnpm/rollup@4.59.0/node_modules/rollup/dist/es/shared/node-entry.js:22453:28)
+    at async file:///app/node_modules/.pnpm/rollup@4.59.0/node_modules/rollup/dist/es/shared/node-entry.js:21445:33
+    at async Queue.work (file:///app/node_modules/.pnpm/rollup@4.59.0/node_modules/rollup/dist/es/shared/node-entry.js:22681:32)
+/app/artifacts/dashboard:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/dashboard@0.0.0 build: `vite build --config vite.config.ts`
+Exit status 1
+ ELIFECYCLE  Command failed with exit code 1.
+Build Failed: build daemon returned an error < failed to solve: process "/bin/sh -c pnpm run build:railway" did not complete successfully: exit code: 1 >
