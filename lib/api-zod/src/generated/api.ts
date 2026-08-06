@@ -1141,6 +1141,9 @@ export const UpdateInvoiceBody = zod.object({
   dueDate: zod.coerce.date().nullish(),
   notes: zod.string().nullish(),
   internalNote: zod.string().nullish(),
+  // Net-terms path: store payment method + note without marking paid
+  paymentMethod: zod.string().nullish(),
+  paymentNote: zod.string().nullish(),
 });
 
 export const updateInvoiceResponseLineItemsItemTaxPercentDefault = 0;

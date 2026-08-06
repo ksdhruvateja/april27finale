@@ -1167,7 +1167,16 @@ export default function Invoices() {
                         {inv.paidAt && <span className="text-emerald-600 text-xs font-medium">Paid {formatDate(inv.paidAt)}</span>}
                       </div>
                     </td>
-                    <td className="px-5 py-3.5 text-slate-500 text-xs">{formatDate(inv.dueDate)}</td>
+                    <td className="px-5 py-3.5">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-slate-500 text-xs">{formatDate(inv.dueDate) || "—"}</span>
+                        {inv.paymentMethod === "net_terms" && (
+                          <span className="text-[10px] font-semibold text-violet-600 bg-violet-50 border border-violet-200 rounded px-1.5 py-0.5 w-fit leading-tight">
+                            Net Terms
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-5 py-3.5" onClick={e => e.stopPropagation()}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>

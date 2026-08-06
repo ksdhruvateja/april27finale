@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useLocation } from "wouter";
 import { useDebounce } from "@/hooks/useDebounce";
 import { logAudit } from "@/lib/auditLog";
 import { useRole } from "@/context/RoleContext";
@@ -30,7 +31,9 @@ type Customer = {
   billingAddress?: any; shippingAddress?: any; amountOwed?: number;
 };
 
-function CustomerViewModal({ customer, onClose, creditAvailable, salesLeads }: { customer: Customer; onClose: () => void; creditAvailable: number; salesLeads: any[] }) {
+function CustomerViewModal({ customer, onClose, credits, salesLeads }: { customer: Customer; onClose: () => void; credits: any[]; salesLeads: any[] }) {
+  const [, navigate] = useLocation();
+  const creditAvailable = credits.reduce((s: number, c: any) => s + Number(c.refundAmount ?? 0), 0);
   const phones: any[] = customer.phones ?? (customer.phone ? [{ label: "Mobile", number: customer.phone }] : []);
   const emails: any[] = customer.emails ?? (customer.email ? [{ label: "Work", email: customer.email }] : []);
 
@@ -101,15 +104,55 @@ function CustomerViewModal({ customer, onClose, creditAvailable, salesLeads }: {
               )}
             </div>
           )}
-          {creditAvailable > 0 && (
-            <div className="flex items-center gap-3 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3">
-              <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                <Gift size={15} className="text-emerald-600" />
+          {credits.length > 0 && (
+            <div className="rounded-xl bg-emerald-50 border border-emerald-200 overflow-hidden">
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-emerald-200">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                    <Gift size={13} className="text-emerald-600" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700">Store Credits Available</p>
+                    <p className="text-base font-black text-emerald-800">{formatCurrency(creditAvailable)} total</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => { onClose(); navigate("/invoices"); }}
+                  className="text-[11px] font-semibold text-emerald-700 bg-emerald-100 border border-emerald-300 rounded-lg px-2.5 py-1.5 hover:bg-emerald-200 transition-colors whitespace-nowrap"
+                >
+                  Apply to Invoice →
+                </button>
               </div>
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600">Store Credit Available</p>
-                <p className="text-lg font-black text-emerald-700 mt-0.5">{formatCurrency(creditAvailable)}</p>
-                <p className="text-[11px] text-emerald-500 mt-0.5">Eligible to receive — from approved returns &amp; refunds</p>
+              {/* Individual credit memos */}
+              <div className="divide-y divide-emerald-100">
+                {credits.map((c: any) => {
+                  const cmNum = `CM-${String(c.id).padStart(4, "0")}`;
+                  const statusColors: Record<string, string> = {
+                    approved: "bg-emerald-100 text-emerald-700 border-emerald-200",
+                    refunded: "bg-blue-50 text-blue-600 border-blue-200",
+                    completed: "bg-slate-100 text-slate-500 border-slate-200",
+                  };
+                  const statusCls = statusColors[c.status] ?? "bg-slate-100 text-slate-500 border-slate-200";
+                  return (
+                    <div key={c.id} className="flex items-center justify-between px-4 py-2.5 gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[11px] font-bold text-emerald-800 font-mono">{cmNum}</span>
+                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${statusCls}`}>{c.status}</span>
+                        </div>
+                        {c.reason && <p className="text-[11px] text-emerald-600 mt-0.5 truncate max-w-[200px]">{c.reason}</p>}
+                        {c.invoiceId && <p className="text-[10px] text-emerald-500">Inv #{String(c.invoiceId).padStart(4, "0")}</p>}
+                      </div>
+                      <span className="text-sm font-black text-emerald-700 flex-shrink-0">
+                        {formatCurrency(Number(c.refundAmount))}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="px-4 py-2 bg-emerald-100/60 border-t border-emerald-200">
+                <p className="text-[10px] text-emerald-600">Credits are auto-applied in Pay Now → the balance due reduces automatically.</p>
               </div>
             </div>
           )}
@@ -210,17 +253,27 @@ export default function Customers() {
 
   const debouncedSearch = useDebounce(search, 250);
 
-  /** Credit available per customer ID (approved / refunded / completed returns) */
-  const creditByCustomerId = useMemo(() => {
+  /** Individual credit records per customer ID (approved / refunded / completed returns) */
+  const creditsByCustomerId = useMemo(() => {
     const CREDIT_STATUSES = new Set(["approved", "refunded", "completed"]);
-    const map: Record<number, number> = {};
+    const map: Record<number, any[]> = {};
     for (const r of (returnsData ?? [])) {
-      if (CREDIT_STATUSES.has(r.status) && r.refundAmount != null) {
-        map[r.customerId] = (map[r.customerId] ?? 0) + Number(r.refundAmount);
+      if (CREDIT_STATUSES.has(r.status) && r.refundAmount != null && Number(r.refundAmount) > 0) {
+        if (!map[r.customerId]) map[r.customerId] = [];
+        map[r.customerId].push(r);
       }
     }
     return map;
   }, [returnsData]);
+
+  /** Total credit available per customer (derived from individual records) */
+  const creditByCustomerId = useMemo(() => {
+    const map: Record<number, number> = {};
+    for (const [id, credits] of Object.entries(creditsByCustomerId)) {
+      map[Number(id)] = credits.reduce((s, c) => s + Number(c.refundAmount ?? 0), 0);
+    }
+    return map;
+  }, [creditsByCustomerId]);
 
   /* ── Analytics data ─────────────────────────────────────── */
   const revenueByCustomer = useMemo(() => {
@@ -543,7 +596,7 @@ export default function Customers() {
       </div>
       {showModal && <CustomerModal onClose={() => setShowModal(false)} />}
       {editingCustomer && <CustomerModal customer={editingCustomer} onClose={() => setEditingCustomer(null)} />}
-      {viewingCustomer && <CustomerViewModal customer={viewingCustomer} onClose={() => setViewingCustomer(null)} creditAvailable={creditByCustomerId[viewingCustomer.id] ?? 0} salesLeads={salesLeads} />}
+      {viewingCustomer && <CustomerViewModal customer={viewingCustomer} onClose={() => setViewingCustomer(null)} credits={creditsByCustomerId[viewingCustomer.id] ?? []} salesLeads={salesLeads} />}
     </Layout>
   );
 }

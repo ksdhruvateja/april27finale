@@ -88,6 +88,8 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
   if (parsed.data.trackingNumber !== undefined) updateData.trackingNumber = parsed.data.trackingNumber;
   if (parsed.data.salesLead !== undefined) updateData.salesLead = parsed.data.salesLead;
   if (parsed.data.dueDate !== undefined) updateData.dueDate = parsed.data.dueDate ? new Date(parsed.data.dueDate) : null;
+  if (parsed.data.paymentMethod !== undefined) updateData.paymentMethod = parsed.data.paymentMethod ?? null;
+  if (parsed.data.paymentNote   !== undefined) updateData.paymentNote   = parsed.data.paymentNote   ?? null;
   if (parsed.data.lineItems !== undefined) {
     const rawLineItems = Array.isArray(req.body.lineItems) ? req.body.lineItems : parsed.data.lineItems;
     const totals = calcTotals(parsed.data.lineItems as Array<{ quantity: number; unitPrice: number; taxPercent: number; discountPercent: number }>);
