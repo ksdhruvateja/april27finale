@@ -1,0 +1,107 @@
+You reached the start of the range
+2026-08-06 17:26
+scheduling build on Metal builder "production-builderv3-us-east4-ddgb"
+unpacking archive
+12.9 MB
+51ms
+uploading snapshot
+9 MB
+187ms
+
+internal
+load build definition from Dockerfile
+0ms
+
+internal
+load metadata for docker.io/library/node:22-alpine
+18s
+
+internal
+load .dockerignore
+1ms
+
+1
+FROM docker.io/library/node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 cached
+12ms
+
+internal
+load build context
+0ms
+
+2
+RUN corepack disable && npm install -g pnpm@10.26.1
+4s
+npm notice
+
+3
+WORKDIR /app
+227ms
+
+4
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+176ms
+
+5
+COPY lib/ ./lib/
+167ms
+
+6
+COPY artifacts/ ./artifacts/
+164ms
+
+7
+COPY scripts/ ./scripts/
+139ms
+
+8
+RUN pnpm install --frozen-lockfile --prod=false
+4s
+Done in 4.6s using pnpm v10.26.1
+
+9
+RUN pnpm run build:railway
+2s
+> workspace@0.0.0 build:railway /app
+> pnpm --filter @workspace/dashboard run build && pnpm --filter @workspace/api-server run build
+> @workspace/dashboard@0.0.0 build /app/artifacts/dashboard
+> vite build --config vite.config.ts
+/app/node_modules/.pnpm/rollup@4.59.0/node_modules/rollup/dist/native.js:115
+		throw new Error(
+		      ^
+Error: Cannot find module @rollup/rollup-linux-x64-musl. npm has a bug related to optional dependencies (https://github.com/npm/cli/issues/4828). Please try `npm i` again after removing both package-lock.json and node_modules directory.
+
+    at requireWithFriendlyError (/app/node_modules/.pnpm/rollup@4.59.0/node_modules/rollup/dist/native.js:115:9)
+    at Object.<anonymous> (/app/node_modules/.pnpm/rollup@4.59.0/node_modules/rollup/dist/native.js:124:76)
+    at Module._compile (node:internal/modules/cjs/loader:1781:14)
+    at Object..js (node:internal/modules/cjs/loader:1913:10)
+    at Module.load (node:internal/modules/cjs/loader:1505:32)
+    at Function._load (node:internal/modules/cjs/loader:1309:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)
+    at loadCJSModuleWithModuleLoad (node:internal/modules/esm/translators:335:3)
+    at ModuleWrap.<anonymous> (node:internal/modules/esm/translators:235:7)
+    at ModuleJob.run (node:internal/modules/esm/module_job:343:25) {
+  [cause]: Error: Cannot find module '@rollup/rollup-linux-x64-musl'
+  Require stack:
+  - /app/node_modules/.pnpm/rollup@4.59.0/node_modules/rollup/dist/native.js
+      at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)
+      at defaultResolveImpl (node:internal/modules/cjs/loader:1040:19)
+      at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1045:22)
+      at Function._load (node:internal/modules/cjs/loader:1216:25)
+      at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)
+      at Module.require (node:internal/modules/cjs/loader:1527:12)
+      at require (node:internal/modules/helpers:147:16)
+      at requireWithFriendlyError (/app/node_modules/.pnpm/rollup@4.59.0/node_modules/rollup/dist/native.js:97:10)
+      at Object.<anonymous> (/app/node_modules/.pnpm/rollup@4.59.0/node_modules/rollup/dist/native.js:124:76)
+      at Module._compile (node:internal/modules/cjs/loader:1781:14) {
+    code: 'MODULE_NOT_FOUND',
+    requireStack: [
+      '/app/node_modules/.pnpm/rollup@4.59.0/node_modules/rollup/dist/native.js'
+    ]
+  }
+}
+Node.js v22.23.2
+/app/artifacts/dashboard:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/dashboard@0.0.0 build: `vite build --config vite.config.ts`
+Exit status 1
+ ELIFECYCLE  Command failed with exit code 1.
+Build Failed: build daemon returned an error < failed to solve: process "/bin/sh -c pnpm run build:railway" did not complete successfully: exit code: 1 >
