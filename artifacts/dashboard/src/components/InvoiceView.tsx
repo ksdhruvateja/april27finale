@@ -166,103 +166,103 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:'Segoe UI',system-ui,Arial,sans-serif;background:#fff;color:#1a1a2e;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .page{padding:48px 56px;max-width:860px;margin:0 auto}
-  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:36px}
-  .logo-block{display:flex;align-items:center;gap:14px}
-  .logo-svg{width:46px;height:46px;border-radius:10px;object-fit:contain;flex-shrink:0;display:block}
-  .company-name{font-size:20px;font-weight:800;letter-spacing:-0.5px;color:#0d1f3c;line-height:1}
-  .company-tagline{font-size:10px;color:#9ca3af;letter-spacing:2.5px;text-transform:uppercase;margin-top:4px}
-  .inv-title-block{text-align:right}
-  .inv-title{font-size:38px;font-weight:900;letter-spacing:-2px;color:#0d1f3c;line-height:1}
-  .inv-num{font-size:14px;font-weight:700;color:#6b7280;margin-top:5px;letter-spacing:0.5px}
-  .status-badge{display:inline-block;padding:4px 14px;border-radius:99px;font-size:11px;font-weight:700;margin-top:8px;letter-spacing:0.5px}
+  .page{padding:40px 52px;max-width:860px;margin:0 auto}
+  /* ── Letterhead ── */
+  .letterhead{text-align:center;padding-bottom:20px;border-bottom:2px solid #0d1f3c;margin-bottom:24px}
+  .lh-logo{width:60px;height:60px;border-radius:12px;object-fit:contain;display:block;margin:0 auto 10px}
+  .lh-name{font-size:22px;font-weight:900;letter-spacing:-0.5px;color:#0d1f3c;line-height:1}
+  .lh-tag{font-size:9px;color:#9ca3af;letter-spacing:3px;text-transform:uppercase;margin-top:4px}
+  /* ── Doc header row ── */
+  .doc-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px}
+  .doc-type{font-size:32px;font-weight:900;letter-spacing:-1.5px;color:#0d1f3c}
+  .doc-meta{text-align:right}
+  .doc-num{font-size:13px;font-weight:700;color:#6b7280;margin-bottom:6px;letter-spacing:0.5px}
+  .status-badge{display:inline-block;padding:4px 14px;border-radius:99px;font-size:11px;font-weight:700;letter-spacing:0.5px}
   .badge-paid{background:#d1fae5;color:#065f46}
   .badge-sent{background:#dbeafe;color:#1e40af}
   .badge-pending{background:#fef3c7;color:#92400e}
   .badge-overdue{background:#fee2e2;color:#991b1b}
   .badge-draft{background:#f3f4f6;color:#6b7280}
   .badge-cancelled{background:#f3f4f6;color:#6b7280}
-  .ref-pill{display:inline-flex;align-items:center;gap:5px;margin-top:8px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:6px;padding:3px 10px;font-size:11px}
+  .ref-pill{display:inline-flex;align-items:center;gap:5px;margin-top:6px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:6px;padding:3px 10px;font-size:11px}
   .ref-pill .rl{color:#6366f1;font-weight:600;text-transform:uppercase;letter-spacing:0.5px}
   .ref-pill .rv{color:#4338ca;font-weight:700;font-family:monospace}
-  .divider{border:none;border-top:1px solid #e5e7eb;margin:28px 0}
-  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:36px;margin-bottom:28px}
-  .info-block h4{font-size:10px;text-transform:uppercase;letter-spacing:2px;color:#9ca3af;margin-bottom:10px;font-weight:600}
-  .info-block .biz-name{font-size:15px;font-weight:700;color:#0d1f3c;margin-bottom:5px}
+  /* ── Address grid ── */
+  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-bottom:24px}
+  .info-block h4{font-size:9px;text-transform:uppercase;letter-spacing:2px;color:#9ca3af;margin-bottom:8px;font-weight:700}
+  .info-block .biz-name{font-size:14px;font-weight:700;color:#0d1f3c;margin-bottom:4px}
   .info-block .addr{font-size:12px;color:#6b7280;line-height:1.8}
   .info-block .contact-row{font-size:12px;color:#6b7280;line-height:1.9}
-  .dates-row{display:flex;gap:16px;margin-bottom:32px}
-  .date-chip{flex:1;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:13px 16px}
-  .date-chip .lbl{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#9ca3af;margin-bottom:5px;font-weight:600}
+  /* ── Date chips ── */
+  .dates-row{display:flex;gap:14px;margin-bottom:28px}
+  .date-chip{flex:1;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:12px 15px}
+  .date-chip .lbl{font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:#9ca3af;margin-bottom:4px;font-weight:700}
   .date-chip .val{font-size:13px;font-weight:600;color:#111827}
   .date-chip.alert{border-color:#fca5a5;background:#fef2f2}
   .date-chip.alert .val{color:#dc2626}
   .date-chip.paid-chip{border-color:#6ee7b7;background:#ecfdf5}
   .date-chip.paid-chip .val{color:#059669}
-  table{width:100%;border-collapse:collapse;margin-bottom:24px}
+  /* ── Table ── */
+  table{width:100%;border-collapse:collapse;margin-bottom:20px}
   thead tr{background:#f9fafb;border-bottom:2px solid #e5e7eb}
-  th{text-align:left;padding:10px 14px;font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:#9ca3af;font-weight:600}
+  th{text-align:left;padding:9px 13px;font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#9ca3af;font-weight:700}
   th.right{text-align:right}
-  td{padding:13px 14px;font-size:14px;border-bottom:1px solid #f3f4f6;vertical-align:top;color:#374151}
+  td{padding:11px 13px;font-size:13px;border-bottom:1px solid #f3f4f6;vertical-align:top;color:#374151}
   td.right{text-align:right}
-  .item-name{font-weight:600;font-size:14px;color:#111827;margin-bottom:2px;white-space:pre-wrap}
-  .item-desc{font-size:12px;color:#9ca3af;margin-top:2px}
-  .item-sku{font-size:11px;font-family:monospace;color:#9ca3af;background:#f3f4f6;padding:2px 6px;border-radius:4px}
+  .item-name{font-weight:600;font-size:13px;color:#111827;margin-bottom:2px;white-space:pre-wrap}
+  .item-desc{font-size:11px;color:#9ca3af;margin-top:2px}
+  .item-sku{font-size:10px;font-family:monospace;color:#9ca3af;background:#f3f4f6;padding:2px 5px;border-radius:4px}
   .item-amount{font-weight:700;color:#111827}
   .muted{color:#d1d5db}
-  .totals-section{display:flex;justify-content:flex-end;margin-top:8px}
-  .totals-box{width:300px;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden}
-  .total-row{display:flex;justify-content:space-between;padding:10px 18px;font-size:13px;border-bottom:1px solid #f3f4f6}
+  /* ── Totals ── */
+  .totals-section{display:flex;justify-content:flex-end;margin-top:4px;margin-bottom:24px}
+  .totals-box{width:290px;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden}
+  .total-row{display:flex;justify-content:space-between;padding:9px 16px;font-size:12px;border-bottom:1px solid #f3f4f6}
   .total-row .tl{color:#6b7280}
   .total-row .tv{font-weight:600;color:#111827}
   .total-row.discount .tv{color:#dc2626}
-  .grand-total{display:flex;justify-content:space-between;align-items:center;padding:15px 18px;background:#0d1f3c}
-  .grand-total .gl{font-size:14px;font-weight:700;color:#fff}
-  .grand-total .gv{font-size:20px;font-weight:900;color:#c8ff00}
-  .info-label{font-size:10px;text-transform:uppercase;letter-spacing:2px;font-weight:600;margin-bottom:6px}
-  .payment-info{margin-top:28px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px}
+  .grand-total{display:flex;justify-content:space-between;align-items:center;padding:13px 16px;background:#0d1f3c}
+  .grand-total .gl{font-size:13px;font-weight:700;color:#fff}
+  .grand-total .gv{font-size:18px;font-weight:900;color:#c8ff00}
+  /* ── Info blocks ── */
+  .info-label{font-size:9px;text-transform:uppercase;letter-spacing:2px;font-weight:700;margin-bottom:5px}
+  .payment-info{margin-top:20px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px 16px}
   .payment-info .info-label{color:#16a34a}
   .payment-info p{font-size:12px;color:#166534}
-  .notes-block{margin-top:20px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:14px 18px}
+  .notes-block{margin-top:16px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 16px}
   .notes-block .info-label{color:#b45309}
   .notes-block p{font-size:12px;color:#78350f;line-height:1.7}
-  .footer{margin-top:48px;padding-top:20px;border-top:2px solid #0d1f3c;display:flex;justify-content:space-between;align-items:flex-end}
-  .footer-logo{display:flex;align-items:center;gap:8px;margin-bottom:5px}
-  .footer-logo-badge{width:22px;height:22px;border-radius:5px;object-fit:contain;display:block}
-  .footer-co{font-size:13px;font-weight:700;color:#0d1f3c}
-  .footer-addr{font-size:11px;color:#9ca3af;line-height:1.7}
-  .footer-right{text-align:right}
-  .footer-thanks{font-size:13px;font-weight:600;color:#374151}
-  .footer-terms{font-size:10px;color:#9ca3af;margin-top:3px}
-  @media print{body{padding:0}@page{margin:36px;size:A4}}
+  /* ── Footer ── */
+  .footer{margin-top:36px;padding-top:14px;border-top:1px solid #e5e7eb;text-align:center}
+  .footer-addr{font-size:10px;color:#9ca3af}
+  @media print{body{padding:0}@page{margin:28px 36px;size:A4}}
 </style></head>
 <body><div class="page">
 
-  <div class="header">
-    <div class="logo-block">
-      <img src="${logoSrc}" alt="${profile.name}" class="logo-svg" />
-      <div>
-        <div class="company-name">${profile.name}</div>
-        <div class="company-tagline">${profile.tagline}</div>
-      </div>
-    </div>
-    <div class="inv-title-block">
-      <div class="inv-title">INVOICE</div>
-      <div class="inv-num">${effectiveInvoiceNum}</div>
+  <!-- Centered letterhead -->
+  <div class="letterhead">
+    <img src="${logoSrc}" alt="${profile.name}" class="lh-logo" />
+    <div class="lh-name">${fromName}</div>
+    ${profile.tagline ? `<div class="lh-tag">${profile.tagline}</div>` : ""}
+  </div>
+
+  <!-- Document type + number -->
+  <div class="doc-header">
+    <div class="doc-type">INVOICE</div>
+    <div class="doc-meta">
+      <div class="doc-num">${effectiveInvoiceNum}</div>
       <div><span class="status-badge badge-${badgeClass}">${badgeLabel}</span></div>
       ${invoice.trackingNumber ? `<div><div class="ref-pill"><span class="rl">Ref&nbsp;</span><span class="rv">${invoice.trackingNumber}</span></div></div>` : ""}
     </div>
   </div>
 
-  <hr class="divider"/>
-
+  <!-- From / Bill To -->
   <div class="info-grid">
     <div class="info-block">
       <h4>From</h4>
       <div class="biz-name">${fromName}</div>
       <div class="addr">${fromLine1}<br/>${fromLine2}</div>
-      ${fromPhone ? `<div class="contact-row" style="margin-top:6px">📞 ${fromPhone}</div>` : ""}
-      <div class="contact-row">🌐 ${BUSINESS.website}</div>
+      ${fromPhone ? `<div class="contact-row" style="margin-top:5px">${fromPhone}</div>` : ""}
     </div>
     <div class="info-block">
       <h4>Bill To</h4>
@@ -271,6 +271,7 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
     </div>
   </div>
 
+  <!-- Dates -->
   <div class="dates-row">
     <div class="date-chip">
       <div class="lbl">Issue Date</div>
@@ -280,6 +281,7 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
     ${invoice.paidAt ? `<div class="date-chip paid-chip"><div class="lbl">Paid On</div><div class="val">${formatDate(invoice.paidAt)}</div></div>` : ""}
   </div>
 
+  <!-- Line items -->
   <table>
     <thead>
       <tr>
@@ -294,6 +296,7 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
     <tbody>${lineItemsHTML}</tbody>
   </table>
 
+  <!-- Totals -->
   <div class="totals-section">
     <div class="totals-box">
       <div class="total-row"><span class="tl">Subtotal</span><span class="tv">${formatCurrency(invoice.subtotal)}</span></div>
@@ -307,20 +310,9 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
   ${paymentHTML}
   ${notesHTML}
 
+  <!-- Footer — address only, no marketing copy -->
   <div class="footer">
-    <div>
-      <div class="footer-logo">
-        <img src="${logoSrc}" alt="${profile.name}" class="footer-logo-badge" />
-        <div class="footer-co">${profile.name}</div>
-      </div>
-      <div class="footer-addr">
-        ${fromLine1} · ${fromLine2}${fromPhone ? `<br/>${fromPhone}` : ""}
-      </div>
-    </div>
-    <div class="footer-right">
-      <div class="footer-thanks">Thank you for your business!</div>
-      <div class="footer-terms">Payment due within 30 days of invoice date.</div>
-    </div>
+    <div class="footer-addr">${fromLine1} · ${fromLine2}${fromPhone ? ` · ${fromPhone}` : ""}</div>
   </div>
 
 </div></body></html>`;

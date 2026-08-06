@@ -4,7 +4,7 @@ import { logAudit } from "@/lib/auditLog";
 import { useRole } from "@/context/RoleContext";
 import Layout from "@/components/Layout";
 import Header from "@/components/Header";
-import { useListCustomers, useDeleteCustomer, getListCustomersQueryKey, useListInvoices } from "@workspace/api-client-react";
+import { useListCustomers, useDeleteCustomer, getListCustomersQueryKey, useListInvoices, useListSalesLeads } from "@workspace/api-client-react";
 import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, X, Phone, Mail, MapPin, Building2, AlertCircle, BarChart2, ChevronDown, ChevronUp, Gift } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend, CartesianGrid } from "recharts";
 import { formatCurrency } from "@/lib/utils";
@@ -30,9 +30,19 @@ type Customer = {
   billingAddress?: any; shippingAddress?: any; amountOwed?: number;
 };
 
-function CustomerViewModal({ customer, onClose, creditAvailable }: { customer: Customer; onClose: () => void; creditAvailable: number }) {
+function CustomerViewModal({ customer, onClose, creditAvailable, salesLeads }: { customer: Customer; onClose: () => void; creditAvailable: number; salesLeads: any[] }) {
   const phones: any[] = customer.phones ?? (customer.phone ? [{ label: "Mobile", number: customer.phone }] : []);
   const emails: any[] = customer.emails ?? (customer.email ? [{ label: "Work", email: customer.email }] : []);
+
+  // Find the matching sales lead by name
+  const matchedLead = useMemo(() => {
+    if (!customer.salesRep) return null;
+    const needle = customer.salesRep.trim().toLowerCase();
+    return salesLeads.find((l: any) => {
+      const full = `${l.firstName ?? ""} ${l.lastName ?? ""}`.trim().toLowerCase();
+      return full === needle;
+    }) ?? null;
+  }, [customer.salesRep, salesLeads]);
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: "rgba(15,23,42,0.45)", backdropFilter: "blur(8px)" }} onClick={onClose}>
@@ -129,8 +139,35 @@ function CustomerViewModal({ customer, onClose, creditAvailable }: { customer: C
           )}
           {customer.salesRep && (
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Sales Lead</p>
-              <p className="text-sm text-slate-700">{customer.salesRep}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                Sales Lead
+              </p>
+              {matchedLead ? (
+                <div className="flex items-center gap-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3">
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+                    style={{ background: "hsl(224 50% 20%)" }}>
+                    {customer.salesRep[0]?.toUpperCase()}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-indigo-900">{customer.salesRep}</p>
+                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
+                      {matchedLead.email && (
+                        <span className="text-[11px] text-indigo-600 flex items-center gap-1 truncate">
+                          <Mail size={9} />{matchedLead.email}
+                        </span>
+                      )}
+                      {matchedLead.mobile && (
+                        <span className="text-[11px] text-indigo-600 flex items-center gap-1">
+                          <Phone size={9} />{matchedLead.mobile}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-700">{customer.salesRep}</p>
+              )}
             </div>
           )}
           {customer.shippingAccountNumber && (
@@ -153,6 +190,8 @@ function CustomerViewModal({ customer, onClose, creditAvailable }: { customer: C
 
 export default function Customers() {
   const { data: customers, isLoading } = useListCustomers();
+  const { data: salesLeadsData } = useListSalesLeads();
+  const salesLeads: any[] = (salesLeadsData as any[]) ?? [];
   const { data: invoices } = useListInvoices();
   const { data: returnsData } = useQuery<any[]>({
     queryKey: ["returns-refunds"],
@@ -504,7 +543,7 @@ export default function Customers() {
       </div>
       {showModal && <CustomerModal onClose={() => setShowModal(false)} />}
       {editingCustomer && <CustomerModal customer={editingCustomer} onClose={() => setEditingCustomer(null)} />}
-      {viewingCustomer && <CustomerViewModal customer={viewingCustomer} onClose={() => setViewingCustomer(null)} creditAvailable={creditByCustomerId[viewingCustomer.id] ?? 0} />}
+      {viewingCustomer && <CustomerViewModal customer={viewingCustomer} onClose={() => setViewingCustomer(null)} creditAvailable={creditByCustomerId[viewingCustomer.id] ?? 0} salesLeads={salesLeads} />}
     </Layout>
   );
 }

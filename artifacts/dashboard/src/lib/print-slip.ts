@@ -69,44 +69,33 @@ export async function printShippingSlip(shipment: any, fromAddr?: CompanyAddress
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#111827;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:13px}
-  @media print{body{padding:0}@page{margin:22px 28px;size:letter}}
+  @media print{body{padding:0}@page{margin:28px 36px;size:letter}}
 </style>
 </head>
 <body>
-<div style="max-width:740px;margin:0 auto;padding:36px 44px;background:#fff">
+<div style="max-width:740px;margin:0 auto;padding:40px 48px;background:#fff">
 
-  <!-- ── Header ── -->
-  <table style="width:100%;border-collapse:collapse;margin-bottom:0">
-    <tr>
-      <!-- Left: logo + company -->
-      <td style="vertical-align:top;width:60%">
-        <div style="display:flex;align-items:center;gap:12px">
-          <img src="${logoSrc}" alt="${fromName}" style="width:48px;height:48px;object-fit:contain;border-radius:8px;background:#f1f5f9;padding:3px"/>
-          <div>
-            <div style="font-size:18px;font-weight:800;color:#0f172a;letter-spacing:-0.3px">${fromName}</div>
-            <div style="font-size:10px;color:#94a3b8;margin-top:2px;letter-spacing:0.5px;text-transform:uppercase">${companyProfile.tagline}</div>
-            <div style="font-size:11px;color:#64748b;margin-top:4px;line-height:1.6">${fromLine1}<br/>${fromLine2}</div>
-          </div>
-        </div>
-      </td>
-      <!-- Right: document heading -->
-      <td style="vertical-align:top;text-align:right">
-        <div style="font-size:26px;font-weight:900;color:#0f172a;letter-spacing:-0.5px;line-height:1">PACKING SLIP</div>
-        <div style="font-size:14px;font-weight:700;color:#3b82f6;margin-top:4px">${slipNum}</div>
-        <div style="font-size:11px;color:#94a3b8;margin-top:4px">${today}</div>
-        ${invNum ? `<div style="font-size:11px;color:#64748b;margin-top:3px">Invoice: <strong>${invNum}</strong></div>` : ""}
-        ${shipment.carrier ? `<div style="margin-top:8px;display:inline-block;padding:3px 12px;background:#dbeafe;color:#1d4ed8;font-size:10px;font-weight:700;border-radius:99px;border:1px solid #bfdbfe;letter-spacing:0.3px">${shipment.carrier}</div>` : ""}
-      </td>
-    </tr>
-  </table>
+  <!-- ── Centered letterhead ── -->
+  <div style="text-align:center;padding-bottom:20px;border-bottom:2px solid #0f172a;margin-bottom:24px">
+    <img src="${logoSrc}" alt="${fromName}" style="width:60px;height:60px;object-fit:contain;border-radius:12px;display:block;margin:0 auto 10px"/>
+    <div style="font-size:22px;font-weight:900;color:#0f172a;letter-spacing:-0.5px;line-height:1">${fromName}</div>
+    ${companyProfile.tagline ? `<div style="font-size:9px;color:#94a3b8;letter-spacing:3px;text-transform:uppercase;margin-top:4px">${companyProfile.tagline}</div>` : ""}
+  </div>
 
-  <!-- ── Rule ── -->
-  <div style="height:2px;background:#0f172a;margin:18px 0 20px"></div>
+  <!-- ── Doc header ── -->
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px">
+    <div style="font-size:32px;font-weight:900;color:#0f172a;letter-spacing:-1.5px">PACKING SLIP</div>
+    <div style="text-align:right">
+      <div style="font-size:13px;font-weight:700;color:#64748b;margin-bottom:4px;letter-spacing:0.5px">${slipNum}</div>
+      <div style="font-size:11px;color:#94a3b8">${today}</div>
+      ${invNum ? `<div style="font-size:11px;color:#64748b;margin-top:3px">Invoice: <strong>${invNum}</strong></div>` : ""}
+      ${shipment.carrier ? `<div style="margin-top:8px;display:inline-block;padding:3px 12px;background:#dbeafe;color:#1d4ed8;font-size:10px;font-weight:700;border-radius:99px;border:1px solid #bfdbfe">${shipment.carrier}</div>` : ""}
+    </div>
+  </div>
 
   <!-- ── Address blocks ── -->
   <table style="width:100%;border-collapse:collapse;margin-bottom:22px">
     <tr>
-      <!-- From -->
       <td style="width:48%;vertical-align:top;padding-right:12px">
         <div style="border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;background:#f8fafc">
           <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px;border-bottom:1px solid #e2e8f0;padding-bottom:6px">From</div>
@@ -114,7 +103,6 @@ export async function printShippingSlip(shipment: any, fromAddr?: CompanyAddress
           <div style="font-size:12px;color:#475569;line-height:1.7">${fromLine1}<br/>${fromLine2}</div>
         </div>
       </td>
-      <!-- Ship To -->
       <td style="width:52%;vertical-align:top;padding-left:12px">
         <div style="border:2px solid #0f172a;border-radius:8px;padding:14px 16px;background:#fff">
           <div style="font-size:9px;font-weight:700;color:#1d4ed8;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px;border-bottom:1px solid #e2e8f0;padding-bottom:6px">Ship To</div>
@@ -127,13 +115,12 @@ export async function printShippingSlip(shipment: any, fromAddr?: CompanyAddress
   </table>
 
   ${shipment.trackingNumber ? `
-  <!-- ── Tracking ── -->
   <div style="margin-bottom:20px;padding:12px 16px;background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:8px;display:flex;align-items:center;justify-content:space-between">
     <div style="font-size:10px;font-weight:700;color:#3b82f6;text-transform:uppercase;letter-spacing:1.5px">Tracking Number</div>
     <div style="font-size:15px;font-family:'Courier New',monospace;font-weight:800;color:#1d4ed8;letter-spacing:2.5px">${shipment.trackingNumber}</div>
   </div>` : ""}
 
-  <!-- ── Items table ── -->
+  <!-- ── Items ── -->
   <div style="margin-bottom:${shipment.notes ? "18px" : "28px"}">
     <div style="font-size:9.5px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px">Package Contents</div>
     <table style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
@@ -149,7 +136,6 @@ export async function printShippingSlip(shipment: any, fromAddr?: CompanyAddress
   </div>
 
   ${shipment.notes ? `
-  <!-- ── Notes ── -->
   <div style="margin-bottom:24px;padding:12px 16px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px">
     <div style="font-size:9.5px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Shipping Notes</div>
     <div style="font-size:12px;color:#78350f;line-height:1.6">${shipment.notes}</div>
@@ -173,16 +159,9 @@ export async function printShippingSlip(shipment: any, fromAddr?: CompanyAddress
     </tr>
   </table>
 
-  <!-- ── Footer ── -->
-  <div style="border-top:1px solid #e5e7eb;padding-top:14px;display:flex;justify-content:space-between;align-items:center">
-    <div style="display:flex;align-items:center;gap:8px">
-      <img src="${logoSrc}" alt="${fromName}" style="width:20px;height:20px;object-fit:contain;border-radius:4px;background:#f1f5f9;padding:2px"/>
-      <span style="font-size:11.5px;font-weight:700;color:#0f172a">${fromName}</span>
-      ${companyProfile.website ? `<span style="font-size:10.5px;color:#94a3b8">· ${companyProfile.website}</span>` : ""}
-    </div>
-    <div style="font-size:10px;color:#cbd5e1;text-align:right">
-      ${fromLine1} · ${fromLine2}
-    </div>
+  <!-- ── Footer — address only ── -->
+  <div style="border-top:1px solid #e5e7eb;padding-top:14px;text-align:center">
+    <div style="font-size:10px;color:#94a3b8">${fromLine1} · ${fromLine2}</div>
   </div>
 
 </div>

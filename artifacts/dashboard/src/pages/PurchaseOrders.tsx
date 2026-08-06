@@ -1759,38 +1759,124 @@ function PrintPODialog({ po, onClose }: PrintPODialogProps) {
     : null;
 
   const doPrint = () => {
-    const printContent = document.getElementById("po-print-document");
-    if (!printContent) return;
     const win = window.open("", "_blank", "width=900,height=700");
     if (!win) { alert("Please allow popups to print."); return; }
-    win.document.write(`<!DOCTYPE html><html><head><title>${poRef}</title><style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      body { font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #1e293b; padding: 40px; }
-      .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; padding-bottom: 20px; border-bottom: 2px solid #e2e8f0; }
-      .company-block h1 { font-size: 20px; font-weight: 700; color: #1e3a5f; margin-bottom: 4px; }
-      .company-block p { font-size: 10px; color: #64748b; }
-      .vendor-block { text-align: right; }
-      .vendor-block .label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #94a3b8; margin-bottom: 4px; }
-      .vendor-block p { font-size: 11px; color: #334155; }
-      .meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 28px; }
-      .meta-item .label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #94a3b8; margin-bottom: 4px; }
-      .meta-item .value { font-size: 13px; font-weight: 600; color: #1e293b; }
-      table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
-      thead tr { background: #1e3a5f; color: white; }
-      thead th { padding: 10px 12px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
-      thead th:last-child { text-align: right; }
-      thead th:nth-child(2), thead th:nth-child(3) { text-align: right; }
-      tbody tr { border-bottom: 1px solid #f1f5f9; }
-      tbody tr:nth-child(even) { background: #f8fafc; }
-      tbody td { padding: 9px 12px; font-size: 11px; color: #334155; }
-      tbody td:nth-child(2), tbody td:nth-child(3) { text-align: right; }
-      tbody td:last-child { text-align: right; font-weight: 600; }
-      .totals { margin-left: auto; width: 260px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; margin-bottom: 28px; }
-      .totals-row { display: flex; justify-content: space-between; padding: 8px 14px; font-size: 11px; border-bottom: 1px solid #f1f5f9; }
-      .totals-row:last-child { background: #1e3a5f; color: white; font-weight: 700; font-size: 13px; border-bottom: none; }
-      .footer { border-top: 1px solid #e2e8f0; padding-top: 14px; font-size: 10px; color: #64748b; }
-      @media print { body { padding: 20px; } @page { margin: 0.5in; } }
-    </style></head><body>${printContent.innerHTML}</body></html>`);
+    const fromName  = selectedAddr?.name  ?? profile.name;
+    const fromLine1 = selectedAddr?.line1 ?? profile.line1 ?? "";
+    const fromLine2 = selectedAddr
+      ? [selectedAddr.city, selectedAddr.state, selectedAddr.zip].filter(Boolean).join(", ")
+      : (profile.line2 ?? "");
+    const fromPhone = selectedAddr?.phone ?? null;
+    const logoSrc   = profile.logo ?? "/forez-logo.png";
+
+    const itemRowsHTML = lineItems.map((li, i) => {
+      const amt = li.quantity * li.unitPrice;
+      return `<tr style="background:${i % 2 === 0 ? "#fff" : "#f9fafb"}">
+        <td style="padding:10px 13px;font-size:13px;color:#111827;border-bottom:1px solid #f3f4f6;font-weight:500">${li.description || `Item ${i + 1}`}</td>
+        <td style="padding:10px 13px;font-size:13px;color:#374151;text-align:right;border-bottom:1px solid #f3f4f6">${li.quantity}</td>
+        <td style="padding:10px 13px;font-size:13px;color:#374151;text-align:right;border-bottom:1px solid #f3f4f6">${formatCurrency(li.unitPrice)}</td>
+        <td style="padding:10px 13px;font-size:13px;color:#111827;text-align:right;border-bottom:1px solid #f3f4f6;font-weight:600">${formatCurrency(amt)}</td>
+      </tr>`;
+    }).join("");
+
+    win.document.write(`<!DOCTYPE html>
+<html><head><title>${poRef}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,Arial,sans-serif;background:#fff;color:#111827;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .page{padding:40px 52px;max-width:860px;margin:0 auto}
+  .letterhead{text-align:center;padding-bottom:20px;border-bottom:2px solid #1e3a5f;margin-bottom:24px}
+  .lh-logo{width:60px;height:60px;border-radius:12px;object-fit:contain;display:block;margin:0 auto 10px}
+  .lh-name{font-size:22px;font-weight:900;letter-spacing:-0.5px;color:#1e3a5f;line-height:1}
+  .lh-tag{font-size:9px;color:#94a3b8;letter-spacing:3px;text-transform:uppercase;margin-top:4px}
+  .doc-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px}
+  .doc-type{font-size:32px;font-weight:900;letter-spacing:-1.5px;color:#1e3a5f}
+  .doc-meta{text-align:right}
+  .doc-num{font-size:13px;font-weight:700;color:#64748b;margin-bottom:4px;letter-spacing:0.5px}
+  .doc-date{font-size:11px;color:#94a3b8}
+  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-bottom:24px}
+  .info-block h4{font-size:9px;text-transform:uppercase;letter-spacing:2px;color:#94a3b8;margin-bottom:8px;font-weight:700}
+  .info-block .biz-name{font-size:14px;font-weight:700;color:#1e293b;margin-bottom:4px}
+  .info-block .addr{font-size:12px;color:#64748b;line-height:1.8}
+  .meta-row{display:flex;gap:14px;margin-bottom:28px}
+  .meta-chip{flex:1;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 15px}
+  .meta-chip .lbl{font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:#94a3b8;margin-bottom:4px;font-weight:700}
+  .meta-chip .val{font-size:13px;font-weight:600;color:#1e293b}
+  table{width:100%;border-collapse:collapse;margin-bottom:20px}
+  thead tr{background:#1e3a5f}
+  th{text-align:left;padding:10px 13px;font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#fff;font-weight:700}
+  th.right{text-align:right}
+  .totals-section{display:flex;justify-content:flex-end;margin-bottom:24px}
+  .totals-box{width:290px;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden}
+  .total-row{display:flex;justify-content:space-between;padding:9px 16px;font-size:12px;border-bottom:1px solid #f1f5f9;color:#64748b}
+  .total-row .tv{font-weight:600;color:#1e293b}
+  .grand-total{display:flex;justify-content:space-between;align-items:center;padding:13px 16px;background:#1e3a5f}
+  .grand-total .gl{font-size:13px;font-weight:700;color:#fff}
+  .grand-total .gv{font-size:18px;font-weight:900;color:#fff}
+  .notes{font-size:12px;color:#64748b;line-height:1.7;padding:14px 16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:20px}
+  .footer{margin-top:36px;padding-top:14px;border-top:1px solid #e2e8f0;text-align:center}
+  .footer-addr{font-size:10px;color:#94a3b8}
+  @media print{body{padding:0}@page{margin:28px 36px;size:A4}}
+</style></head>
+<body><div class="page">
+
+  <div class="letterhead">
+    <img src="${logoSrc}" alt="${fromName}" class="lh-logo" />
+    <div class="lh-name">${fromName}</div>
+    ${fromLine1 ? `<div class="lh-tag">${fromLine1}${fromLine2 ? ` · ${fromLine2}` : ""}</div>` : ""}
+  </div>
+
+  <div class="doc-header">
+    <div class="doc-type">PURCHASE ORDER</div>
+    <div class="doc-meta">
+      <div class="doc-num">${poRef}</div>
+      <div class="doc-date">${today}</div>
+    </div>
+  </div>
+
+  <div class="info-grid">
+    <div class="info-block">
+      <h4>From</h4>
+      <div class="biz-name">${fromName}</div>
+      <div class="addr">${fromLine1}${fromLine2 ? `<br/>${fromLine2}` : ""}${fromPhone ? `<br/>${fromPhone}` : ""}</div>
+    </div>
+    <div class="info-block">
+      <h4>Vendor</h4>
+      <div class="biz-name">${po.vendorName}</div>
+    </div>
+  </div>
+
+  <div class="meta-row">
+    <div class="meta-chip"><div class="lbl">PO Number</div><div class="val">${poRef}</div></div>
+    <div class="meta-chip"><div class="lbl">Date Issued</div><div class="val">${today}</div></div>
+    ${includePromiseDate && promiseDateStr ? `<div class="meta-chip"><div class="lbl">Promise Date</div><div class="val">${promiseDateStr}</div></div>` : ""}
+  </div>
+
+  <table>
+    <thead><tr>
+      <th>Description</th>
+      <th class="right">Qty</th>
+      <th class="right">Unit Price</th>
+      <th class="right">Amount</th>
+    </tr></thead>
+    <tbody>${itemRowsHTML}</tbody>
+  </table>
+
+  <div class="totals-section">
+    <div class="totals-box">
+      <div class="total-row"><span>Subtotal</span><span class="tv">${formatCurrency(subtotal)}</span></div>
+      ${taxTotal > 0 ? `<div class="total-row"><span>Tax</span><span class="tv">${formatCurrency(taxTotal)}</span></div>` : ""}
+      <div class="grand-total"><span class="gl">Total</span><span class="gv">${formatCurrency(total)}</span></div>
+    </div>
+  </div>
+
+  ${po.notes ? `<div class="notes"><strong>Notes:</strong> ${po.notes}</div>` : ""}
+
+  <div class="footer">
+    <div class="footer-addr">${fromLine1}${fromLine2 ? ` · ${fromLine2}` : ""}${fromPhone ? ` · ${fromPhone}` : ""}</div>
+  </div>
+
+</div></body></html>`);
     win.document.close();
     win.focus();
     setTimeout(() => { win.print(); }, 400);
@@ -1905,81 +1991,6 @@ function PrintPODialog({ po, onClose }: PrintPODialogProps) {
       </div>
       )}
 
-      {/* Hidden print document — rendered off-screen */}
-      <div id="po-print-document" style={{ display: "none" }}>
-        <div className="header">
-          <div className="company-block">
-            <h1>{selectedAddr?.name ?? profile.name}</h1>
-            {selectedAddr ? (
-              <>
-                <p>{selectedAddr.line1}{selectedAddr.line2 ? `, ${selectedAddr.line2}` : ""}</p>
-                <p>{[selectedAddr.city, selectedAddr.state, selectedAddr.zip].filter(Boolean).join(", ")}</p>
-                {selectedAddr.phone && <p>{selectedAddr.phone}</p>}
-              </>
-            ) : (
-              <>
-                {profile.line1 && <p>{profile.line1}</p>}
-                {profile.line2 && <p>{profile.line2}</p>}
-              </>
-            )}
-            <p>Purchase Order</p>
-          </div>
-          <div className="vendor-block">
-            <p className="label">Vendor</p>
-            <p style={{ fontWeight: 600, fontSize: 13 }}>{po.vendorName}</p>
-          </div>
-        </div>
-
-        <div className="meta">
-          <div className="meta-item">
-            <div className="label">PO Number</div>
-            <div className="value">{poRef}</div>
-          </div>
-          <div className="meta-item">
-            <div className="label">Date Issued</div>
-            <div className="value">{today}</div>
-          </div>
-          {includePromiseDate && promiseDateStr && (
-            <div className="meta-item">
-              <div className="label">Promise Date</div>
-              <div className="value">{promiseDateStr}</div>
-            </div>
-          )}
-        </div>
-
-        <table>
-          <thead>
-            <tr>
-              <th>Description</th>
-              <th>Qty</th>
-              <th>Unit Price</th>
-              <th>Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {lineItems.map((li, i) => (
-              <tr key={i}>
-                <td>{li.description || `Item ${i + 1}`}</td>
-                <td style={{ textAlign: "right" }}>{li.quantity}</td>
-                <td style={{ textAlign: "right" }}>{formatCurrency(li.unitPrice)}</td>
-                <td style={{ textAlign: "right" }}>{formatCurrency(li.quantity * li.unitPrice)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        <div className="totals">
-          <div className="totals-row"><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
-          {taxTotal > 0 && <div className="totals-row"><span>Tax</span><span>{formatCurrency(taxTotal)}</span></div>}
-          <div className="totals-row"><span>Total</span><span>{formatCurrency(total)}</span></div>
-        </div>
-
-        {po.notes && (
-          <div className="footer">
-            <strong>Notes:</strong> {po.notes}
-          </div>
-        )}
-      </div>
     </div>
   );
 }

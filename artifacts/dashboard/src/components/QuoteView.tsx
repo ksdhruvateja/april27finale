@@ -152,126 +152,134 @@ export default function QuoteView({ quote, onClose, onDecline, onStatusChange }:
 
     const w = window.open("", "_blank", "width=900,height=700");
     if (!w) return;
-    w.document.write(`
-      <html><head><title>${quoteNum} — ${profile.name}</title>
-      <style>
-        *{box-sizing:border-box;margin:0;padding:0}
-        body{font-family:'Segoe UI',sans-serif;background:#fff;color:#111;padding:48px}
-        .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:36px}
-        .logo-block{display:flex;align-items:center;gap:12px}
-        .logo-img{width:42px;height:42px;border-radius:8px;object-fit:contain}
-        .company-name{font-size:20px;font-weight:800;letter-spacing:-0.5px;color:#111}
-        .company-sub{font-size:10px;color:#888;letter-spacing:2px;text-transform:uppercase;margin-top:2px}
-        .company-addr{font-size:11px;color:#666;line-height:1.6;margin-top:6px}
-        h1{font-size:30px;font-weight:900;letter-spacing:-1px;color:#000}
-        .badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:99px;font-size:12px;font-weight:700;margin-top:6px}
-        .badge-accepted{background:#d4f400;color:#000}
-        .badge-sent{background:#dbeafe;color:#1e40af}
-        .badge-declined{background:#fee2e2;color:#dc2626}
-        .badge-draft{background:#f5f5f5;color:#555}
-        .meta{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;margin:28px 0}
-        .meta-block h4{font-size:10px;text-transform:uppercase;letter-spacing:2px;color:#888;margin-bottom:6px}
-        .meta-block p{font-size:13px;color:#111;line-height:1.6}
-        .meta-block p strong{font-weight:700}
-        hr{border:none;border-top:1px solid #e0e0e0;margin:24px 0}
-        table{width:100%;border-collapse:collapse;margin-bottom:24px}
-        thead tr{background:#f5f5f5}
-        th{text-align:left;padding:10px 12px;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:#555;border-bottom:2px solid #e0e0e0}
-        td{padding:12px;font-size:14px;border-bottom:1px solid #f0f0f0;vertical-align:top}
-        td.right{text-align:right}
-        .item-name{font-size:14px;font-weight:600;color:#111;white-space:pre-wrap}
-        .item-desc{font-size:12px;color:#888;margin-top:2px;line-height:1.4}
-        .totals{display:flex;justify-content:flex-end}
-        .totals-table{width:280px}
-        .totals-row{display:flex;justify-content:space-between;padding:6px 0;font-size:13px;border-bottom:1px solid #f0f0f0}
-        .totals-total{display:flex;justify-content:space-between;padding:10px 0 0;font-size:18px;font-weight:800;color:#000;border-top:2px solid #000;margin-top:4px}
-        .notes{font-size:12px;color:#666;line-height:1.6;margin-top:20px;padding:16px;background:#f9f9f9;border-radius:6px}
-        .footer{margin-top:48px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid #e0e0e0;padding-top:16px}
-        .footer-logo{display:flex;align-items:center;gap:8px}
-        .footer-logo-img{width:22px;height:22px;border-radius:4px;object-fit:contain}
-        .footer-co{font-size:12px;font-weight:700;color:#333}
-        .footer-right{font-size:10px;color:#aaa;text-align:right}
-        @media print{body{padding:0} @page{margin:40px}}
-      </style></head><body>
-      <div class="header">
-        <div>
-          <div class="logo-block">
-            <img src="${logoSrc}" alt="${profile.name}" class="logo-img" />
-            <div>
-              <div class="company-name">${profile.name}</div>
-              <div class="company-sub">${profile.tagline}</div>
-            </div>
-          </div>
-          <div class="company-addr">
-            ${fromLine1}, ${fromLine2}${fromPhone ? `<br/>${fromPhone}` : ""}
-          </div>
-        </div>
-        <div style="text-align:right">
-          <h1>${quoteNum}</h1>
-          <span class="badge badge-${quote.status}">${status.label}</span>
-          <div style="margin-top:12px;font-size:11px;color:#888">
-            <div><strong>Issued:</strong> ${formatDate(quote.createdAt)}</div>
-            ${quote.expiresAt ? `<div style="margin-top:4px"><strong>Expires:</strong> ${formatDate(quote.expiresAt)}</div>` : ""}
-          </div>
-        </div>
-      </div>
-      <hr/>
-      <div class="meta">
-        <div class="meta-block">
-          <h4>Prepared By</h4>
-          <p><strong>${fromName}</strong><br/>${fromLine1}<br/>${fromLine2}${fromPhone ? `<br/>${fromPhone}` : ""}</p>
-        </div>
-        <div class="meta-block">
-          <h4>Prepared For</h4>
-          <p><strong>${quote.customerName}</strong>${customerAddrLine ? `<br/>${customerAddrLine.replace(/\n/g, "<br/>")}` : ""}</p>
-        </div>
-        <div class="meta-block" style="text-align:right"></div>
-      </div>
-      <hr/>
-      <table>
-        <thead><tr>
-          <th>Description</th>
-          <th style="text-align:right">Qty</th>
-          <th style="text-align:right">Unit Price</th>
-          ${hasLineDiscounts ? `<th style="text-align:right">Discount</th>` : ""}
-          <th style="text-align:right">Amount</th>
-        </tr></thead>
-        <tbody>${lineItems.map(item => {
-          const gross = item.quantity * item.unitPrice;
-          const disc = gross * (item.discountPercent / 100);
-          const amount = gross - disc;
-          return `<tr>
-            <td>
-              <div class="item-name">${item.description ? nl2br(item.description) : "—"}</div>
-              ${item.lineDescription ? `<div class="item-desc">${nl2br(item.lineDescription)}</div>` : ""}
-            </td>
-            <td class="right">${item.quantity}</td>
-            <td class="right">${formatCurrency(item.unitPrice)}</td>
-            ${hasLineDiscounts ? `<td class="right">${item.discountPercent > 0 ? item.discountPercent + "%" : "—"}</td>` : ""}
-            <td class="right" style="font-weight:600">${formatCurrency(amount)}</td>
-          </tr>`;
-        }).join("")}</tbody>
-      </table>
-      <div class="totals">
-        <div class="totals-table">
-          <div class="totals-row"><span>Subtotal</span><span>${formatCurrency(quote.subtotal)}</span></div>
-          ${quote.discountTotal > 0 ? `<div class="totals-row"><span>Discount</span><span style="color:#dc2626">-${formatCurrency(quote.discountTotal)}</span></div>` : ""}
-          ${quote.taxTotal > 0 ? `<div class="totals-row"><span>Tax</span><span>${formatCurrency(quote.taxTotal)}</span></div>` : ""}
-          <div class="totals-total"><span>Total</span><span>${formatCurrency(quote.total)}</span></div>
-        </div>
-      </div>
-      ${quote.notes ? `<div class="notes"><strong>Notes:</strong> ${quote.notes}</div>` : ""}
-      <div class="footer">
-        <div class="footer-logo">
-          <img src="${logoSrc}" alt="${profile.name}" class="footer-logo-img" />
-          <div class="footer-co">${profile.name}</div>
-        </div>
-        <div class="footer-right">
-          ${quote.expiresAt ? `Quote valid until ${formatDate(quote.expiresAt)}` : "Thank you for your business"}<br/>
-          ${profile.website}
-        </div>
-      </div>
-      </body></html>
+    w.document.write(`<!DOCTYPE html>
+<html><head><title>${quoteNum} — ${profile.name}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,Arial,sans-serif;background:#fff;color:#111827;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .page{padding:40px 52px;max-width:860px;margin:0 auto}
+  .letterhead{text-align:center;padding-bottom:20px;border-bottom:2px solid #111827;margin-bottom:24px}
+  .lh-logo{width:60px;height:60px;border-radius:12px;object-fit:contain;display:block;margin:0 auto 10px}
+  .lh-name{font-size:22px;font-weight:900;letter-spacing:-0.5px;color:#111827;line-height:1}
+  .lh-tag{font-size:9px;color:#9ca3af;letter-spacing:3px;text-transform:uppercase;margin-top:4px}
+  .doc-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px}
+  .doc-type{font-size:32px;font-weight:900;letter-spacing:-1.5px;color:#111827}
+  .doc-meta{text-align:right}
+  .doc-num{font-size:13px;font-weight:700;color:#6b7280;margin-bottom:6px;letter-spacing:0.5px}
+  .badge{display:inline-block;padding:4px 14px;border-radius:99px;font-size:11px;font-weight:700;letter-spacing:0.5px}
+  .badge-accepted{background:#d4f400;color:#111}
+  .badge-sent{background:#dbeafe;color:#1e40af}
+  .badge-declined{background:#fee2e2;color:#dc2626}
+  .badge-draft{background:#f3f4f6;color:#6b7280}
+  .badge-expired{background:#fee2e2;color:#dc2626}
+  .badge-invoiced{background:#ede9fe;color:#6d28d9}
+  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-bottom:24px}
+  .info-block h4{font-size:9px;text-transform:uppercase;letter-spacing:2px;color:#9ca3af;margin-bottom:8px;font-weight:700}
+  .info-block .biz-name{font-size:14px;font-weight:700;color:#111827;margin-bottom:4px}
+  .info-block .addr{font-size:12px;color:#6b7280;line-height:1.8}
+  .dates-row{display:flex;gap:14px;margin-bottom:28px}
+  .date-chip{flex:1;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:12px 15px}
+  .date-chip .lbl{font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:#9ca3af;margin-bottom:4px;font-weight:700}
+  .date-chip .val{font-size:13px;font-weight:600;color:#111827}
+  table{width:100%;border-collapse:collapse;margin-bottom:20px}
+  thead tr{background:#f9fafb;border-bottom:2px solid #e5e7eb}
+  th{text-align:left;padding:9px 13px;font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#9ca3af;font-weight:700}
+  th.right{text-align:right}
+  td{padding:11px 13px;font-size:13px;border-bottom:1px solid #f3f4f6;vertical-align:top;color:#374151}
+  td.right{text-align:right}
+  .item-name{font-weight:600;font-size:13px;color:#111827;margin-bottom:2px;white-space:pre-wrap}
+  .item-desc{font-size:11px;color:#9ca3af;margin-top:2px;line-height:1.4}
+  .totals-section{display:flex;justify-content:flex-end;margin-bottom:24px}
+  .totals-box{width:290px;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden}
+  .total-row{display:flex;justify-content:space-between;padding:9px 16px;font-size:12px;border-bottom:1px solid #f3f4f6;color:#6b7280}
+  .total-row .tv{font-weight:600;color:#111827}
+  .total-row.discount .tv{color:#dc2626}
+  .grand-total{display:flex;justify-content:space-between;align-items:center;padding:13px 16px;background:#111827}
+  .grand-total .gl{font-size:13px;font-weight:700;color:#fff}
+  .grand-total .gv{font-size:18px;font-weight:900;color:#d4f400}
+  .notes{font-size:12px;color:#6b7280;line-height:1.7;margin-top:16px;padding:14px 16px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px}
+  .footer{margin-top:36px;padding-top:14px;border-top:1px solid #e5e7eb;text-align:center}
+  .footer-addr{font-size:10px;color:#9ca3af}
+  @media print{body{padding:0}@page{margin:28px 36px;size:A4}}
+</style></head><body>
+<div class="page">
+
+  <div class="letterhead">
+    <img src="${logoSrc}" alt="${fromName}" class="lh-logo" />
+    <div class="lh-name">${fromName}</div>
+    ${profile.tagline ? `<div class="lh-tag">${profile.tagline}</div>` : ""}
+  </div>
+
+  <div class="doc-header">
+    <div class="doc-type">QUOTE</div>
+    <div class="doc-meta">
+      <div class="doc-num">${quoteNum}</div>
+      <div><span class="badge badge-${quote.status}">${status.label}</span></div>
+    </div>
+  </div>
+
+  <div class="info-grid">
+    <div class="info-block">
+      <h4>Prepared By</h4>
+      <div class="biz-name">${fromName}</div>
+      <div class="addr">${fromLine1}<br/>${fromLine2}${fromPhone ? `<br/>${fromPhone}` : ""}</div>
+    </div>
+    <div class="info-block">
+      <h4>Prepared For</h4>
+      <div class="biz-name">${quote.customerName}</div>
+      ${customerAddrLine ? `<div class="addr">${customerAddrLine.replace(/\n/g, "<br/>")}</div>` : ""}
+    </div>
+  </div>
+
+  <div class="dates-row">
+    <div class="date-chip">
+      <div class="lbl">Issue Date</div>
+      <div class="val">${formatDate(quote.createdAt)}</div>
+    </div>
+    ${quote.expiresAt ? `<div class="date-chip"><div class="lbl">Expires</div><div class="val">${formatDate(quote.expiresAt)}</div></div>` : ""}
+  </div>
+
+  <table>
+    <thead><tr>
+      <th>Description</th>
+      <th class="right">Qty</th>
+      <th class="right">Unit Price</th>
+      ${hasLineDiscounts ? `<th class="right">Discount</th>` : ""}
+      <th class="right">Amount</th>
+    </tr></thead>
+    <tbody>${lineItems.map(item => {
+      const gross = item.quantity * item.unitPrice;
+      const disc = gross * (item.discountPercent / 100);
+      const amount = gross - disc;
+      return `<tr>
+        <td>
+          <div class="item-name">${item.description ? nl2br(item.description) : "—"}</div>
+          ${item.lineDescription ? `<div class="item-desc">${nl2br(item.lineDescription)}</div>` : ""}
+        </td>
+        <td class="right">${item.quantity}</td>
+        <td class="right">${formatCurrency(item.unitPrice)}</td>
+        ${hasLineDiscounts ? `<td class="right">${item.discountPercent > 0 ? item.discountPercent + "%" : "—"}</td>` : ""}
+        <td class="right" style="font-weight:600">${formatCurrency(amount)}</td>
+      </tr>`;
+    }).join("")}</tbody>
+  </table>
+
+  <div class="totals-section">
+    <div class="totals-box">
+      <div class="total-row"><span>Subtotal</span><span class="tv">${formatCurrency(quote.subtotal)}</span></div>
+      ${quote.discountTotal > 0 ? `<div class="total-row discount"><span>Discount</span><span class="tv">−${formatCurrency(quote.discountTotal)}</span></div>` : ""}
+      ${quote.taxTotal > 0 ? `<div class="total-row"><span>Tax</span><span class="tv">${formatCurrency(quote.taxTotal)}</span></div>` : ""}
+      <div class="grand-total"><span class="gl">Total</span><span class="gv">${formatCurrency(quote.total)}</span></div>
+    </div>
+  </div>
+
+  ${quote.notes ? `<div class="notes"><strong>Notes:</strong> ${quote.notes}</div>` : ""}
+
+  <div class="footer">
+    <div class="footer-addr">${fromLine1} · ${fromLine2}${fromPhone ? ` · ${fromPhone}` : ""}</div>
+  </div>
+
+</div></body></html>
     `);
     w.document.close();
     w.focus();

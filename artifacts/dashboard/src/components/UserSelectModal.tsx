@@ -175,10 +175,6 @@ export default function UserSelectModal() {
           </button>
         </form>
 
-        {/* Default credentials hint */}
-        <p className="text-center text-[11px] font-semibold mt-5 text-slate-500">
-          Default: developer@gmail.com · developer143
-        </p>
       </div>
     </div>
   );

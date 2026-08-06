@@ -131,8 +131,7 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
   const isEdit = !!customer;
   const [apiError, setApiError] = useState<string | null>(null);
   const [netTerms, setNetTerms] = useState<NetTerm[]>(DEFAULT_NET_TERMS);
-  const nameInputRef = useRef<HTMLInputElement>(null);
-  const suggestionsRef = useRef<HTMLDivElement>(null);
+  const leadPickerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch("/api/app-settings/net_terms")
@@ -147,30 +146,22 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
   const { data: salesLeads = [] } = useListSalesLeads({ query: { refetchOnMount: true, staleTime: 0 } });
   const { data: allCustomers = [] } = useListCustomers();
 
-  // Build autocomplete list from salesRep values already saved on existing customers
-  const allRepNames = useMemo(() =>
-    Array.from(new Set(
-      (allCustomers as any[]).map((c: any) => c.salesRep).filter(Boolean)
-    )).sort()
-  , [allCustomers]);
+  // allCustomers kept for future use; filteredLeads drives the Sales Lead picker
 
-  // ── Sales Leads panel state ───────────────────────────────────────────────
+
+  // ── Sales Lead picker state ───────────────────────────────────────────────
   const [showLeadsPanel, setShowLeadsPanel] = useState(false);
   const [leadsSearch, setLeadsSearch] = useState("");
   const [showAddLeadForm, setShowAddLeadForm] = useState(false);
   const [addLeadForm, setAddLeadForm] = useState({ firstName: "", lastName: "", email: "", mobile: "" });
   const [addLeadError, setAddLeadError] = useState<string | null>(null);
 
-  // ── Name suggestion dropdown ──────────────────────────────────────────────
-  const [nameSugOpen, setNameSugOpen] = useState(false);
-
-  // Close suggestion on outside click
+  // Close lead picker on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (
-        nameInputRef.current && !nameInputRef.current.contains(e.target as Node) &&
-        suggestionsRef.current && !suggestionsRef.current.contains(e.target as Node)
-      ) setNameSugOpen(false);
+      if (leadPickerRef.current && !leadPickerRef.current.contains(e.target as Node)) {
+        setShowLeadsPanel(false);
+      }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -224,31 +215,22 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
     );
   }, [salesLeads]);
 
-  // Must be after form state ─────────────────────────────────────────────────
-  const nameSuggestions = useMemo(() => {
-    const q = form.name.trim().toLowerCase();
-    if (!q) return [];
+  // Filtered leads for the Sales Lead picker dropdown
+  const filteredLeads = useMemo(() => {
+    const q = leadsSearch.toLowerCase();
+    if (!q) return uniqueLeads;
     return uniqueLeads.filter((l: any) => {
       const full = `${l.firstName ?? ""} ${l.lastName ?? ""}`.toLowerCase();
-      return full.includes(q);
-    }).slice(0, 8);
-  }, [uniqueLeads, form.name]);
+      return full.includes(q) || (l.email ?? "").toLowerCase().includes(q) || (l.mobile ?? "").includes(q);
+    });
+  }, [uniqueLeads, leadsSearch]);
 
-  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const name = e.target.value;
-    setNameSugOpen(name.trim().length > 0);
-    setForm(f => ({ ...f, name }));
-  };
-
-  /** Fill the form from a selected sales lead */
+  /** Select a sales lead — stores their name in salesRep */
   const selectLead = (lead: any) => {
     const fullName = `${lead.firstName ?? ""} ${lead.lastName ?? ""}`.trim();
-    setForm(f => ({ ...f, name: fullName }));
-    if (lead.email && emails[0]?.email === "")
-      setEmails(prev => [{ label: "Work", email: lead.email }, ...prev.slice(1)]);
-    if (lead.mobile && phones[0]?.number === "")
-      setPhones(prev => [{ label: "Mobile", number: lead.mobile }, ...prev.slice(1)]);
-    setNameSugOpen(false);
+    setForm(f => ({ ...f, salesRep: fullName }));
+    setShowLeadsPanel(false);
+    setLeadsSearch("");
   };
 
   /** Inline add-lead form submission */
@@ -347,120 +329,77 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
 
           {/* Basic Info */}
           <div className="grid grid-cols-2 gap-3">
-            {/* Name field + sliding suggestions */}
-            <LightFormField label="Full Name" required>
-              <div className="relative">
-                <input
-                  ref={nameInputRef}
-                  required
-                  autoFocus
-                  placeholder="e.g. John Smith"
-                  value={form.name}
-                  onChange={handleNameChange}
-                  onFocus={() => { if (form.name.trim()) setNameSugOpen(true); }}
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[hsl(224_50%_40%)] transition-colors"
-                />
-                {/* Slide-down suggestions */}
-                {nameSugOpen && nameSuggestions.length > 0 && (
-                  <div
-                    ref={suggestionsRef}
-                    className="absolute left-0 right-0 top-full mt-1 z-50 rounded-xl overflow-hidden shadow-lg border border-[hsl(224_50%_25%)] animate-in slide-in-from-top-1 duration-150"
-                    style={{ background: "hsl(224 50% 15%)" }}
-                  >
-                    <div className="px-3 py-1.5 flex items-center gap-1.5 border-b border-white/10">
-                      <Users size={10} className="text-white/50" />
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-white/50">Sales Leads</span>
-                    </div>
-                    {nameSuggestions.map((lead: any) => {
-                      const full = `${lead.firstName ?? ""} ${lead.lastName ?? ""}`.trim();
-                      return (
-                        <button
-                          key={lead.id}
-                          type="button"
-                          onMouseDown={e => { e.preventDefault(); selectLead(lead); }}
-                          className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/10 transition-colors text-left"
-                        >
-                          <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                            {full[0]?.toUpperCase() ?? "?"}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-semibold text-white truncate">{full}</p>
-                            {(lead.email || lead.mobile) && (
-                              <p className="text-[11px] text-white/60 truncate">
-                                {lead.email ?? lead.mobile}
-                              </p>
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })}
-                    <button
-                      type="button"
-                      onMouseDown={e => { e.preventDefault(); setNameSugOpen(false); setShowLeadsPanel(true); setShowAddLeadForm(true); setAddLeadForm(f => ({ ...f, firstName: form.name.split(" ")[0] ?? "", lastName: form.name.split(" ").slice(1).join(" ") ?? "" })); }}
-                      className="w-full flex items-center gap-2 px-3 py-2.5 border-t border-white/10 hover:bg-white/10 transition-colors text-left"
-                    >
-                      <UserPlus size={13} className="text-white/70 flex-shrink-0" />
-                      <span className="text-sm font-medium text-white/80">Add as new sales lead…</span>
-                    </button>
-                  </div>
-                )}
-              </div>
+            <LightFormField label="Customer Name" required>
+              <LightFormInput
+                required
+                autoFocus
+                placeholder="e.g. John Smith"
+                value={form.name}
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              />
             </LightFormField>
             <LightFormField label="Company">
               <LightFormInput placeholder="e.g. Acme Corp" value={form.company} onChange={set("company")} />
             </LightFormField>
           </div>
 
-          {/* ── Sales Leads Panel ─────────────────────────────────────────── */}
-          <div className="rounded-xl border border-slate-200 overflow-hidden">
-            {/* Header toggle */}
-            <button
-              type="button"
-              onClick={() => setShowLeadsPanel(v => !v)}
-              className="w-full flex items-center justify-between px-4 py-3 text-left transition-colors hover:bg-slate-50"
-              style={{ background: showLeadsPanel ? "hsl(224 50% 15%)" : undefined }}
-            >
-              <div className="flex items-center gap-2">
-                <Users size={14} className={showLeadsPanel ? "text-white/80" : "text-slate-500"} />
-                <span className={`text-sm font-semibold ${showLeadsPanel ? "text-white" : "text-slate-700"}`}>
-                  Sales Leads
-                </span>
-                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${showLeadsPanel ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"}`}>
-                  {uniqueLeads.length}
-                </span>
-              </div>
-              {showLeadsPanel
-                ? <ChevronUp size={14} className="text-white/70" />
-                : <ChevronDown size={14} className="text-slate-400" />}
-            </button>
-
-            {showLeadsPanel && (
-              <div className="flex flex-col">
-                {/* Search */}
-                <div className="px-3 py-2.5 border-b border-slate-100">
-                  <div className="relative">
-                    <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
-                      type="text"
-                      placeholder="Search leads…"
-                      value={leadsSearch}
-                      onChange={e => setLeadsSearch(e.target.value)}
-                      className="w-full pl-7 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-400 transition-colors"
-                    />
-                  </div>
+          {/* ── Sales Lead picker ─────────────────────────────────────────── */}
+          <LightFormField label="Sales Lead">
+            <div className="relative" ref={leadPickerRef}>
+              {/* Trigger */}
+              <button
+                type="button"
+                onClick={() => { setShowLeadsPanel(v => !v); setShowAddLeadForm(false); }}
+                className="w-full flex items-center justify-between px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white hover:border-slate-300 focus:outline-none focus:border-[hsl(224_50%_40%)] transition-colors"
+              >
+                {form.salesRep ? (
+                  <span className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 text-[10px] font-bold flex-shrink-0">
+                      {form.salesRep[0]?.toUpperCase()}
+                    </div>
+                    <span className="font-medium text-slate-800">{form.salesRep}</span>
+                  </span>
+                ) : (
+                  <span className="text-slate-400">Select or add a sales lead…</span>
+                )}
+                <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                  {form.salesRep && (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={e => { e.stopPropagation(); setForm(f => ({ ...f, salesRep: "" })); }}
+                      className="p-0.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      <X size={12} />
+                    </span>
+                  )}
+                  <ChevronDown size={13} className="text-slate-400" />
                 </div>
+              </button>
 
-                {/* Lead list */}
-                <div className="max-h-44 overflow-y-auto divide-y divide-slate-50">
-                  {uniqueLeads
-                    .filter((l: any) => {
-                      const q = leadsSearch.toLowerCase();
-                      const full = `${l.firstName ?? ""} ${l.lastName ?? ""}`.toLowerCase();
-                      return !q || full.includes(q) || (l.email ?? "").toLowerCase().includes(q) || (l.mobile ?? "").includes(q);
-                    })
-                    .map((lead: any) => {
+              {/* Dropdown */}
+              {showLeadsPanel && (
+                <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-xl overflow-hidden shadow-xl border border-slate-200 bg-white">
+                  {/* Search */}
+                  <div className="px-3 py-2.5 border-b border-slate-100">
+                    <div className="relative">
+                      <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Search leads…"
+                        value={leadsSearch}
+                        autoFocus
+                        onChange={e => setLeadsSearch(e.target.value)}
+                        className="w-full pl-7 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-400 transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Lead list */}
+                  <div className="max-h-48 overflow-y-auto divide-y divide-slate-50">
+                    {filteredLeads.map((lead: any) => {
                       const full = `${lead.firstName ?? ""} ${lead.lastName ?? ""}`.trim();
-                      const isSelected = form.name.trim().toLowerCase() === full.toLowerCase();
+                      const isSelected = form.salesRep === full;
                       return (
                         <button
                           key={lead.id}
@@ -469,7 +408,7 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
                           className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${isSelected ? "bg-indigo-50" : "hover:bg-slate-50"}`}
                         >
                           <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 text-white"
-                            style={{ background: "hsl(224 50% 15%)" }}>
+                            style={{ background: "hsl(224 50% 20%)" }}>
                             {full[0]?.toUpperCase() ?? "?"}
                           </div>
                           <div className="min-w-0 flex-1">
@@ -479,90 +418,94 @@ export default function CustomerModal({ onClose, customer, onCreated }: Props) {
                               {lead.mobile && <span className="text-[11px] text-slate-400 flex items-center gap-1"><Phone size={9} />{lead.mobile}</span>}
                             </div>
                           </div>
-                          {isSelected && <span className="text-[10px] font-semibold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full flex-shrink-0">Selected</span>}
+                          {isSelected && <span className="text-[10px] font-semibold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full flex-shrink-0">✓ Selected</span>}
                         </button>
                       );
                     })}
-                  {(salesLeads as any[]).length === 0 && (
-                    <p className="px-4 py-5 text-center text-xs text-slate-400">No sales leads yet. Add one below.</p>
-                  )}
-                </div>
-
-                {/* Add New Lead button / inline form */}
-                {!showAddLeadForm ? (
-                  <div className="px-3 py-2.5 border-t border-slate-100">
-                    <button
-                      type="button"
-                      onClick={() => setShowAddLeadForm(true)}
-                      className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border-2 border-dashed border-indigo-200 text-indigo-600 text-xs font-semibold hover:bg-indigo-50 hover:border-indigo-400 transition-all"
-                    >
-                      <UserPlus size={13} /> Add New Sales Lead
-                    </button>
+                    {uniqueLeads.length === 0 && (
+                      <p className="px-4 py-4 text-center text-xs text-slate-400">No sales leads yet — add one below.</p>
+                    )}
+                    {uniqueLeads.length > 0 && filteredLeads.length === 0 && (
+                      <p className="px-4 py-4 text-center text-xs text-slate-400">No leads match your search.</p>
+                    )}
                   </div>
-                ) : (
-                  <div className="px-4 py-3 border-t border-slate-100 flex flex-col gap-3"
-                    style={{ background: "hsl(224 50% 97%)" }}>
-                    <div className="flex items-center justify-between mb-0.5">
-                      <p className="text-xs font-semibold text-[hsl(224_50%_25%)] flex items-center gap-1.5">
-                        <UserPlus size={12} /> New Sales Lead
-                      </p>
-                      <button type="button" onClick={() => { setShowAddLeadForm(false); setAddLeadError(null); setAddLeadForm({ firstName: "", lastName: "", email: "", mobile: "" }); }}
-                        className="p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-white transition-colors">
-                        <X size={13} />
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1 block">First Name *</label>
-                        <input required value={addLeadForm.firstName}
-                          onChange={e => setAddLeadForm(f => ({ ...f, firstName: e.target.value }))}
-                          placeholder="Jane"
-                          className="w-full px-2.5 py-1.5 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-400 transition-colors" />
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1 block">Last Name *</label>
-                        <input required value={addLeadForm.lastName}
-                          onChange={e => setAddLeadForm(f => ({ ...f, lastName: e.target.value }))}
-                          placeholder="Doe"
-                          className="w-full px-2.5 py-1.5 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-400 transition-colors" />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1 block">Email</label>
-                        <input type="email" value={addLeadForm.email}
-                          onChange={e => setAddLeadForm(f => ({ ...f, email: e.target.value }))}
-                          placeholder="jane@example.com"
-                          className="w-full px-2.5 py-1.5 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-400 transition-colors" />
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1 block">Mobile</label>
-                        <input type="tel" value={addLeadForm.mobile}
-                          onChange={e => setAddLeadForm(f => ({ ...f, mobile: e.target.value }))}
-                          placeholder="+1 555-000-1234"
-                          className="w-full px-2.5 py-1.5 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-400 transition-colors" />
-                      </div>
-                    </div>
-                    {addLeadError && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-2.5 py-1.5">{addLeadError}</p>}
-                    <div className="flex gap-2">
-                      <button type="button" onClick={() => { setShowAddLeadForm(false); setAddLeadError(null); }}
-                        className="flex-1 py-1.5 rounded-lg border border-slate-200 text-slate-600 text-xs font-medium hover:bg-white transition-colors">
-                        Cancel
-                      </button>
+
+                  {/* Add new lead */}
+                  {!showAddLeadForm ? (
+                    <div className="border-t border-slate-100 px-3 py-2.5">
                       <button
                         type="button"
-                        disabled={createLead.isPending}
-                        onClick={() => handleAddLeadSubmit()}
-                        className="flex-1 py-1.5 rounded-lg text-white text-xs font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
-                        style={{ background: "hsl(224 50% 15%)" }}>
-                        {createLead.isPending ? "Saving…" : <><UserPlus size={12} /> Save & Select</>}
+                        onClick={() => setShowAddLeadForm(true)}
+                        className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border-2 border-dashed border-indigo-200 text-indigo-600 text-xs font-semibold hover:bg-indigo-50 hover:border-indigo-400 transition-all"
+                      >
+                        <UserPlus size={12} /> Add New Sales Lead
                       </button>
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+                  ) : (
+                    <div className="px-4 py-3 border-t border-slate-100 flex flex-col gap-3"
+                      style={{ background: "hsl(224 50% 97%)" }}>
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-[hsl(224_50%_25%)] flex items-center gap-1.5">
+                          <UserPlus size={12} /> New Sales Lead
+                        </p>
+                        <button type="button" onClick={() => { setShowAddLeadForm(false); setAddLeadError(null); setAddLeadForm({ firstName: "", lastName: "", email: "", mobile: "" }); }}
+                          className="p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-white transition-colors">
+                          <X size={13} />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1 block">First Name *</label>
+                          <input value={addLeadForm.firstName}
+                            onChange={e => setAddLeadForm(f => ({ ...f, firstName: e.target.value }))}
+                            placeholder="Jane"
+                            className="w-full px-2.5 py-1.5 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-400 transition-colors" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1 block">Last Name *</label>
+                          <input value={addLeadForm.lastName}
+                            onChange={e => setAddLeadForm(f => ({ ...f, lastName: e.target.value }))}
+                            placeholder="Doe"
+                            className="w-full px-2.5 py-1.5 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-400 transition-colors" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1 block">Email</label>
+                          <input type="email" value={addLeadForm.email}
+                            onChange={e => setAddLeadForm(f => ({ ...f, email: e.target.value }))}
+                            placeholder="jane@example.com"
+                            className="w-full px-2.5 py-1.5 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-400 transition-colors" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1 block">Mobile</label>
+                          <input type="tel" value={addLeadForm.mobile}
+                            onChange={e => setAddLeadForm(f => ({ ...f, mobile: e.target.value }))}
+                            placeholder="+1 555-000-1234"
+                            className="w-full px-2.5 py-1.5 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-400 transition-colors" />
+                        </div>
+                      </div>
+                      {addLeadError && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-2.5 py-1.5">{addLeadError}</p>}
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => { setShowAddLeadForm(false); setAddLeadError(null); }}
+                          className="flex-1 py-1.5 rounded-lg border border-slate-200 text-slate-600 text-xs font-medium hover:bg-white transition-colors">
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          disabled={createLead.isPending}
+                          onClick={() => handleAddLeadSubmit()}
+                          className="flex-1 py-1.5 rounded-lg text-white text-xs font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                          style={{ background: "hsl(224 50% 15%)" }}>
+                          {createLead.isPending ? "Saving…" : <><UserPlus size={12} /> Save & Select</>}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </LightFormField>
 
           {/* Emails with labels */}
           <div className="flex flex-col gap-2">
