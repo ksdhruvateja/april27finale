@@ -227,6 +227,9 @@ export default function Invoices() {
   const [payDate, setPayDate] = useState<string>("");
   const [earlyDiscount, setEarlyDiscount] = useState<string>("");
   const [netTermsOverride, setNetTermsOverride] = useState<string>("");
+  const [payCredits, setPayCredits] = useState<any[]>([]);
+  const [payCreditsLoading, setPayCreditsLoading] = useState(false);
+  const [selectedCredit, setSelectedCredit] = useState<any | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [applyCreditFor, setApplyCreditFor] = useState<InvoiceData | null>(null);
 
@@ -441,7 +444,26 @@ export default function Invoices() {
     setPayDate(new Date().toISOString().slice(0, 10));
     setEarlyDiscount("");
     setNetTermsOverride("");
+    setSelectedCredit(null);
+    setPayCredits([]);
   };
+
+  // Fetch available credits whenever the Pay dialog opens
+  useEffect(() => {
+    if (!payDialog) { setPayCredits([]); setSelectedCredit(null); return; }
+    const inv = (invoices as any[])?.find(i => i.id === payDialog.id);
+    if (!inv?.customerId) return;
+    setPayCreditsLoading(true);
+    const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+    fetch(`${base}/api/returns-refunds?customerId=${inv.customerId}&available=true`)
+      .then(r => r.ok ? r.json() : [])
+      .then((data: any[]) => {
+        setPayCredits(data.filter((c: any) => CREDIT_STATUSES.has(c.status) && Number(c.refundAmount) > 0));
+        setPayCreditsLoading(false);
+      })
+      .catch(() => { setPayCredits([]); setPayCreditsLoading(false); });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [payDialog?.id]);
 
   const toggleSelect = (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -611,47 +633,76 @@ export default function Invoices() {
     }
   };
 
-  const confirmPay = () => {
+  const confirmPay = async () => {
     if (!payDialog) return;
+    const inv = (invoices as any[])?.find(i => i.id === payDialog.id);
+    const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
     const invalidate = () => {
       queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
       queryClient.invalidateQueries({ queryKey: ["accounting-pnl"] });
       queryClient.invalidateQueries({ queryKey: ["accounting-ar"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["returns-refunds"] });
       setPayDialog(null);
       setViewInvoice(null);
+      setSelectedCredit(null);
     };
+
+    // Step 1: Assign credit to this invoice if one was selected
+    let creditNote = "";
+    if (selectedCredit) {
+      await fetch(`${base}/api/returns-refunds/${selectedCredit.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invoiceId: payDialog.id }),
+      });
+      const cmNum = `CM-${String(selectedCredit.id).padStart(4, "0")}`;
+      creditNote = `Store credit ${cmNum} applied (${formatCurrency(Number(selectedCredit.refundAmount))})`;
+    }
+
+    // Step 2: If credit fully covers the invoice, mark paid with credit method
+    const invoiceTotal = Number(inv?.total ?? 0);
+    const creditAmount = selectedCredit ? Number(selectedCredit.refundAmount) : 0;
+    const remaining = Math.max(0, invoiceTotal - creditAmount);
+
+    if (selectedCredit && remaining === 0) {
+      payInvoice.mutate({ id: payDialog.id, data: { paymentMethod: "cash" as any, paymentNote: creditNote } }, {
+        onSuccess: invalidate,
+      });
+      return;
+    }
+
+    // Step 3: Net terms path (credit partially applied is noted)
     if (selectedMethod === "net_terms") {
-      const inv = (invoices as any[])?.find(i => i.id === payDialog.id);
       const cust = (customers as any[])?.find(c => c.id === inv?.customerId);
-      // Use override if customer had no terms; fall back to existing accountType
       const effectiveTermId = netTermsOverride || cust?.accountType || "";
       const term = netTermsList.find(t => t.id === effectiveTermId);
       const days = term?.days ?? 30;
       const dueDate = new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+      const noteStr = [creditNote, `Net terms: ${term?.label ?? effectiveTermId ?? "—"}`].filter(Boolean).join(" | ");
 
       const applyInvoice = () => updateInvoice.mutate({
         id: payDialog.id,
-        data: { status: "sent", dueDate, paymentMethod: "net_terms", paymentNote: `Net terms: ${term?.label ?? effectiveTermId ?? "—"}` } as any,
+        data: { status: "sent", dueDate, paymentMethod: "net_terms", paymentNote: noteStr } as any,
       }, { onSuccess: invalidate });
 
-      // If override chosen, save it to the customer first
       if (netTermsOverride && cust?.id) {
         updateCustomer.mutate({ id: cust.id, data: { accountType: netTermsOverride } as any }, {
-          onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: getListCustomersQueryKey() });
-            applyInvoice();
-          },
-          onError: applyInvoice, // still apply invoice even if customer save fails
+          onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListCustomersQueryKey() }); applyInvoice(); },
+          onError: applyInvoice,
         });
       } else {
         applyInvoice();
       }
       return;
     }
+
+    // Step 4: Normal payment — include credit note
     const noteParts: string[] = [];
     if (payDate) noteParts.push(`Date: ${payDate}`);
     if (earlyDiscount) noteParts.push(`Early discount: ${earlyDiscount}%`);
+    if (creditNote) noteParts.push(creditNote);
     if (payNote) noteParts.push(payNote);
     payInvoice.mutate({ id: payDialog.id, data: { paymentMethod: selectedMethod, paymentNote: noteParts.join(" | ") || undefined } }, {
       onSuccess: invalidate,
@@ -1522,153 +1573,203 @@ export default function Invoices() {
         const netDays = custTerm?.days ?? 30;
         const netDueDate = new Date(Date.now() + netDays * 86400000).toISOString().slice(0, 10);
         const isNetTerms = selectedMethod === "net_terms";
+        const creditFullyCovered = !!(selectedCredit && Math.max(0, Number(inv?.total ?? 0) - Number(selectedCredit.refundAmount)) === 0);
         return (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" onClick={() => setPayDialog(null)}>
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
-          <div className="relative z-10 bg-white rounded-2xl border border-slate-200 shadow-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+          <div className="relative z-10 bg-white rounded-2xl border border-slate-200 shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <h3 className="text-slate-800 font-bold text-base mb-4">Record Payment</h3>
             <div className="flex flex-col gap-4">
-              <div>
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 block">Payment Method</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {PAYMENT_METHODS.map(m => (
-                    <button key={m.value} onClick={() => setSelectedMethod(m.value)}
-                      className={`flex flex-col items-start p-3 rounded-xl border text-left transition-all ${
-                        selectedMethod === m.value
-                          ? m.value === "net_terms"
-                            ? "border-violet-400 bg-violet-50"
-                            : "border-[hsl(224_50%_25%)] bg-[hsl(224_50%_97%)]"
-                          : "border-slate-200 hover:border-slate-300 bg-white"
-                      }`}>
-                      <span className={`text-sm font-semibold ${selectedMethod === m.value ? m.value === "net_terms" ? "text-violet-700" : "text-[hsl(224_50%_20%)]" : "text-slate-700"}`}>{m.label}</span>
-                      <span className="text-xs text-slate-400 mt-0.5">{m.desc}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
 
-              {isNetTerms ? (
-                /* Net Terms info panel */
-                <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 flex flex-col gap-2">
-                  <p className="text-xs font-bold text-violet-700 uppercase tracking-wider">Payment Schedule</p>
-                  {custTerm && !netTermsOverride ? (
-                    /* Customer already has terms — show info + option to change */
-                    <>
-                      <p className="text-sm text-violet-900">
-                        <span className="font-semibold">{cust?.company || cust?.name || inv?.customerName}</span>
-                        {" "}is billed on{" "}<span className="font-bold">{custTerm.label}</span>
-                        {custTerm.days !== undefined && ` (${custTerm.days === 0 ? "due on receipt" : `${custTerm.days} days`})`}
-                      </p>
-                      <p className="text-sm text-violet-700 font-semibold">Due date → {new Date(netDueDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</p>
-                      <p className="text-xs text-violet-500">Invoice will be set to <span className="font-bold">Sent</span> with this due date. No payment recorded yet.</p>
-                      <button
-                        type="button"
-                        onClick={() => setNetTermsOverride(cust?.accountType ?? "")}
-                        className="self-start text-[11px] font-semibold text-violet-600 underline underline-offset-2 hover:text-violet-800 mt-0.5"
-                      >
-                        Change terms for this customer…
-                      </button>
-                    </>
-                  ) : (() => {
-                    /* No terms yet OR user clicked "change" — show picker */
-                    const overrideTerm = netTermsList.find(t => t.id === netTermsOverride);
-                    const previewDays  = overrideTerm?.days ?? 30;
-                    const previewDue   = new Date(Date.now() + previewDays * 86400000).toISOString().slice(0, 10);
-                    const custName     = cust?.company || cust?.name || inv?.customerName;
-                    const isChanging   = !!(custTerm && netTermsOverride);
-                    return (
-                      <>
-                        {!custTerm && cust && (
-                          <p className="text-xs text-amber-700 font-medium flex items-center gap-1.5">
-                            <AlertCircle size={12} className="flex-shrink-0" />
-                            <span><span className="font-bold">{custName}</span> has no payment terms. Choose one below — it will be saved to their profile.</span>
-                          </p>
-                        )}
-                        {isChanging && (
-                          <p className="text-xs text-violet-600 font-medium flex items-center gap-1.5">
-                            <AlertCircle size={12} className="flex-shrink-0" />
-                            Updating terms for <span className="font-bold ml-1">{custName}</span>. This will be saved to their profile.
-                          </p>
-                        )}
-                        {!cust && (
-                          <p className="text-xs text-slate-500">No customer linked — terms won't be saved to a profile.</p>
-                        )}
-                        <div className="grid grid-cols-2 gap-1.5 mt-0.5">
-                          {netTermsList.map(t => (
-                            <button
-                              key={t.id}
-                              type="button"
-                              onClick={() => setNetTermsOverride(t.id)}
-                              className={`flex items-center justify-between px-3 py-2 rounded-lg border text-left text-sm font-semibold transition-all ${
-                                netTermsOverride === t.id
-                                  ? "border-violet-500 bg-violet-100 text-violet-800"
-                                  : "border-slate-200 bg-white text-slate-700 hover:border-violet-300 hover:bg-violet-50"
-                              }`}
-                            >
-                              <span>{t.label}</span>
-                              {t.days !== undefined && (
-                                <span className={`text-[11px] font-normal ${netTermsOverride === t.id ? "text-violet-500" : "text-slate-400"}`}>
-                                  {t.days === 0 ? "on receipt" : `${t.days}d`}
-                                </span>
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                        {overrideTerm && (
-                          <p className="text-sm text-violet-700 font-semibold mt-0.5">
-                            Due date → {new Date(previewDue).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                          </p>
-                        )}
-                        {isChanging && (
-                          <button
-                            type="button"
-                            onClick={() => setNetTermsOverride("")}
-                            className="self-start text-[11px] font-semibold text-violet-500 underline underline-offset-2 hover:text-violet-700"
-                          >
-                            ← Keep existing terms ({custTerm?.label})
+              {/* ── Available Credits ───────────────────────────── */}
+              {payCreditsLoading && (
+                <div className="text-xs text-slate-400 text-center py-1">Checking available credits…</div>
+              )}
+              {!payCreditsLoading && payCredits.length > 0 && (() => {
+                const creditAmt   = selectedCredit ? Number(selectedCredit.refundAmount) : 0;
+                const invTotal    = Number(inv?.total ?? 0);
+                const remaining   = Math.max(0, invTotal - creditAmt);
+                const fullyCovered = selectedCredit && remaining === 0;
+                return (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3.5">
+                    <p className="text-xs font-bold text-emerald-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                      <CreditCard size={12} /> Store Credits Available
+                    </p>
+                    <div className="flex flex-col gap-2">
+                      {payCredits.map(c => {
+                        const cmNum = `CM-${String(c.id).padStart(4, "0")}`;
+                        const isSel = selectedCredit?.id === c.id;
+                        return (
+                          <button key={c.id} type="button"
+                            onClick={() => setSelectedCredit(isSel ? null : c)}
+                            className={`flex items-center justify-between px-3.5 py-2.5 rounded-lg border text-left transition-all ${
+                              isSel
+                                ? "border-emerald-500 bg-white shadow-sm"
+                                : "border-emerald-200 bg-white/70 hover:bg-white hover:border-emerald-300"
+                            }`}>
+                            <div className="min-w-0">
+                              <span className="text-xs font-bold text-slate-700 font-mono">{cmNum}</span>
+                              {c.reason && <span className="text-xs text-slate-400 ml-2 truncate">{c.reason}</span>}
+                            </div>
+                            <div className="flex items-center gap-2.5 flex-shrink-0 ml-2">
+                              <span className="text-emerald-700 font-black text-sm">{formatCurrency(Number(c.refundAmount))}</span>
+                              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSel ? "border-emerald-500 bg-emerald-500" : "border-slate-300 bg-white"}`}>
+                                {isSel && <CheckCircle2 size={10} className="text-white" strokeWidth={3} />}
+                              </div>
+                            </div>
                           </button>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
-              ) : (
-                /* Cash/card/transfer/check — show date + early discount */
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">Payment Date</label>
-                      <input type="date" value={payDate} onChange={e => setPayDate(e.target.value)}
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-400" />
+                        );
+                      })}
                     </div>
-                    <div>
-                      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">Early Discount %</label>
-                      <div className="relative">
-                        <input type="number" min="0" max="100" step="0.5" value={earlyDiscount} onChange={e => setEarlyDiscount(e.target.value)}
-                          placeholder="0"
-                          className="w-full border border-slate-200 rounded-lg px-3 py-2 pr-7 text-sm text-slate-800 focus:outline-none focus:border-blue-400" />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">%</span>
+                    {selectedCredit && (
+                      <div className="mt-2.5 pt-2.5 border-t border-emerald-200 space-y-1">
+                        <div className="flex justify-between text-xs text-slate-500">
+                          <span>Invoice total</span><span>{formatCurrency(Number(inv?.total ?? 0))}</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-emerald-700 font-semibold">
+                          <span>Credit applied</span><span>− {formatCurrency(creditAmt)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm font-black text-slate-800 pt-1 border-t border-emerald-200">
+                          <span>Balance due</span><span>{formatCurrency(remaining)}</span>
+                        </div>
+                        {fullyCovered && (
+                          <p className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1 mt-0.5">
+                            <CheckCircle2 size={11} /> Fully covered — no additional payment needed
+                          </p>
+                        )}
                       </div>
-                      {earlyDiscount && Number(earlyDiscount) > 0 && (() => {
-                        const total = Number(inv?.total ?? 0);
-                        const disc = (total * Number(earlyDiscount)) / 100;
-                        return <p className="text-[11px] text-emerald-600 mt-1 font-semibold">Saves {formatCurrency(disc)} → Pay {formatCurrency(total - disc)}</p>;
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* ── Payment Method + details — hidden when credit fully covers ─ */}
+              {!creditFullyCovered && (
+                <Fragment>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 block">Payment Method</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {PAYMENT_METHODS.map(m => (
+                        <button key={m.value} onClick={() => setSelectedMethod(m.value)}
+                          className={`flex flex-col items-start p-3 rounded-xl border text-left transition-all ${
+                            selectedMethod === m.value
+                              ? m.value === "net_terms" ? "border-violet-400 bg-violet-50" : "border-[hsl(224_50%_25%)] bg-[hsl(224_50%_97%)]"
+                              : "border-slate-200 hover:border-slate-300 bg-white"
+                          }`}>
+                          <span className={`text-sm font-semibold ${selectedMethod === m.value ? m.value === "net_terms" ? "text-violet-700" : "text-[hsl(224_50%_20%)]" : "text-slate-700"}`}>{m.label}</span>
+                          <span className="text-xs text-slate-400 mt-0.5">{m.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {isNetTerms ? (
+                    <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 flex flex-col gap-2">
+                      <p className="text-xs font-bold text-violet-700 uppercase tracking-wider">Payment Schedule</p>
+                      {custTerm && !netTermsOverride ? (
+                        <>
+                          <p className="text-sm text-violet-900">
+                            <span className="font-semibold">{cust?.company || cust?.name || inv?.customerName}</span>
+                            {" "}is billed on{" "}<span className="font-bold">{custTerm.label}</span>
+                            {custTerm.days !== undefined && ` (${custTerm.days === 0 ? "due on receipt" : `${custTerm.days} days`})`}
+                          </p>
+                          <p className="text-sm text-violet-700 font-semibold">Due date → {new Date(netDueDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</p>
+                          <p className="text-xs text-violet-500">Invoice will be set to <span className="font-bold">Sent</span> with this due date. No payment recorded yet.</p>
+                          <button type="button" onClick={() => setNetTermsOverride(cust?.accountType ?? "")}
+                            className="self-start text-[11px] font-semibold text-violet-600 underline underline-offset-2 hover:text-violet-800 mt-0.5">
+                            Change terms for this customer…
+                          </button>
+                        </>
+                      ) : (() => {
+                        const overrideTerm = netTermsList.find(t => t.id === netTermsOverride);
+                        const previewDays = overrideTerm?.days ?? 30;
+                        const previewDue = new Date(Date.now() + previewDays * 86400000).toISOString().slice(0, 10);
+                        const custName = cust?.company || cust?.name || inv?.customerName;
+                        const isChanging = !!(custTerm && netTermsOverride);
+                        return (
+                          <>
+                            {!custTerm && cust && (
+                              <p className="text-xs text-amber-700 font-medium flex items-center gap-1.5">
+                                <AlertCircle size={12} className="flex-shrink-0" />
+                                <span><span className="font-bold">{custName}</span> has no payment terms. Choose one below — it will be saved to their profile.</span>
+                              </p>
+                            )}
+                            {isChanging && (
+                              <p className="text-xs text-violet-600 font-medium flex items-center gap-1.5">
+                                <AlertCircle size={12} className="flex-shrink-0" />
+                                Updating terms for <span className="font-bold ml-1">{custName}</span>. This will be saved to their profile.
+                              </p>
+                            )}
+                            {!cust && <p className="text-xs text-slate-500">No customer linked — terms won't be saved to a profile.</p>}
+                            <div className="grid grid-cols-2 gap-1.5 mt-0.5">
+                              {netTermsList.map(t => (
+                                <button key={t.id} type="button" onClick={() => setNetTermsOverride(t.id)}
+                                  className={`flex items-center justify-between px-3 py-2 rounded-lg border text-left text-sm font-semibold transition-all ${
+                                    netTermsOverride === t.id ? "border-violet-500 bg-violet-100 text-violet-800" : "border-slate-200 bg-white text-slate-700 hover:border-violet-300 hover:bg-violet-50"
+                                  }`}>
+                                  <span>{t.label}</span>
+                                  {t.days !== undefined && (
+                                    <span className={`text-[11px] font-normal ${netTermsOverride === t.id ? "text-violet-500" : "text-slate-400"}`}>
+                                      {t.days === 0 ? "on receipt" : `${t.days}d`}
+                                    </span>
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                            {overrideTerm && (
+                              <p className="text-sm text-violet-700 font-semibold mt-0.5">
+                                Due date → {new Date(previewDue).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                              </p>
+                            )}
+                            {isChanging && (
+                              <button type="button" onClick={() => setNetTermsOverride("")}
+                                className="self-start text-[11px] font-semibold text-violet-500 underline underline-offset-2 hover:text-violet-700">
+                                ← Keep existing terms ({custTerm?.label})
+                              </button>
+                            )}
+                          </>
+                        );
                       })()}
                     </div>
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">Note (optional)</label>
-                    <input type="text" value={payNote} onChange={e => setPayNote(e.target.value)} placeholder="e.g. Check #1234"
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-400" />
-                  </div>
-                </>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">Payment Date</label>
+                          <input type="date" value={payDate} onChange={e => setPayDate(e.target.value)}
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-400" />
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">Early Discount %</label>
+                          <div className="relative">
+                            <input type="number" min="0" max="100" step="0.5" value={earlyDiscount} onChange={e => setEarlyDiscount(e.target.value)}
+                              placeholder="0" className="w-full border border-slate-200 rounded-lg px-3 py-2 pr-7 text-sm text-slate-800 focus:outline-none focus:border-blue-400" />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">%</span>
+                          </div>
+                          {earlyDiscount && Number(earlyDiscount) > 0 && (() => {
+                            const total = Number(inv?.total ?? 0);
+                            const disc = (total * Number(earlyDiscount)) / 100;
+                            return <p className="text-[11px] text-emerald-600 mt-1 font-semibold">Saves {formatCurrency(disc)} → Pay {formatCurrency(total - disc)}</p>;
+                          })()}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">Note (optional)</label>
+                        <input type="text" value={payNote} onChange={e => setPayNote(e.target.value)} placeholder="e.g. Check #1234"
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-400" />
+                      </div>
+                    </>
+                  )}
+                </Fragment>
               )}
             </div>
             <div className="flex gap-3 mt-5">
               <button onClick={() => setPayDialog(null)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50">Cancel</button>
               <button onClick={confirmPay} disabled={payInvoice.isPending || updateInvoice.isPending}
-                className={`flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 ${isNetTerms ? "bg-violet-600 hover:bg-violet-700" : "bg-emerald-600 hover:bg-emerald-700"}`}>
-                {(payInvoice.isPending || updateInvoice.isPending) ? "Saving…" : isNetTerms ? "Apply Net Terms" : "Confirm Payment"}
+                className={`flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 ${creditFullyCovered ? "bg-emerald-600 hover:bg-emerald-700" : isNetTerms ? "bg-violet-600 hover:bg-violet-700" : "bg-emerald-600 hover:bg-emerald-700"}`}>
+                {(payInvoice.isPending || updateInvoice.isPending) ? "Saving…"
+                  : creditFullyCovered ? "Apply Credit & Close Invoice"
+                  : isNetTerms ? "Apply Net Terms" : "Confirm Payment"}
               </button>
             </div>
           </div>
