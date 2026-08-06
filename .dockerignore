@@ -1,10 +1,29 @@
+# Dependencies (reinstalled in Docker)
 node_modules
-.git
-.gitignore
+**/node_modules
+
+# Build output (rebuilt in Docker)
+**/dist
+**/.next
+
+# Local environment (Railway injects env vars)
 .env
 .env.*
-.agents
-.local
-artifacts/**/node_modules
-lib/**/node_modules
-scripts/node_modules
+!.env.example
+
+# Git
+.git
+.gitignore
+
+# Large attached assets (not needed for build)
+attached_assets/
+
+# Logs and temp files
+*.log
+.DS_Store
+
+# Replit-specific
+.replit
+replit.nix
+.local/
+.agents/

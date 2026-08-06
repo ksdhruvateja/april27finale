@@ -1,7 +1,6 @@
 [build]
-builder = "NIXPACKS"
-installCommand = "pnpm i --frozen-lockfile --prod=false"
-buildCommand = "pnpm run build:railway"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
 
 [deploy]
 startCommand = "node artifacts/api-server/dist/index.mjs"
