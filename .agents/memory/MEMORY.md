@@ -1,4 +1,5 @@
 - [Corepack + artifact workflow fix](corepack-artifact-workflow.md) — remove `"packageManager"` from root package.json to stop SIGABRT; api-server dev script needs `--env-file=../../.env` for NEON_DATABASE_URL
+- [Railway Dockerfile pnpm version](railway-dockerfile-pnpm.md) — Dockerfile must pin exact pnpm version matching workspace; mismatch causes ERR_PNPM_LOCKFILE_CONFIG_MISMATCH
 - [Company Profile sync](company-profile-sync.md) — `useCompanyProfile()` hook + Settings editor; `buildPrintHtml` in PrintChequeModal needs company fields as opts params (module-level fn)
 - [Customer schema fixes](customer-schema.md) — emails/phones/accountType required zod.any() to accept structured objects; fixes silent 400 on create/update
 - [Net terms + company addresses](app-settings-json.md) — stored as JSON blobs in app_settings table; fetch dynamically; `net_terms` and `company_addresses` added to ALLOWED_KEYS
