@@ -366,11 +366,11 @@ function CompanyAddressesSection() {
 /* ── Stripe Section ──────────────────────────────────────────────────── */
 function StripeSection() {
   const [secretKey,      setSecretKey]      = useState("");
-  const [pubKey,         setPubKey]         = useState("");
+  const [webhookSecret,  setWebhookSecret]  = useState("");
   const [maskedSecret,   setMaskedSecret]   = useState<string | null>(null);
-  const [savedPubKey,    setSavedPubKey]    = useState<string | null>(null);
+  const [maskedWebhook,  setMaskedWebhook]  = useState<string | null>(null);
   const [showSecret,     setShowSecret]     = useState(false);
-  const [showPub,        setShowPub]        = useState(false);
+  const [showWebhook,    setShowWebhook]    = useState(false);
   const [saving,         setSaving]         = useState(false);
   const [saved,          setSaved]          = useState(false);
   const [isConfigured,   setIsConfigured]   = useState(false);
@@ -379,13 +379,13 @@ function StripeSection() {
     fetch("/api/app-settings/stripe_secret_key")
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.value) { setMaskedSecret(d.value); setIsConfigured(true); } });
-    fetch("/api/app-settings/stripe_publishable_key")
+    fetch("/api/app-settings/stripe_webhook_secret")
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.value) setSavedPubKey(d.value); });
+      .then(d => { if (d?.value) setMaskedWebhook(d.value); });
   }, []);
 
   const handleSave = async () => {
-    if (!secretKey.trim() && !pubKey.trim()) return;
+    if (!secretKey.trim() && !webhookSecret.trim()) return;
     setSaving(true);
     try {
       const ops: Promise<any>[] = [];
@@ -396,11 +396,11 @@ function StripeSection() {
           body: JSON.stringify({ value: secretKey.trim() }),
         }));
       }
-      if (pubKey.trim()) {
-        ops.push(fetch("/api/app-settings/stripe_publishable_key", {
+      if (webhookSecret.trim()) {
+        ops.push(fetch("/api/app-settings/stripe_webhook_secret", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ value: pubKey.trim() }),
+          body: JSON.stringify({ value: webhookSecret.trim() }),
         }));
       }
       await Promise.all(ops);
@@ -409,9 +409,9 @@ function StripeSection() {
         setSecretKey("");
         setIsConfigured(true);
       }
-      if (pubKey.trim()) {
-        setSavedPubKey(pubKey.trim());
-        setPubKey("");
+      if (webhookSecret.trim()) {
+        setMaskedWebhook(webhookSecret.slice(0, 6) + "••••••••" + webhookSecret.slice(-4));
+        setWebhookSecret("");
       }
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -421,15 +421,15 @@ function StripeSection() {
   const handleClear = async () => {
     if (!confirm("Remove Stripe keys? Payment processing via Stripe will be disabled.")) return;
     await Promise.all([
-      fetch("/api/app-settings/stripe_secret_key",      { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value: "" }) }),
-      fetch("/api/app-settings/stripe_publishable_key", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value: "" }) }),
+      fetch("/api/app-settings/stripe_secret_key",     { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value: "" }) }),
+      fetch("/api/app-settings/stripe_webhook_secret", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value: "" }) }),
     ]);
     setMaskedSecret(null);
-    setSavedPubKey(null);
+    setMaskedWebhook(null);
     setIsConfigured(false);
   };
 
-  const canSave = secretKey.trim() || pubKey.trim();
+  const canSave = secretKey.trim() || webhookSecret.trim();
 
   return (
     <div className="glass-card p-6 max-w-2xl">
@@ -445,17 +445,18 @@ function StripeSection() {
         </span>
       </div>
       <p className="text-slate-500 text-sm mb-5">
-        Connect Stripe to accept card payments on invoices and walk-in sales. Keys are stored securely.
+        Connect Stripe to accept card payments on invoices. Keys are saved here and used directly — no environment variables needed.
       </p>
 
-      {(maskedSecret || savedPubKey) && !secretKey && !pubKey && (
+      {/* Connected status */}
+      {maskedSecret && !secretKey && (
         <div className="flex items-center justify-between p-3 mb-4 rounded-lg bg-green-50 border border-green-200">
           <div className="flex items-center gap-2">
             <CheckCircle2 size={14} className="text-green-600 flex-shrink-0" />
             <div>
               <p className="text-sm font-semibold text-green-800">Stripe Connected</p>
-              {maskedSecret && <p className="text-xs text-green-700 font-mono mt-0.5">Secret: {maskedSecret}</p>}
-              {savedPubKey  && <p className="text-xs text-green-700 font-mono">Publishable: {savedPubKey.slice(0, 20)}…</p>}
+              <p className="text-xs text-green-700 font-mono mt-0.5">Secret key: {maskedSecret}</p>
+              {maskedWebhook && <p className="text-xs text-green-700 font-mono">Webhook secret: {maskedWebhook}</p>}
             </div>
           </div>
           <button onClick={handleClear} className="text-xs text-red-500 hover:text-red-700 font-semibold transition-colors flex-shrink-0">Remove</button>
@@ -481,27 +482,31 @@ function StripeSection() {
               {showSecret ? <EyeOff size={14} /> : <Eye size={14} />}
             </button>
           </div>
+          <p className="text-xs text-slate-400 mt-1.5">Found at <span className="font-mono">dashboard.stripe.com/apikeys</span></p>
         </div>
 
-        {/* Publishable Key */}
+        {/* Webhook Secret */}
         <div>
           <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">
-            Publishable Key <span className="text-slate-400 normal-case font-normal tracking-normal">(pk_live_… or pk_test_…)</span>
+            Webhook Secret <span className="text-slate-400 normal-case font-normal tracking-normal">(whsec_… — optional)</span>
           </label>
           <div className="relative">
             <input
-              type={showPub ? "text" : "password"}
-              value={pubKey}
-              onChange={e => setPubKey(e.target.value)}
-              placeholder={savedPubKey ? "Enter new key to replace…" : "pk_live_…"}
+              type={showWebhook ? "text" : "password"}
+              value={webhookSecret}
+              onChange={e => setWebhookSecret(e.target.value)}
+              placeholder={maskedWebhook ? "Enter new secret to replace…" : "whsec_…"}
               className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2.5 pr-10 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-400 transition-colors font-mono"
             />
-            <button onClick={() => setShowPub(v => !v)}
+            <button onClick={() => setShowWebhook(v => !v)}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
-              {showPub ? <EyeOff size={14} /> : <Eye size={14} />}
+              {showWebhook ? <EyeOff size={14} /> : <Eye size={14} />}
             </button>
           </div>
-          <p className="text-xs text-slate-400 mt-1.5">Used in the browser to initialise Stripe.js for card collection.</p>
+          <p className="text-xs text-slate-400 mt-1.5">
+            Enables auto-marking invoices paid when Stripe fires a payment event. Set your webhook endpoint to{" "}
+            <span className="font-mono text-slate-500">/api/stripe/webhook</span> in Stripe Dashboard → Developers → Webhooks.
+          </p>
         </div>
 
         <button onClick={handleSave} disabled={!canSave || saving}

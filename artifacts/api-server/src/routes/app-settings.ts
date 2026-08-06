@@ -8,6 +8,7 @@ const ALLOWED_KEYS = [
   "easyship_api_key",
   "stripe_secret_key",
   "stripe_publishable_key",
+  "stripe_webhook_secret",
   "company_name",
   "company_tagline",
   "company_address",
@@ -22,7 +23,7 @@ const ALLOWED_KEYS = [
   "company_addresses",
 ];
 
-const MASKED_KEYS = ["easyship_api_key", "stripe_secret_key"];
+const MASKED_KEYS = ["easyship_api_key", "stripe_secret_key", "stripe_webhook_secret"];
 
 const maskValue = (value: string) => value.slice(0, 6) + "••••••••" + value.slice(-4);
 

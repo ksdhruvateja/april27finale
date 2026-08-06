@@ -1,13 +1,31 @@
 import { Router } from "express";
 import Stripe from "stripe";
-import { db, invoicesTable } from "@workspace/db";
+import { db, invoicesTable, appSettingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
 const router = Router();
 
-function getStripe(): Stripe {
-  const key = process.env.STRIPE_SECRET_KEY;
-  if (!key) throw new Error("STRIPE_SECRET_KEY is not configured");
+/* ── Read Stripe keys from app_settings (set via Settings page) ─────────── */
+async function getStripeKey(): Promise<string> {
+  const [row] = await db
+    .select({ value: appSettingsTable.value })
+    .from(appSettingsTable)
+    .where(eq(appSettingsTable.key, "stripe_secret_key"));
+  const key = row?.value?.trim();
+  if (!key) throw new Error("Stripe API key not configured — add it in Settings → Stripe Payments");
+  return key;
+}
+
+async function getWebhookSecret(): Promise<string | null> {
+  const [row] = await db
+    .select({ value: appSettingsTable.value })
+    .from(appSettingsTable)
+    .where(eq(appSettingsTable.key, "stripe_webhook_secret"));
+  return row?.value?.trim() || null;
+}
+
+async function getStripe(): Promise<Stripe> {
+  const key = await getStripeKey();
   return new Stripe(key, { apiVersion: "2024-12-18.acacia" as any });
 }
 
@@ -27,9 +45,8 @@ router.post("/stripe/create-checkout", async (req, res): Promise<void> => {
   }
 
   try {
-    const stripe = getStripe();
+    const stripe = await getStripe();
 
-    // Build success / cancel URLs from env or request origin
     const origin =
       (req.headers.origin as string) ||
       (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "http://localhost:3000");
@@ -41,7 +58,7 @@ router.post("/stripe/create-checkout", async (req, res): Promise<void> => {
           quantity: 1,
           price_data: {
             currency: "usd",
-            unit_amount: Math.round(Number(amount) * 100), // convert to cents
+            unit_amount: Math.round(Number(amount) * 100),
             product_data: {
               name: description || `Invoice #${String(invoiceId).padStart(4, "0")}`,
               ...(customerName ? { description: `Customer: ${customerName}` } : {}),
@@ -60,7 +77,7 @@ router.post("/stripe/create-checkout", async (req, res): Promise<void> => {
 
     res.json({ sessionId: session.id, checkoutUrl: session.url });
   } catch (err: any) {
-    const isConfig = err.message?.includes("STRIPE_SECRET_KEY");
+    const isConfig = err.message?.includes("not configured");
     res.status(isConfig ? 503 : 500).json({ error: err.message });
   }
 });
@@ -74,7 +91,7 @@ router.get("/stripe/session-status", async (req, res): Promise<void> => {
   }
 
   try {
-    const stripe = getStripe();
+    const stripe = await getStripe();
     const session = await stripe.checkout.sessions.retrieve(sessionId, {
       expand: ["payment_intent"],
     });
@@ -96,23 +113,25 @@ router.get("/stripe/session-status", async (req, res): Promise<void> => {
 
 export default router;
 
-/* ── Webhook handler (exported separately — mounted with raw body in app.ts) ── */
+/* ── Webhook handler — mounted with raw body in app.ts ───────────────────── */
 export async function stripeWebhookHandler(
   req: import("express").Request,
   res: import("express").Response,
 ): Promise<void> {
   const sig = req.headers["stripe-signature"];
-  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  // Read webhook secret from app_settings (set via Settings page)
+  const secret = await getWebhookSecret();
 
   if (!secret) {
-    // Webhook secret not configured — silently acknowledge so Stripe doesn't retry
+    // Webhook secret not configured — acknowledge so Stripe doesn't retry
     res.json({ received: true, note: "webhook secret not configured" });
     return;
   }
 
   let event: Stripe.Event;
   try {
-    const stripe = getStripe();
+    const stripe = await getStripe();
     event = stripe.webhooks.constructEvent(req.body as Buffer, sig as string, secret);
   } catch (err: any) {
     res.status(400).json({ error: `Webhook signature failed: ${err.message}` });
@@ -128,8 +147,11 @@ export async function stripeWebhookHandler(
         const txId = typeof pi === "string" ? pi : (pi?.id ?? session.id);
         const note = `Transaction ID: ${txId} | Stripe Session: ${session.id}`;
 
-        // Check if not already paid (idempotency guard)
-        const [inv] = await db.select({ status: invoicesTable.status }).from(invoicesTable).where(eq(invoicesTable.id, invoiceId));
+        const [inv] = await db
+          .select({ status: invoicesTable.status })
+          .from(invoicesTable)
+          .where(eq(invoicesTable.id, invoiceId));
+
         if (inv && inv.status !== "paid") {
           await db
             .update(invoicesTable)
