@@ -20,14 +20,16 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 
 ## How to Run on Replit
 
-Two workflows run the services. Start both from the Replit workflow panel:
+Two artifact-managed workflows run the services (started automatically via the **Project** run button):
 
-- **Dashboard** — runs Vite dev server on port 23183 (proxied to preview pane at `/`)
-- **API Server** — builds with esbuild then starts Express on port 8080
+- **`artifacts/dashboard: web`** — Vite dev server on port 23183 (preview pane at `/`)
+- **`artifacts/api-server: API Server`** — esbuild + Express on port 8080
 
 The dashboard Vite proxy forwards `/api/*` to `http://localhost:8080`.
 
-> **Important (Replit quirk):** Replit's artifact-managed workflow pre-step (`pnpm add pnpm@9.15.9`) aborts under corepack for this workspace. Both services are therefore configured as standalone workflows instead of using the artifact-managed `artifacts/dashboard: web` / `artifacts/api-server: API Server` workflows (those will show as FAILED — ignore them). The standalone **Dashboard** workflow uses the full absolute pnpm path with `COREPACK_ENABLE_STRICT=0`, and the standalone **API Server** workflow calls `node build.mjs` directly to avoid nested pnpm calls.
+> **Replit quirk fixed:** The workspace originally had `"packageManager": "pnpm@9.15.9"` in the root `package.json`, which activates corepack and causes Replit's artifact pre-step (`pnpm add pnpm@9.15.9`) to abort with SIGABRT. This field was removed so corepack no longer intercepts pnpm calls. The env vars `COREPACK_ENABLE_STRICT=0` and `COREPACK_ENABLE_AUTO_PIN=0` are also set globally as a belt-and-suspenders measure.
+
+> **DB env loading:** The api-server `dev` script uses `node --env-file=../../.env` to load `NEON_DATABASE_URL` from the workspace root `.env`. The production `start` script does not (Railway/production sets env vars directly).
 
 ## Installing Dependencies
 
