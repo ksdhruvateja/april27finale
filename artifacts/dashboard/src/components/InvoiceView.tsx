@@ -167,65 +167,64 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
 <title>Invoice ${effectiveInvoiceNum} — ${profile.name}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Helvetica Neue',Arial,sans-serif;background:#fff;color:#1f2937;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:13px;line-height:1.5}
-  .page{max-width:860px;margin:0 auto;padding:36px 48px}
-  .doc-hdr{text-align:center;padding-bottom:18px;border-bottom:2.5px solid #0d2044;margin-bottom:0}
-  .co-logo{width:80px;height:80px;object-fit:contain;border-radius:10px;display:block;margin:0 auto 10px}
-  .co-name{font-size:21px;font-weight:800;color:#0d2044;letter-spacing:-0.3px;line-height:1.2}
-  .co-addr{font-size:11px;color:#6b7280;margin-top:5px;line-height:1.65}
-  .doc-meta{display:flex;justify-content:space-between;align-items:flex-start;padding:18px 0 20px;border-bottom:1px solid #e5e7eb;margin-bottom:24px}
-  .doc-type{font-size:28px;font-weight:900;color:#0d2044;letter-spacing:-0.5px;line-height:1}
+  body{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;background:#fff;color:#222;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:12.5px;line-height:1.6}
+  .page{max-width:800px;margin:0 auto;padding:32px 44px}
+  .doc-hdr{text-align:center;padding-bottom:14px;border-bottom:1.5px solid #111;margin-bottom:0}
+  .co-logo{width:72px;height:72px;object-fit:contain;display:block;margin:0 auto 8px}
+  .co-name{font-size:18px;font-weight:700;color:#111;letter-spacing:-0.1px}
+  .co-addr{font-size:10.5px;color:#888;margin-top:4px;line-height:1.6}
+  .doc-meta{display:flex;justify-content:space-between;align-items:flex-start;padding:16px 0;border-bottom:1px solid #d0d0d0;margin-bottom:20px}
+  .doc-type{font-size:20px;font-weight:700;color:#111;letter-spacing:1px}
   .doc-right{text-align:right}
-  .mrow{display:flex;justify-content:flex-end;align-items:baseline;gap:14px;line-height:2.1}
-  .mlbl{font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap}
-  .mval{font-size:12.5px;font-weight:700;color:#111827;min-width:110px;text-align:right}
-  .mval.alert{color:#dc2626}
-  .mval.ok{color:#059669}
-  .spill{display:inline-block;margin-top:8px;padding:3px 11px;border-radius:3px;font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase}
-  .s-paid{background:#dcfce7;color:#15803d;border:1px solid #bbf7d0}
-  .s-sent{background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe}
-  .s-pending{background:#fef3c7;color:#92400e;border:1px solid #fde68a}
-  .s-overdue{background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5}
-  .s-draft{background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb}
-  .s-cancelled{background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb}
-  .addr-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px}
-  .addr-block{padding:14px 16px;border:1px solid #e5e7eb;border-radius:6px;background:#fafafa}
-  .addr-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#9ca3af;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #efefef}
-  .addr-name{font-size:13.5px;font-weight:700;color:#0d2044;margin-bottom:3px}
-  .addr-text{font-size:11.5px;color:#6b7280;line-height:1.75}
-  table.items{width:100%;border-collapse:collapse;margin-bottom:6px}
-  table.items thead tr{background:#0d2044}
-  table.items th{padding:10px 13px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.85);text-align:left}
+  .mrow{display:flex;justify-content:flex-end;align-items:baseline;gap:20px;line-height:2.2}
+  .mlbl{font-size:9.5px;font-weight:600;color:#999;text-transform:uppercase;letter-spacing:0.8px;white-space:nowrap}
+  .mval{font-size:12px;font-weight:600;color:#222;min-width:110px;text-align:right}
+  .mval.alert{color:#b91c1c}
+  .mval.ok{color:#166534}
+  .spill{display:inline-block;margin-top:8px;padding:2px 10px;font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;border:1.5px solid currentColor}
+  .s-paid{color:#166534}
+  .s-sent{color:#1e40af}
+  .s-pending{color:#92400e}
+  .s-overdue{color:#b91c1c}
+  .s-draft{color:#999;border-color:#ccc}
+  .s-cancelled{color:#aaa;border-color:#ccc}
+  .addr-grid{display:flex;gap:0;padding-bottom:16px;border-bottom:1px solid #ddd;margin-bottom:20px}
+  .addr-block{flex:1;padding-right:24px}
+  .addr-block+.addr-block{padding-left:24px;padding-right:0;border-left:1px solid #e0e0e0}
+  .addr-lbl{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#bbb;margin-bottom:5px}
+  .addr-name{font-size:13px;font-weight:700;color:#111;margin-bottom:2px}
+  .addr-text{font-size:11px;color:#666;line-height:1.75}
+  table.items{width:100%;border-collapse:collapse;margin-bottom:4px}
+  table.items thead tr{background:#f2f2f2;border-top:1.5px solid #bbb;border-bottom:1.5px solid #bbb}
+  table.items th{padding:9px 12px;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:#444;text-align:left}
   table.items th.r{text-align:right}
-  table.items tbody tr{border-bottom:1px solid #f3f4f6}
-  table.items tbody tr:last-child{border-bottom:2px solid #e5e7eb}
-  table.items td{padding:11px 13px;font-size:12.5px;color:#374151;vertical-align:top}
+  table.items tbody tr{border-bottom:1px solid #eee}
+  table.items tbody tr:last-child{border-bottom:1.5px solid #bbb}
+  table.items td{padding:10px 12px;font-size:12px;color:#333;vertical-align:top}
   table.items td.r{text-align:right}
-  .iname{font-weight:600;color:#111827;margin-bottom:2px}
-  .idesc{font-size:11px;color:#9ca3af;margin-top:3px;line-height:1.5}
-  .isku{display:inline-block;font-size:10px;font-family:'Courier New',monospace;color:#9ca3af;background:#f3f4f6;padding:1px 5px;border-radius:3px}
-  .iamt{font-weight:700;color:#111827}
-  .tot-wrap{display:flex;justify-content:flex-end;margin:10px 0 24px}
-  .tot-inner{width:270px}
-  .tot-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;font-size:12.5px;border-bottom:1px solid #f3f4f6}
-  .tot-lbl{color:#6b7280}
-  .tot-val{font-weight:600;color:#111827}
-  .tot-val.disc{color:#dc2626}
-  .tot-val.cr{color:#059669}
-  .grand-row{display:flex;justify-content:space-between;align-items:center;background:#0d2044;border-radius:5px;padding:13px 16px;margin-top:8px}
-  .grand-lbl{font-size:11px;font-weight:700;color:rgba(255,255,255,0.8);text-transform:uppercase;letter-spacing:0.5px}
-  .grand-val{font-size:22px;font-weight:900;color:#fff}
-  .info-box{padding:13px 16px;border-radius:6px;margin-top:16px}
-  .info-box-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:2px;margin-bottom:6px}
-  .pay-box{background:#f0fdf4;border:1px solid #bbf7d0}
-  .pay-box .info-box-lbl{color:#15803d}
-  .pay-box p{font-size:12px;color:#166534;line-height:1.6}
-  .notes-box{background:#fffbeb;border:1px solid #fde68a}
-  .notes-box .info-box-lbl{color:#b45309}
-  .notes-box p{font-size:12px;color:#78350f;line-height:1.75}
-  .doc-footer{margin-top:40px;padding-top:14px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center}
-  .foot-l,.foot-r{font-size:10px;color:#9ca3af}
-  @media print{body{padding:0}#ptoolbar,#ptoolbar-spacer{display:none!important}@page{margin:22px 36px;size:A4}}
+  .iname{font-weight:600;color:#111;margin-bottom:1px}
+  .idesc{font-size:10.5px;color:#999;margin-top:2px;line-height:1.5}
+  .isku{display:inline-block;font-size:10px;font-family:'Courier New',monospace;color:#aaa;background:#f5f5f5;padding:1px 4px}
+  .iamt{font-weight:600;color:#222}
+  .tot-wrap{display:flex;justify-content:flex-end;margin:8px 0 22px}
+  .tot-inner{width:256px}
+  .tot-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:12px;border-bottom:1px solid #f0f0f0}
+  .tot-lbl{color:#777}
+  .tot-val{font-weight:600;color:#222}
+  .tot-val.disc{color:#b91c1c}
+  .tot-val.cr{color:#166534}
+  .grand-row{display:flex;justify-content:space-between;align-items:baseline;padding:10px 0 0;border-top:2.5px double #111;margin-top:4px}
+  .grand-lbl{font-size:11px;font-weight:700;color:#111;text-transform:uppercase;letter-spacing:0.5px}
+  .grand-val{font-size:18px;font-weight:700;color:#111}
+  .info-box{margin-top:14px;padding-top:10px;border-top:1px solid #e8e8e8}
+  .info-box-lbl{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#aaa;margin-bottom:5px}
+  .pay-box .info-box-lbl{color:#166534}
+  .pay-box p{font-size:12px;color:#166534;line-height:1.65}
+  .notes-box .info-box-lbl{color:#888}
+  .notes-box p{font-size:12px;color:#444;line-height:1.75}
+  .doc-footer{margin-top:32px;padding-top:10px;border-top:1px solid #ddd;display:flex;justify-content:space-between;align-items:center}
+  .foot-l,.foot-r{font-size:9.5px;color:#aaa}
+  @media print{body{padding:0}#ptoolbar,#ptoolbar-spacer{display:none!important}@page{margin:18px 32px;size:A4}}
 </style></head>
 <body>
   <div id="ptoolbar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#1e293b;color:#f1f5f9;display:flex;align-items:center;gap:10px;padding:10px 20px;font-family:'Helvetica Neue',Arial,sans-serif;font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,0.3)">
