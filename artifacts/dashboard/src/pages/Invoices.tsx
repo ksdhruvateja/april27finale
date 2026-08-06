@@ -18,6 +18,105 @@ import InvoicePoModal from "@/components/InvoicePoModal";
 type PaymentMethod = "stripe" | "bank_transfer" | "check" | "cash" | "net_terms";
 interface NetTerm { id: string; label: string; days?: number; }
 
+const CREDIT_STATUSES = new Set(["approved", "refunded", "completed"]);
+
+function CreditPickerModal({ invoice, onClose }: { invoice: any; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [credits, setCredits] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [applying, setApplying] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/returns-refunds?customerId=${invoice.customerId}&available=true`)
+      .then(r => r.ok ? r.json() : [])
+      .then((data: any[]) => {
+        setCredits(data.filter(c => CREDIT_STATUSES.has(c.status) && Number(c.refundAmount) > 0));
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [invoice.customerId]);
+
+  async function applyCredit(creditId: number) {
+    setApplying(creditId);
+    setError(null);
+    try {
+      const res = await fetch(`/api/returns-refunds/${creditId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invoiceId: invoice.id }),
+      });
+      if (!res.ok) throw new Error("Failed to apply credit");
+      await qc.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
+      onClose();
+    } catch {
+      setError("Failed to apply credit. Please try again.");
+      setApplying(null);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div className="relative z-10 bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-200" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center">
+              <CreditCard size={15} className="text-emerald-600" />
+            </div>
+            <div>
+              <h3 className="text-slate-800 font-bold text-sm">Apply Customer Credit</h3>
+              <p className="text-slate-400 text-xs">Available credits for {invoice.customerName ?? "this customer"}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="p-5 flex flex-col gap-3">
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2.5 text-sm text-red-700">{error}</div>
+          )}
+          {loading ? (
+            <p className="text-center text-sm text-slate-400 py-8">Loading credits…</p>
+          ) : credits.length === 0 ? (
+            <div className="text-center py-8">
+              <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-3">
+                <CreditCard size={20} className="text-slate-400" />
+              </div>
+              <p className="text-sm font-semibold text-slate-600">No available credits</p>
+              <p className="text-xs text-slate-400 mt-1">Create a credit in Returns &amp; Refunds first.</p>
+            </div>
+          ) : (
+            credits.map(c => {
+              const cmNum = `CM-${String(c.id).padStart(4, "0")}`;
+              return (
+                <div key={c.id} className="flex items-center justify-between px-4 py-3 rounded-xl border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50 transition-colors">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-slate-800 font-mono">{cmNum}</p>
+                    {c.reason && <p className="text-xs text-slate-400 mt-0.5 truncate">{c.reason}</p>}
+                    <p className="text-[10px] text-slate-300 mt-0.5 capitalize">{c.status}</p>
+                  </div>
+                  <div className="flex items-center gap-3 ml-3 flex-shrink-0">
+                    <span className="text-emerald-600 font-black text-base">{formatCurrency(Number(c.refundAmount))}</span>
+                    <button
+                      onClick={() => applyCredit(c.id)}
+                      disabled={applying !== null}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                    >
+                      {applying === c.id ? "Applying…" : "Apply"}
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const INVOICE_STATUSES: { value: string; label: string; cls: string }[] = [
   { value: "draft",        label: "Draft",        cls: "text-slate-500  bg-slate-50  border-slate-200" },
   { value: "sent",         label: "Sent",         cls: "text-blue-700   bg-blue-50   border-blue-200"  },
@@ -129,6 +228,7 @@ export default function Invoices() {
   const [earlyDiscount, setEarlyDiscount] = useState<string>("");
   const [netTermsOverride, setNetTermsOverride] = useState<string>("");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [applyCreditFor, setApplyCreditFor] = useState<InvoiceData | null>(null);
 
   /* ── Batch Pay ───────────────────────────────────────── */
   const [batchPayOpen, setBatchPayOpen] = useState(false);
@@ -1225,7 +1325,11 @@ export default function Invoices() {
           onPay={e => openPayDialog(viewInvoice.id, e)}
           onShip={() => { const inv = viewInvoice; setViewInvoice(null); if (inv) openShipmentPreflight(inv); }}
           onCreatePO={() => { const inv = viewInvoice; setViewInvoice(null); if (inv) openPoModal(inv); }}
+          onApplyCredit={() => setApplyCreditFor(viewInvoice)}
         />
+      )}
+      {applyCreditFor && (
+        <CreditPickerModal invoice={applyCreditFor} onClose={() => setApplyCreditFor(null)} />
       )}
       {/* Duplicate PO Guard Dialog */}
       {duplicatePOGuard && (() => {

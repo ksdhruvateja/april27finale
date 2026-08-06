@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, isNull, type SQL } from "drizzle-orm";
 import { db, returnsTable, customersTable, invoicesTable } from "@workspace/db";
 import { z } from "zod/v4";
 
@@ -39,8 +39,17 @@ async function withNames(r: typeof returnsTable.$inferSelect) {
   };
 }
 
-router.get("/returns-refunds", async (_req, res): Promise<void> => {
-  const rows = await db.select().from(returnsTable).orderBy(desc(returnsTable.createdAt));
+router.get("/returns-refunds", async (req, res): Promise<void> => {
+  const conditions: SQL[] = [];
+  const invId  = req.query.invoiceId  ? parseInt(req.query.invoiceId  as string) : null;
+  const custId = req.query.customerId ? parseInt(req.query.customerId as string) : null;
+  const available = req.query.available === "true";
+  if (invId  && !isNaN(invId))  conditions.push(eq(returnsTable.invoiceId, invId));
+  if (custId && !isNaN(custId)) conditions.push(eq(returnsTable.customerId, custId));
+  if (available) conditions.push(isNull(returnsTable.invoiceId));
+  const rows = await db.select().from(returnsTable)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(returnsTable.createdAt));
   res.json(await Promise.all(rows.map(withNames)));
 });
 

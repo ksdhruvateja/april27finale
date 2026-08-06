@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from "react";
-import { X, Printer, CheckCircle2, Clock, AlertTriangle, Ban, ShoppingCart, Link2, MapPin } from "lucide-react";
+import { X, Printer, CheckCircle2, Clock, AlertTriangle, Ban, ShoppingCart, Link2, MapPin, CreditCard, Plus } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useListCustomers } from "@workspace/api-client-react";
 import { useCompanyProfile } from "@/lib/companyProfile";
@@ -52,6 +52,7 @@ interface Props {
   onMarkPaid?: (id: number) => void;
   onMarkPending?: (id: number) => void;
   onCreatePO?: () => void;
+  onApplyCredit?: () => void;
   /** Override the overlay z-index (default "z-50"). Pass e.g. "z-[100]" when opened above another overlay. */
   overlayZIndex?: string;
 }
@@ -84,7 +85,7 @@ const escapeHtml = (value: string) =>
 
 const nl2br = (value: string) => escapeHtml(value).replace(/\r?\n/g, "<br/>");
 
-export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPending, onCreatePO, overlayZIndex = "z-50" }: Props) {
+export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPending, onCreatePO, onApplyCredit, overlayZIndex = "z-50" }: Props) {
   const printRef = useRef<HTMLDivElement>(null);
   const { data: customers } = useListCustomers();
   const profile = useCompanyProfile();
@@ -96,6 +97,16 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.value) { try { setCompanyAddresses(JSON.parse(d.value)); } catch {} } });
   }, []);
+
+  const [credits, setCredits] = useState<any[]>([]);
+  useEffect(() => {
+    if (!invoice.id) return;
+    fetch(`/api/returns-refunds?invoiceId=${invoice.id}`)
+      .then(r => r.ok ? r.json() : [])
+      .then((data: any[]) => setCredits(data.filter((c: any) => Number(c.refundAmount) > 0)))
+      .catch(() => {});
+  }, [invoice.id]);
+  const creditTotal = credits.reduce((sum, c) => sum + Number(c.refundAmount || 0), 0);
 
   const customer = customers?.find((c: any) => c.id === invoice.customerId) as any;
   const addr = customer?.shippingAddress ?? customer?.billingAddress;
@@ -288,7 +299,8 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
       <div class="total-row"><span class="tl">Subtotal</span><span class="tv">${formatCurrency(invoice.subtotal)}</span></div>
       ${invoice.discountTotal > 0 ? `<div class="total-row discount"><span class="tl">Discount</span><span class="tv">−${formatCurrency(invoice.discountTotal)}</span></div>` : ""}
       <div class="total-row"><span class="tl">Tax</span><span class="tv">${formatCurrency(invoice.taxTotal)}</span></div>
-      <div class="grand-total"><span class="gl">Total Due</span><span class="gv">${formatCurrency(invoice.total)}</span></div>
+      ${credits.map((c: any) => `<div class="total-row" style="color:#16a34a"><span class="tl">Credit CM-${String(c.id).padStart(4,"0")}</span><span class="tv">−${formatCurrency(Number(c.refundAmount))}</span></div>`).join("")}
+      <div class="grand-total"><span class="gl">${creditTotal > 0 ? "Net Due" : "Total Due"}</span><span class="gv">${formatCurrency(Math.max(0, invoice.total - creditTotal))}</span></div>
     </div>
   </div>
 
@@ -399,6 +411,11 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
             {invoice.status !== "paid" && invoice.status !== "cancelled" && onMarkPaid && (
               <button onClick={() => onMarkPaid(invoice.id)} className="flex items-center gap-1.5 text-xs font-semibold bg-lime/10 border border-lime/30 text-lime px-3 py-1.5 rounded-lg hover:bg-lime/20 transition-colors">
                 <CheckCircle2 size={13} /> Mark Paid
+              </button>
+            )}
+            {onApplyCredit && invoice.status !== "paid" && invoice.status !== "cancelled" && (
+              <button onClick={onApplyCredit} className="flex items-center gap-1.5 text-xs font-semibold bg-emerald-400/10 border border-emerald-400/30 text-emerald-300 px-3 py-1.5 rounded-lg hover:bg-emerald-400/20 transition-colors">
+                <CreditCard size={13} /> Apply Credit
               </button>
             )}
             <button onClick={handlePrint} className="flex items-center gap-1.5 text-xs font-semibold bg-white/8 border border-white/10 text-white/80 px-3 py-1.5 rounded-lg hover:bg-white/12 transition-colors">
@@ -515,9 +532,22 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
                 <TotalRow label="Discount" value={`−${formatCurrency(invoice.discountTotal)}`} accent="text-red-400" />
               )}
               <TotalRow label="Tax" value={formatCurrency(invoice.taxTotal)} />
+              {credits.length > 0 && (
+                <>
+                  <div className="h-px bg-emerald-400/20 mx-4" />
+                  {credits.map((c: any) => (
+                    <TotalRow
+                      key={c.id}
+                      label={`Credit CM-${String(c.id).padStart(4, "0")}`}
+                      value={`−${formatCurrency(Number(c.refundAmount))}`}
+                      accent="text-emerald-400"
+                    />
+                  ))}
+                </>
+              )}
               <div className="flex justify-between items-center px-4 py-3.5 bg-[#0d1f3c]">
-                <span className="text-white font-bold text-sm">Total Due</span>
-                <span className="text-[#c8ff00] font-black text-lg">{formatCurrency(invoice.total)}</span>
+                <span className="text-white font-bold text-sm">{creditTotal > 0 ? "Net Due" : "Total Due"}</span>
+                <span className="text-[#c8ff00] font-black text-lg">{formatCurrency(Math.max(0, invoice.total - creditTotal))}</span>
               </div>
             </div>
           </div>

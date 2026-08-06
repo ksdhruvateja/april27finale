@@ -105,6 +105,18 @@ function CreditMemoView({
   const hasLines = lineItems.length > 0;
   const total = record.refundAmount ?? 0;
 
+  const { data: allTickets } = useQuery<any[]>({
+    queryKey: ["tickets"],
+    queryFn: () => fetch(`${API}/api/tickets`).then(r => r.json()),
+  });
+  const linkedTickets = useMemo(() => {
+    if (!allTickets) return [];
+    return allTickets.filter((t: any) =>
+      t.customerId === record.customerId ||
+      (record.invoiceNumber && t.orderRef && t.orderRef === record.invoiceNumber)
+    );
+  }, [allTickets, record.customerId, record.invoiceNumber]);
+
   function printMemo() {
     const rows = lineItems.map(li => {
       const gross = (li.quantity ?? 1) * (li.unitPrice ?? 0);
@@ -275,6 +287,48 @@ ${record.notes ? `<div style="margin-top:16px;padding:10px 14px;background:#eff6
             <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
               <p className="font-semibold text-[11px] uppercase tracking-wider text-amber-500 mb-1">Internal Note</p>
               <p>{record.internalNote}</p>
+            </div>
+          )}
+
+          {/* Linked Support Tickets */}
+          {linkedTickets.length > 0 && (
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                Linked Support Tickets ({linkedTickets.length})
+              </p>
+              <div className="flex flex-col gap-2">
+                {linkedTickets.map((t: any) => (
+                  <div key={t.id} className="flex items-start gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50">
+                    <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <FileText size={14} className="text-indigo-600" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {t.orderRef && (
+                          <span className="font-mono text-xs font-bold text-indigo-600">#{t.orderRef}</span>
+                        )}
+                        <span className="text-xs font-semibold text-slate-700 truncate">{t.subject}</span>
+                        <span className={`inline-flex text-[10px] font-semibold px-1.5 py-0.5 rounded-full border capitalize ${
+                          t.status === "closed"   ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                          t.status === "pending"  ? "bg-amber-50  text-amber-700  border-amber-200"  :
+                                                    "bg-blue-50   text-blue-700   border-blue-200"
+                        }`}>{t.status}</span>
+                        <span className={`inline-flex text-[10px] font-semibold px-1.5 py-0.5 rounded-full border capitalize ${
+                          t.priority === "urgent" ? "bg-red-50    text-red-600    border-red-200"    :
+                          t.priority === "high"   ? "bg-orange-50 text-orange-700 border-orange-200" :
+                                                    "bg-slate-50  text-slate-500  border-slate-200"
+                        }`}>{t.priority}</span>
+                      </div>
+                      {t.description && (
+                        <p className="text-xs text-slate-500 mt-1 line-clamp-2">{t.description}</p>
+                      )}
+                      <p className="text-[10px] text-slate-300 mt-1">
+                        {new Date(t.createdAt).toLocaleDateString("en-US", { dateStyle: "medium" })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
