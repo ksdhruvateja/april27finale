@@ -20,17 +20,14 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 
 ## How to Run on Replit
 
-The **"Start application"** workflow starts both services:
+Two workflows run the services. Start both from the Replit workflow panel:
 
-- **Dashboard** (React/Vite): port 5173 — served through the Replit preview pane
-- **API server** (Express 5): port 3000 — proxied from the dashboard via Vite's `/api` proxy
+- **Dashboard** — runs Vite dev server on port 23183 (proxied to preview pane at `/`)
+- **API Server** — builds with esbuild then starts Express on port 8080
 
-The workflow command:
-1. Starts the Vite dev server for the dashboard
-2. Builds the API server with esbuild (`node build.mjs`)
-3. Starts the API server with `node --enable-source-maps dist/index.mjs`
+The dashboard Vite proxy forwards `/api/*` to `http://localhost:8080`.
 
-> **Important (Replit quirk):** The workflow calls `node build.mjs` directly instead of `pnpm run build` to avoid Replit's corepack intercepting nested pnpm calls. When restarting after code changes to the API, the workflow will rebuild automatically.
+> **Important (Replit quirk):** Replit's artifact-managed workflow pre-step (`pnpm add pnpm@9.15.9`) aborts under corepack for this workspace. Both services are therefore configured as standalone workflows instead of using the artifact-managed `artifacts/dashboard: web` / `artifacts/api-server: API Server` workflows (those will show as FAILED — ignore them). The standalone **Dashboard** workflow uses the full absolute pnpm path with `COREPACK_ENABLE_STRICT=0`, and the standalone **API Server** workflow calls `node build.mjs` directly to avoid nested pnpm calls.
 
 ## Installing Dependencies
 

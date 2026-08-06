@@ -1,13 +1,10 @@
 kind = "web"
 previewPath = "/"
 title = "QuickBoo Dashboard"
+description = "A QuickBooks-style business management dashboard for invoices, customers, vendors, inventory, expenses, and bank accounts. Full-featured accounting frontend that connects to an Express REST API."
 version = "1.0.0"
 id = "artifacts/dashboard"
 router = "path"
-
-[[integratedSkills]]
-name = "react-vite"
-version = "1.0.0"
 
 [[services]]
 name = "web"
@@ -19,8 +16,8 @@ run = "pnpm --filter @workspace/dashboard run dev"
 
 [services.production]
 build = [ "pnpm", "--filter", "@workspace/dashboard", "run", "build" ]
-publicDir = "artifacts/dashboard/dist/public"
 serve = "static"
+publicDir = "artifacts/dashboard/dist/public"
 
 [[services.production.rewrites]]
 from = "/*"
