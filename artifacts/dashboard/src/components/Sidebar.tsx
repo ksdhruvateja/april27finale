@@ -199,6 +199,7 @@ export default function Sidebar({ embedded }: SidebarProps) {
             <button
               onClick={async () => {
                 try { await fetch("/api/auth/logout", { method: "POST", credentials: "include" }); } catch {}
+                try { localStorage.removeItem("qb_auth_token"); } catch {}
                 setCurrentUser(null);
               }}
               title="Sign out"

@@ -57,6 +57,11 @@ export default function UserSelectModal() {
         return;
       }
 
+      // Persist the JWT so the global fetch interceptor can attach it
+      if (data.token) {
+        try { localStorage.setItem("qb_auth_token", data.token); } catch {}
+      }
+
       let customPermissions: CustomPermissions | undefined;
       if (data.role === "custom" && data.customPermissions) {
         try { customPermissions = JSON.parse(data.customPermissions); } catch {}

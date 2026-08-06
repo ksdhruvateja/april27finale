@@ -92,12 +92,15 @@ router.post("/auth/login", loginLimiter, async (req, res): Promise<void> => {
   const token = issueToken(payload);
   res.cookie(COOKIE_NAME, token, COOKIE_OPTS);
 
+  // Also return token in body so clients that can't rely on cookies
+  // (e.g. behind a double-proxy in dev) can use Bearer auth
   res.json({
     id:                user.id,
     email:             user.email,
     name:              user.name,
     role:              user.role,
     customPermissions: user.customPermissions,
+    token,
   });
 });
 

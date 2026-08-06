@@ -2,6 +2,37 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 
+// ── Auth token injection ─────────────────────────────────────────────────────
+// Intercept every /api/ fetch and attach the stored Bearer token.
+// This avoids relying on httpOnly cookies which can be lost through proxy layers.
+export const QB_TOKEN_KEY = "qb_auth_token";
+
+const _baseFetch = globalThis.fetch.bind(globalThis);
+globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+  const rawUrl =
+    typeof input === "string"
+      ? input
+      : input instanceof URL
+        ? input.toString()
+        : (input as Request).url;
+
+  const isApi = rawUrl.includes("/api/") || rawUrl.endsWith("/api");
+  if (isApi) {
+    const token = localStorage.getItem(QB_TOKEN_KEY);
+    if (token) {
+      const headers = new Headers((init?.headers as HeadersInit | undefined) ?? {});
+      if (!headers.has("Authorization")) {
+        headers.set("Authorization", `Bearer ${token}`);
+      }
+      init = { ...init, headers, credentials: "include" };
+      if (typeof input !== "string" && !(input instanceof URL)) {
+        input = new Request(rawUrl, { ...input, headers, credentials: "include" });
+      }
+    }
+  }
+  return _baseFetch(input, init);
+}) as typeof fetch;
+
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.replace(/\/+$/, "");
 
 if (apiBaseUrl) {
