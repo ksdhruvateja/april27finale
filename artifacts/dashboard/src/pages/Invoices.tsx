@@ -6,7 +6,7 @@ import Header from "@/components/Header";
 import InvoiceView from "@/components/InvoiceView";
 import InvoiceModal from "@/components/InvoiceModal";
 import { useListInvoices, useDeleteInvoice, usePayInvoice, useUpdateInvoice, getListInvoicesQueryKey, useListCustomers, useListPurchaseOrders, useListShipments, useUpdateCustomer, getListCustomersQueryKey } from "@workspace/api-client-react";
-import { Search, Plus, MoreHorizontal, Edit, Trash2, CheckCircle, CheckCircle2, Eye, X, Truck, ShoppingCart, Hash, Link2, ChevronDown, Pencil, StickyNote, Mail, MessageSquare, Download, Calendar, ChevronRight, BarChart2, ChevronUp, TrendingUp, TrendingDown, Printer, Save, CreditCard, AlertCircle, FileText, Percent, Tag, ToggleLeft, ToggleRight } from "lucide-react";
+import { Search, Plus, MoreHorizontal, Edit, Trash2, CheckCircle, CheckCircle2, Eye, X, Truck, ShoppingCart, Hash, Link2, ChevronDown, Pencil, StickyNote, Mail, MessageSquare, Download, Calendar, ChevronRight, BarChart2, ChevronUp, TrendingUp, TrendingDown, Printer, Save, CreditCard, AlertCircle, FileText, Percent, Tag, ToggleLeft, ToggleRight, ExternalLink } from "lucide-react";
 import { printShippingSlip } from "@/lib/print-slip";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, Legend, PieChart, Pie, ComposedChart, Line, Area } from "recharts";
 import { useQueryClient } from "@tanstack/react-query";
@@ -230,6 +230,11 @@ export default function Invoices() {
   const [payCredits, setPayCredits] = useState<any[]>([]);
   const [payCreditsLoading, setPayCreditsLoading] = useState(false);
   const [selectedCredit, setSelectedCredit] = useState<any | null>(null);
+  // Method-specific payment detail fields
+  const [collectedBy, setCollectedBy]   = useState("");   // cash
+  const [transactionId, setTransactionId] = useState(""); // stripe / bank_transfer
+  const [chequeNumber, setChequeNumber] = useState("");   // check
+  const [refNumber, setRefNumber]       = useState("");   // check
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [applyCreditFor, setApplyCreditFor] = useState<InvoiceData | null>(null);
 
@@ -446,6 +451,10 @@ export default function Invoices() {
     setNetTermsOverride("");
     setSelectedCredit(null);
     setPayCredits([]);
+    setCollectedBy("");
+    setTransactionId("");
+    setChequeNumber("");
+    setRefNumber("");
   };
 
   // Fetch available credits whenever the Pay dialog opens
@@ -698,15 +707,37 @@ export default function Invoices() {
       return;
     }
 
-    // Step 4: Normal payment — include credit note
+    // Step 4: Normal payment — build method-specific note
     const noteParts: string[] = [];
-    if (payDate) noteParts.push(`Date: ${payDate}`);
+    if (selectedMethod === "cash") {
+      if (payDate)      noteParts.push(`Date: ${payDate}`);
+      if (collectedBy)  noteParts.push(`Collected by: ${collectedBy}`);
+    } else if (selectedMethod === "stripe") {
+      if (transactionId) noteParts.push(`Transaction ID: ${transactionId}`);
+    } else if (selectedMethod === "bank_transfer") {
+      if (payDate)       noteParts.push(`Date: ${payDate}`);
+      if (transactionId) noteParts.push(`Transaction Ref: ${transactionId}`);
+    } else if (selectedMethod === "check") {
+      if (payDate)      noteParts.push(`Date: ${payDate}`);
+      if (chequeNumber) noteParts.push(`Cheque No: ${chequeNumber}`);
+      if (refNumber)    noteParts.push(`Ref: ${refNumber}`);
+    } else {
+      if (payDate) noteParts.push(`Date: ${payDate}`);
+    }
     if (earlyDiscount) noteParts.push(`Early discount: ${earlyDiscount}%`);
-    if (creditNote) noteParts.push(creditNote);
-    if (payNote) noteParts.push(payNote);
-    payInvoice.mutate({ id: payDialog.id, data: { paymentMethod: selectedMethod, paymentNote: noteParts.join(" | ") || undefined } }, {
-      onSuccess: invalidate,
-    });
+    if (creditNote)    noteParts.push(creditNote);
+    if (payNote)       noteParts.push(payNote);
+    payInvoice.mutate({
+      id: payDialog.id,
+      data: {
+        paymentMethod: selectedMethod,
+        paymentNote: noteParts.join(" | ") || undefined,
+        // Structured fields stored separately in the ledger
+        checkNumber:  selectedMethod === "check"        ? chequeNumber || undefined : undefined,
+        externalTxId: (selectedMethod === "stripe" || selectedMethod === "bank_transfer") ? transactionId || undefined : undefined,
+        collectedBy:  selectedMethod === "cash"         ? collectedBy  || undefined : undefined,
+      } as any,
+    }, { onSuccess: invalidate });
   };
 
   const openBatchPay = () => {
@@ -1733,12 +1764,94 @@ export default function Invoices() {
                     </div>
                   ) : (
                     <>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">Payment Date</label>
-                          <input type="date" value={payDate} onChange={e => setPayDate(e.target.value)}
-                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-400" />
+                      {/* ── Cash ── date + collected-by name ─────────── */}
+                      {selectedMethod === "cash" && (
+                        <>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">Payment Date</label>
+                              <input type="date" value={payDate} onChange={e => setPayDate(e.target.value)}
+                                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-400" />
+                            </div>
+                            <div>
+                              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">Collected By</label>
+                              <input type="text" value={collectedBy} onChange={e => setCollectedBy(e.target.value)}
+                                placeholder="Name of recipient"
+                                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-400" />
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      {/* ── Credit Card (Stripe) ── link + transaction ID ── */}
+                      {selectedMethod === "stripe" && (
+                        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 flex flex-col gap-3">
+                          <div className="flex items-start gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                              <CreditCard size={15} className="text-white" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-blue-900">Process via Stripe Dashboard</p>
+                              <p className="text-xs text-blue-600 mt-0.5">Charge the customer in Stripe, then paste the transaction ID below.</p>
+                            </div>
+                          </div>
+                          <a href="https://dashboard.stripe.com/payments" target="_blank" rel="noreferrer"
+                            className="inline-flex items-center gap-1.5 self-start px-3.5 py-2 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition-colors">
+                            Open Stripe Dashboard <ExternalLink size={11} />
+                          </a>
+                          <div>
+                            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">Transaction / Charge ID</label>
+                            <input type="text" value={transactionId} onChange={e => setTransactionId(e.target.value)}
+                              placeholder="ch_xxxxxxxxxx or pi_xxxxxxxxxx"
+                              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 font-mono focus:outline-none focus:border-blue-400 bg-white" />
+                          </div>
                         </div>
+                      )}
+
+                      {/* ── Bank Transfer ── date + transaction reference ── */}
+                      {selectedMethod === "bank_transfer" && (
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">Payment Date</label>
+                            <input type="date" value={payDate} onChange={e => setPayDate(e.target.value)}
+                              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-400" />
+                          </div>
+                          <div>
+                            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">Transaction Ref</label>
+                            <input type="text" value={transactionId} onChange={e => setTransactionId(e.target.value)}
+                              placeholder="Wire ref / ACH trace"
+                              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-400" />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ── Check ── date + cheque no + reference ─────── */}
+                      {selectedMethod === "check" && (
+                        <>
+                          <div>
+                            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">Payment Date</label>
+                            <input type="date" value={payDate} onChange={e => setPayDate(e.target.value)}
+                              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-400" />
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">Cheque Number</label>
+                              <input type="text" value={chequeNumber} onChange={e => setChequeNumber(e.target.value)}
+                                placeholder="e.g. 001234"
+                                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 font-mono focus:outline-none focus:border-blue-400" />
+                            </div>
+                            <div>
+                              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">Reference Number</label>
+                              <input type="text" value={refNumber} onChange={e => setRefNumber(e.target.value)}
+                                placeholder="e.g. REF-001"
+                                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-400" />
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      {/* ── Early discount (cash / bank / check only) ─── */}
+                      {selectedMethod !== "stripe" && (
                         <div>
                           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">Early Discount %</label>
                           <div className="relative">
@@ -1752,10 +1865,12 @@ export default function Invoices() {
                             return <p className="text-[11px] text-emerald-600 mt-1 font-semibold">Saves {formatCurrency(disc)} → Pay {formatCurrency(total - disc)}</p>;
                           })()}
                         </div>
-                      </div>
+                      )}
+
+                      {/* ── Additional note (all methods) ─────────────── */}
                       <div>
                         <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">Note (optional)</label>
-                        <input type="text" value={payNote} onChange={e => setPayNote(e.target.value)} placeholder="e.g. Check #1234"
+                        <input type="text" value={payNote} onChange={e => setPayNote(e.target.value)} placeholder="Any additional notes…"
                           className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-400" />
                       </div>
                     </>

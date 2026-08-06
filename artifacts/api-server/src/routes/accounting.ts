@@ -70,6 +70,9 @@ router.get("/accounting/general-ledger", async (_req, res): Promise<void> => {
         });
       }
       // Cash receipt for the net amount actually collected
+      const methodLabel: Record<string, string> = {
+        cash: "Cash", stripe: "Credit Card", bank_transfer: "Bank Transfer", check: "Check",
+      };
       entries.push({
         id: `INV-PAY-${inv.id}`,
         date: inv.paidAt ?? inv.createdAt,
@@ -81,6 +84,9 @@ router.get("/accounting/general-ledger", async (_req, res): Promise<void> => {
         balance: -num(inv.total),
         status: "paid",
         ref: inv.invoiceNumber ?? `INV-${inv.id.toString().padStart(4, "0")}`,
+        paymentMethod: inv.paymentMethod ?? null,
+        paymentMethodLabel: inv.paymentMethod ? (methodLabel[inv.paymentMethod] ?? inv.paymentMethod) : null,
+        paymentNote: inv.paymentNote ?? null,
       });
     }
   }

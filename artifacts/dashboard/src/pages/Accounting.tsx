@@ -497,7 +497,21 @@ function LedgerTab() {
                   <td className="px-4 py-3">
                     <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${typeBg[r.type] ?? "text-slate-500 bg-slate-50 border-slate-200"}`}>{typeLabel[r.type] ?? r.type}</span>
                   </td>
-                  <td className="px-4 py-3 text-slate-700 max-w-[200px] truncate">{r.description}</td>
+                  <td className="px-4 py-3 text-slate-700 max-w-[220px]">
+                    <div className="truncate">{r.description}</div>
+                    {r.type === "payment_received" && r.paymentMethodLabel && (
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">
+                          {r.paymentMethodLabel}
+                        </span>
+                        {r.paymentNote && (
+                          <span className="text-[10px] text-slate-400 truncate max-w-[150px]" title={r.paymentNote}>
+                            {r.paymentNote}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-slate-500 text-xs">{r.party ?? "—"}</td>
                   <td className="px-4 py-3 text-slate-400 font-mono text-xs">{r.ref}</td>
                   <td className="px-4 py-3 text-emerald-600 font-semibold text-right">{r.debit > 0 ? formatCurrency(r.debit) : "—"}</td>

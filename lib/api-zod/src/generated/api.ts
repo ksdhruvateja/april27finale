@@ -1211,6 +1211,10 @@ export const PayInvoiceBody = zod.object({
   paymentNote: zod.string().nullish(),
   earlyDiscountPercent: zod.number().min(0).max(100).nullish(),
   earlyDiscountAmount: zod.number().min(0).nullish(),
+  // Method-specific structured fields
+  checkNumber:  zod.string().nullish(),  // check
+  externalTxId: zod.string().nullish(),  // stripe / bank_transfer transaction reference
+  collectedBy:  zod.string().nullish(),  // cash — name of person who received
 });
 
 export const payInvoiceResponseLineItemsItemTaxPercentDefault = 0;
