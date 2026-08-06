@@ -1769,111 +1769,143 @@ function PrintPODialog({ po, onClose }: PrintPODialogProps) {
     const fromPhone = selectedAddr?.phone ?? null;
     const logoSrc   = profile.logo ?? "/forez-logo.png";
 
-    const itemRowsHTML = lineItems.map((li, i) => {
+    const itemRowsHTML = lineItems.map(li => {
       const amt = li.quantity * li.unitPrice;
-      return `<tr style="background:${i % 2 === 0 ? "#fff" : "#f9fafb"}">
-        <td style="padding:10px 13px;font-size:13px;color:#111827;border-bottom:1px solid #f3f4f6;font-weight:500">${li.description || `Item ${i + 1}`}</td>
-        <td style="padding:10px 13px;font-size:13px;color:#374151;text-align:right;border-bottom:1px solid #f3f4f6">${li.quantity}</td>
-        <td style="padding:10px 13px;font-size:13px;color:#374151;text-align:right;border-bottom:1px solid #f3f4f6">${formatCurrency(li.unitPrice)}</td>
-        <td style="padding:10px 13px;font-size:13px;color:#111827;text-align:right;border-bottom:1px solid #f3f4f6;font-weight:600">${formatCurrency(amt)}</td>
+      return `<tr>
+        <td>
+          <div class="iname">${li.description || "—"}</div>
+          ${li.lineDescription ? `<div class="idesc">${li.lineDescription}</div>` : ""}
+        </td>
+        ${li.sku ? `<td class="mono" style="color:#9ca3af;font-size:11px">${li.sku}</td>` : `<td style="color:#d1d5db">—</td>`}
+        <td class="r">${li.quantity}</td>
+        <td style="color:#9ca3af">${li.unit || "ea"}</td>
+        <td class="r">${formatCurrency(li.unitPrice)}</td>
+        <td class="r iamt">${formatCurrency(amt)}</td>
       </tr>`;
     }).join("");
 
     win.document.write(`<!DOCTYPE html>
-<html><head><title>${poRef}</title>
+<html><head>
+<meta charset="utf-8"/>
+<title>${poRef} — ${fromName}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Segoe UI',system-ui,Arial,sans-serif;background:#fff;color:#111827;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .page{padding:40px 52px;max-width:860px;margin:0 auto}
-  .letterhead{text-align:center;padding-bottom:20px;border-bottom:2px solid #1e3a5f;margin-bottom:24px}
-  .lh-logo{width:60px;height:60px;border-radius:12px;object-fit:contain;display:block;margin:0 auto 10px}
-  .lh-name{font-size:22px;font-weight:900;letter-spacing:-0.5px;color:#1e3a5f;line-height:1}
-  .lh-tag{font-size:9px;color:#94a3b8;letter-spacing:3px;text-transform:uppercase;margin-top:4px}
-  .doc-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px}
-  .doc-type{font-size:32px;font-weight:900;letter-spacing:-1.5px;color:#1e3a5f}
-  .doc-meta{text-align:right}
-  .doc-num{font-size:13px;font-weight:700;color:#64748b;margin-bottom:4px;letter-spacing:0.5px}
-  .doc-date{font-size:11px;color:#94a3b8}
-  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-bottom:24px}
-  .info-block h4{font-size:9px;text-transform:uppercase;letter-spacing:2px;color:#94a3b8;margin-bottom:8px;font-weight:700}
-  .info-block .biz-name{font-size:14px;font-weight:700;color:#1e293b;margin-bottom:4px}
-  .info-block .addr{font-size:12px;color:#64748b;line-height:1.8}
-  .meta-row{display:flex;gap:14px;margin-bottom:28px}
-  .meta-chip{flex:1;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 15px}
-  .meta-chip .lbl{font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:#94a3b8;margin-bottom:4px;font-weight:700}
-  .meta-chip .val{font-size:13px;font-weight:600;color:#1e293b}
-  table{width:100%;border-collapse:collapse;margin-bottom:20px}
-  thead tr{background:#1e3a5f}
-  th{text-align:left;padding:10px 13px;font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#fff;font-weight:700}
-  th.right{text-align:right}
-  .totals-section{display:flex;justify-content:flex-end;margin-bottom:24px}
-  .totals-box{width:290px;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden}
-  .total-row{display:flex;justify-content:space-between;padding:9px 16px;font-size:12px;border-bottom:1px solid #f1f5f9;color:#64748b}
-  .total-row .tv{font-weight:600;color:#1e293b}
-  .grand-total{display:flex;justify-content:space-between;align-items:center;padding:13px 16px;background:#1e3a5f}
-  .grand-total .gl{font-size:13px;font-weight:700;color:#fff}
-  .grand-total .gv{font-size:18px;font-weight:900;color:#fff}
-  .notes{font-size:12px;color:#64748b;line-height:1.7;padding:14px 16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:20px}
-  .footer{margin-top:36px;padding-top:14px;border-top:1px solid #e2e8f0;text-align:center}
-  .footer-addr{font-size:10px;color:#94a3b8}
-  @media print{body{padding:0}@page{margin:28px 36px;size:A4}}
+  body{font-family:'Helvetica Neue',Arial,sans-serif;background:#fff;color:#1f2937;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:13px;line-height:1.5}
+  .page{max-width:860px;margin:0 auto;padding:36px 48px}
+  .doc-hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:20px;border-bottom:2.5px solid #0d2044;margin-bottom:26px}
+  .co-left{display:flex;align-items:flex-start;gap:14px}
+  .co-logo{width:52px;height:52px;object-fit:contain;border-radius:8px;flex-shrink:0}
+  .co-name{font-size:17px;font-weight:800;color:#0d2044;letter-spacing:-0.3px;line-height:1.2}
+  .co-addr{font-size:11px;color:#6b7280;margin-top:5px;line-height:1.7}
+  .doc-right{text-align:right}
+  .doc-type{font-size:28px;font-weight:900;color:#0d2044;letter-spacing:-0.3px;line-height:1;margin-bottom:12px}
+  .mrow{display:flex;justify-content:flex-end;align-items:baseline;gap:14px;line-height:2.1}
+  .mlbl{font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap}
+  .mval{font-size:12.5px;font-weight:700;color:#111827;min-width:110px;text-align:right}
+  .addr-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px}
+  .addr-block{padding:14px 16px;border:1px solid #e5e7eb;border-radius:6px;background:#fafafa}
+  .addr-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#9ca3af;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #efefef}
+  .addr-name{font-size:13.5px;font-weight:700;color:#0d2044;margin-bottom:3px}
+  .addr-text{font-size:11.5px;color:#6b7280;line-height:1.75}
+  table.items{width:100%;border-collapse:collapse;margin-bottom:6px}
+  table.items thead tr{background:#0d2044}
+  table.items th{padding:10px 13px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.85);text-align:left}
+  table.items th.r{text-align:right}
+  table.items tbody tr{border-bottom:1px solid #f3f4f6}
+  table.items tbody tr:last-child{border-bottom:2px solid #e5e7eb}
+  table.items td{padding:11px 13px;font-size:12.5px;color:#374151;vertical-align:top}
+  table.items td.r{text-align:right}
+  .mono{font-family:'Courier New',monospace}
+  .iname{font-weight:600;color:#111827;margin-bottom:2px}
+  .idesc{font-size:11px;color:#9ca3af;margin-top:3px;line-height:1.5}
+  .iamt{font-weight:700;color:#111827}
+  .tot-wrap{display:flex;justify-content:flex-end;margin:10px 0 24px}
+  .tot-inner{width:270px}
+  .tot-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;font-size:12.5px;border-bottom:1px solid #f3f4f6}
+  .tot-lbl{color:#6b7280}
+  .tot-val{font-weight:600;color:#111827}
+  .grand-row{display:flex;justify-content:space-between;align-items:center;background:#0d2044;border-radius:5px;padding:13px 16px;margin-top:8px}
+  .grand-lbl{font-size:11px;font-weight:700;color:rgba(255,255,255,0.8);text-transform:uppercase;letter-spacing:0.5px}
+  .grand-val{font-size:22px;font-weight:900;color:#fff}
+  .auth-grid{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-top:32px}
+  .auth-block .auth-line{border-bottom:1.5px solid #cbd5e1;margin-bottom:5px;height:28px}
+  .auth-block .auth-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#94a3b8}
+  .notes-box{background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:13px 16px;margin-bottom:20px}
+  .notes-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#b45309;margin-bottom:6px}
+  .notes-box p{font-size:12px;color:#78350f;line-height:1.75}
+  .doc-footer{margin-top:36px;padding-top:14px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center}
+  .foot-l,.foot-r{font-size:10px;color:#9ca3af}
+  @media print{body{padding:0}@page{margin:22px 36px;size:A4}}
 </style></head>
 <body><div class="page">
 
-  <div class="letterhead">
-    <img src="${logoSrc}" alt="${fromName}" class="lh-logo" />
-    <div class="lh-name">${fromName}</div>
-    ${fromLine1 ? `<div class="lh-tag">${fromLine1}${fromLine2 ? ` · ${fromLine2}` : ""}</div>` : ""}
-  </div>
-
-  <div class="doc-header">
-    <div class="doc-type">PURCHASE ORDER</div>
-    <div class="doc-meta">
-      <div class="doc-num">${poRef}</div>
-      <div class="doc-date">${today}</div>
+  <div class="doc-hdr">
+    <div class="co-left">
+      <img src="${logoSrc}" class="co-logo" alt="${fromName}"/>
+      <div>
+        <div class="co-name">${fromName}</div>
+        <div class="co-addr">${fromLine1}<br/>${fromLine2}${fromPhone ? `<br/>${fromPhone}` : ""}</div>
+      </div>
+    </div>
+    <div class="doc-right">
+      <div class="doc-type">PURCHASE ORDER</div>
+      <div class="mrow"><span class="mlbl">PO Number</span><span class="mval" style="font-family:'Courier New',monospace">${poRef}</span></div>
+      <div class="mrow"><span class="mlbl">Date Issued</span><span class="mval">${today}</span></div>
+      ${includePromiseDate && promiseDateStr ? `<div class="mrow"><span class="mlbl">Promise Date</span><span class="mval">${promiseDateStr}</span></div>` : ""}
     </div>
   </div>
 
-  <div class="info-grid">
-    <div class="info-block">
-      <h4>From</h4>
-      <div class="biz-name">${fromName}</div>
-      <div class="addr">${fromLine1}${fromLine2 ? `<br/>${fromLine2}` : ""}${fromPhone ? `<br/>${fromPhone}` : ""}</div>
+  <div class="addr-grid">
+    <div class="addr-block">
+      <div class="addr-lbl">Issued By</div>
+      <div class="addr-name">${fromName}</div>
+      <div class="addr-text">${fromLine1}<br/>${fromLine2}${fromPhone ? `<br/>${fromPhone}` : ""}</div>
     </div>
-    <div class="info-block">
-      <h4>Vendor</h4>
-      <div class="biz-name">${po.vendorName}</div>
+    <div class="addr-block">
+      <div class="addr-lbl">Vendor / Supplier</div>
+      <div class="addr-name">${po.vendorName}</div>
     </div>
   </div>
 
-  <div class="meta-row">
-    <div class="meta-chip"><div class="lbl">PO Number</div><div class="val">${poRef}</div></div>
-    <div class="meta-chip"><div class="lbl">Date Issued</div><div class="val">${today}</div></div>
-    ${includePromiseDate && promiseDateStr ? `<div class="meta-chip"><div class="lbl">Promise Date</div><div class="val">${promiseDateStr}</div></div>` : ""}
-  </div>
-
-  <table>
+  <table class="items">
     <thead><tr>
-      <th>Description</th>
-      <th class="right">Qty</th>
-      <th class="right">Unit Price</th>
-      <th class="right">Amount</th>
+      <th style="width:38%">Description</th>
+      <th style="width:10%">SKU</th>
+      <th class="r" style="width:8%">Qty</th>
+      <th style="width:7%">Unit</th>
+      <th class="r" style="width:16%">Unit Price</th>
+      <th class="r" style="width:16%">Amount</th>
     </tr></thead>
     <tbody>${itemRowsHTML}</tbody>
   </table>
 
-  <div class="totals-section">
-    <div class="totals-box">
-      <div class="total-row"><span>Subtotal</span><span class="tv">${formatCurrency(subtotal)}</span></div>
-      ${taxTotal > 0 ? `<div class="total-row"><span>Tax</span><span class="tv">${formatCurrency(taxTotal)}</span></div>` : ""}
-      <div class="grand-total"><span class="gl">Total</span><span class="gv">${formatCurrency(total)}</span></div>
+  <div class="tot-wrap">
+    <div class="tot-inner">
+      <div class="tot-row"><span class="tot-lbl">Subtotal</span><span class="tot-val">${formatCurrency(subtotal)}</span></div>
+      ${taxTotal > 0 ? `<div class="tot-row"><span class="tot-lbl">Tax</span><span class="tot-val">${formatCurrency(taxTotal)}</span></div>` : ""}
+      <div class="grand-row">
+        <span class="grand-lbl">Total</span>
+        <span class="grand-val">${formatCurrency(total)}</span>
+      </div>
     </div>
   </div>
 
-  ${po.notes ? `<div class="notes"><strong>Notes:</strong> ${po.notes}</div>` : ""}
+  ${po.notes ? `<div class="notes-box"><div class="notes-lbl">Notes &amp; Special Instructions</div><p>${po.notes}</p></div>` : ""}
 
-  <div class="footer">
-    <div class="footer-addr">${fromLine1}${fromLine2 ? ` · ${fromLine2}` : ""}${fromPhone ? ` · ${fromPhone}` : ""}</div>
+  <div class="auth-grid">
+    <div class="auth-block">
+      <div class="auth-line"></div>
+      <div class="auth-lbl">Authorised By</div>
+    </div>
+    <div class="auth-block">
+      <div class="auth-line"></div>
+      <div class="auth-lbl">Date</div>
+    </div>
+  </div>
+
+  <div class="doc-footer">
+    <div class="foot-l">${fromLine1} · ${fromLine2}${fromPhone ? ` · ${fromPhone}` : ""}</div>
+    <div class="foot-r">This is an official purchase order</div>
   </div>
 
 </div></body></html>`);

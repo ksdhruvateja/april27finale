@@ -126,9 +126,11 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
     const logoSrc   = profile.logo ?? forézLogo;
 
     const customerAddrHTML = (() => {
-      const parts: string[] = [];
-      if (addr?.line1) parts.push(`<div class="addr">${addr.line1}${addr.line2 ? `<br/>${addr.line2}` : ""}${addr.city ? `<br/>${addr.city}${addr.state ? `, ${addr.state}` : ""}${addr.zip ? ` ${addr.zip}` : ""}` : ""}</div>`);
-      return parts.join("");
+      if (!addr?.line1) return "";
+      const lines = [addr.line1];
+      if (addr.line2) lines.push(addr.line2);
+      if (addr.city) lines.push([addr.city, addr.state, addr.zip].filter(Boolean).join(", "));
+      return lines.join("<br/>");
     })();
 
     const lineItemsHTML = (invoice.lineItems as LineItem[]).map(item => {
@@ -136,27 +138,27 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
       return `
         <tr>
           <td>
-            <div class="item-name">${item.description ? nl2br(item.description) : "—"}</div>
-            ${item.lineDescription ? `<div class="item-desc">${nl2br(item.lineDescription)}</div>` : ""}
+            <div class="iname">${item.description ? nl2br(item.description) : "—"}</div>
+            ${item.lineDescription ? `<div class="idesc">${nl2br(item.lineDescription)}</div>` : ""}
           </td>
-          <td>${item.sku ? `<span class="item-sku">${item.sku}</span>` : `<span class="muted">—</span>`}</td>
-          <td class="right">${item.quantity}</td>
-          <td>${item.unit || "ea"}</td>
-          <td class="right">${formatCurrency(item.unitPrice)}</td>
-          <td class="right item-amount">${formatCurrency(amount)}</td>
+          <td>${item.sku ? `<span class="isku">${item.sku}</span>` : `<span style="color:#d1d5db">—</span>`}</td>
+          <td class="r">${item.quantity}</td>
+          <td style="color:#9ca3af">${item.unit || "ea"}</td>
+          <td class="r">${formatCurrency(item.unitPrice)}</td>
+          <td class="r iamt">${formatCurrency(amount)}</td>
         </tr>`;
     }).join("");
 
     const paymentHTML = invoice.paidAt && invoice.paymentMethod ? `
-      <div class="payment-info">
-        <div class="info-label">✓ Payment Received</div>
+      <div class="info-box pay-box">
+        <div class="info-box-lbl">✓ Payment Received</div>
         <p>${PAYMENT_METHOD_LABELS[invoice.paymentMethod] ?? invoice.paymentMethod} on ${formatDate(invoice.paidAt)}${invoice.paymentNote ? ` — ${invoice.paymentNote}` : ""}</p>
       </div>` : "";
 
     const notesHTML = invoice.notes ? `
-      <div class="notes-block">
-        <div class="info-label">Notes</div>
-        <p>${invoice.notes}</p>
+      <div class="info-box notes-box">
+        <div class="info-box-lbl">Notes</div>
+        <p>${nl2br(invoice.notes)}</p>
       </div>` : "";
 
     return `<!DOCTYPE html>
@@ -165,154 +167,131 @@ export default function InvoiceView({ invoice, onClose, onMarkPaid, onMarkPendin
 <title>Invoice ${effectiveInvoiceNum} — ${profile.name}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Segoe UI',system-ui,Arial,sans-serif;background:#fff;color:#1a1a2e;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .page{padding:40px 52px;max-width:860px;margin:0 auto}
-  /* ── Letterhead ── */
-  .letterhead{text-align:center;padding-bottom:20px;border-bottom:2px solid #0d1f3c;margin-bottom:24px}
-  .lh-logo{width:60px;height:60px;border-radius:12px;object-fit:contain;display:block;margin:0 auto 10px}
-  .lh-name{font-size:22px;font-weight:900;letter-spacing:-0.5px;color:#0d1f3c;line-height:1}
-  .lh-tag{font-size:9px;color:#9ca3af;letter-spacing:3px;text-transform:uppercase;margin-top:4px}
-  /* ── Doc header row ── */
-  .doc-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px}
-  .doc-type{font-size:32px;font-weight:900;letter-spacing:-1.5px;color:#0d1f3c}
-  .doc-meta{text-align:right}
-  .doc-num{font-size:13px;font-weight:700;color:#6b7280;margin-bottom:6px;letter-spacing:0.5px}
-  .status-badge{display:inline-block;padding:4px 14px;border-radius:99px;font-size:11px;font-weight:700;letter-spacing:0.5px}
-  .badge-paid{background:#d1fae5;color:#065f46}
-  .badge-sent{background:#dbeafe;color:#1e40af}
-  .badge-pending{background:#fef3c7;color:#92400e}
-  .badge-overdue{background:#fee2e2;color:#991b1b}
-  .badge-draft{background:#f3f4f6;color:#6b7280}
-  .badge-cancelled{background:#f3f4f6;color:#6b7280}
-  .ref-pill{display:inline-flex;align-items:center;gap:5px;margin-top:6px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:6px;padding:3px 10px;font-size:11px}
-  .ref-pill .rl{color:#6366f1;font-weight:600;text-transform:uppercase;letter-spacing:0.5px}
-  .ref-pill .rv{color:#4338ca;font-weight:700;font-family:monospace}
-  /* ── Address grid ── */
-  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-bottom:24px}
-  .info-block h4{font-size:9px;text-transform:uppercase;letter-spacing:2px;color:#9ca3af;margin-bottom:8px;font-weight:700}
-  .info-block .biz-name{font-size:14px;font-weight:700;color:#0d1f3c;margin-bottom:4px}
-  .info-block .addr{font-size:12px;color:#6b7280;line-height:1.8}
-  .info-block .contact-row{font-size:12px;color:#6b7280;line-height:1.9}
-  /* ── Date chips ── */
-  .dates-row{display:flex;gap:14px;margin-bottom:28px}
-  .date-chip{flex:1;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:12px 15px}
-  .date-chip .lbl{font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:#9ca3af;margin-bottom:4px;font-weight:700}
-  .date-chip .val{font-size:13px;font-weight:600;color:#111827}
-  .date-chip.alert{border-color:#fca5a5;background:#fef2f2}
-  .date-chip.alert .val{color:#dc2626}
-  .date-chip.paid-chip{border-color:#6ee7b7;background:#ecfdf5}
-  .date-chip.paid-chip .val{color:#059669}
-  /* ── Table ── */
-  table{width:100%;border-collapse:collapse;margin-bottom:20px}
-  thead tr{background:#f9fafb;border-bottom:2px solid #e5e7eb}
-  th{text-align:left;padding:9px 13px;font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#9ca3af;font-weight:700}
-  th.right{text-align:right}
-  td{padding:11px 13px;font-size:13px;border-bottom:1px solid #f3f4f6;vertical-align:top;color:#374151}
-  td.right{text-align:right}
-  .item-name{font-weight:600;font-size:13px;color:#111827;margin-bottom:2px;white-space:pre-wrap}
-  .item-desc{font-size:11px;color:#9ca3af;margin-top:2px}
-  .item-sku{font-size:10px;font-family:monospace;color:#9ca3af;background:#f3f4f6;padding:2px 5px;border-radius:4px}
-  .item-amount{font-weight:700;color:#111827}
-  .muted{color:#d1d5db}
-  /* ── Totals ── */
-  .totals-section{display:flex;justify-content:flex-end;margin-top:4px;margin-bottom:24px}
-  .totals-box{width:290px;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden}
-  .total-row{display:flex;justify-content:space-between;padding:9px 16px;font-size:12px;border-bottom:1px solid #f3f4f6}
-  .total-row .tl{color:#6b7280}
-  .total-row .tv{font-weight:600;color:#111827}
-  .total-row.discount .tv{color:#dc2626}
-  .grand-total{display:flex;justify-content:space-between;align-items:center;padding:13px 16px;background:#0d1f3c}
-  .grand-total .gl{font-size:13px;font-weight:700;color:#fff}
-  .grand-total .gv{font-size:18px;font-weight:900;color:#c8ff00}
-  /* ── Info blocks ── */
-  .info-label{font-size:9px;text-transform:uppercase;letter-spacing:2px;font-weight:700;margin-bottom:5px}
-  .payment-info{margin-top:20px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px 16px}
-  .payment-info .info-label{color:#16a34a}
-  .payment-info p{font-size:12px;color:#166534}
-  .notes-block{margin-top:16px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 16px}
-  .notes-block .info-label{color:#b45309}
-  .notes-block p{font-size:12px;color:#78350f;line-height:1.7}
-  /* ── Footer ── */
-  .footer{margin-top:36px;padding-top:14px;border-top:1px solid #e5e7eb;text-align:center}
-  .footer-addr{font-size:10px;color:#9ca3af}
-  @media print{body{padding:0}@page{margin:28px 36px;size:A4}}
+  body{font-family:'Helvetica Neue',Arial,sans-serif;background:#fff;color:#1f2937;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:13px;line-height:1.5}
+  .page{max-width:860px;margin:0 auto;padding:36px 48px}
+  .doc-hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:20px;border-bottom:2.5px solid #0d2044;margin-bottom:26px}
+  .co-left{display:flex;align-items:flex-start;gap:14px}
+  .co-logo{width:52px;height:52px;object-fit:contain;border-radius:8px;flex-shrink:0}
+  .co-name{font-size:17px;font-weight:800;color:#0d2044;letter-spacing:-0.3px;line-height:1.2}
+  .co-addr{font-size:11px;color:#6b7280;margin-top:5px;line-height:1.7}
+  .doc-right{text-align:right}
+  .doc-type{font-size:28px;font-weight:900;color:#0d2044;letter-spacing:-0.3px;line-height:1;margin-bottom:12px}
+  .mrow{display:flex;justify-content:flex-end;align-items:baseline;gap:14px;line-height:2.1}
+  .mlbl{font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap}
+  .mval{font-size:12.5px;font-weight:700;color:#111827;min-width:110px;text-align:right}
+  .mval.alert{color:#dc2626}
+  .mval.ok{color:#059669}
+  .spill{display:inline-block;margin-top:8px;padding:3px 11px;border-radius:3px;font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase}
+  .s-paid{background:#dcfce7;color:#15803d;border:1px solid #bbf7d0}
+  .s-sent{background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe}
+  .s-pending{background:#fef3c7;color:#92400e;border:1px solid #fde68a}
+  .s-overdue{background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5}
+  .s-draft{background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb}
+  .s-cancelled{background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb}
+  .addr-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px}
+  .addr-block{padding:14px 16px;border:1px solid #e5e7eb;border-radius:6px;background:#fafafa}
+  .addr-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#9ca3af;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #efefef}
+  .addr-name{font-size:13.5px;font-weight:700;color:#0d2044;margin-bottom:3px}
+  .addr-text{font-size:11.5px;color:#6b7280;line-height:1.75}
+  table.items{width:100%;border-collapse:collapse;margin-bottom:6px}
+  table.items thead tr{background:#0d2044}
+  table.items th{padding:10px 13px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.85);text-align:left}
+  table.items th.r{text-align:right}
+  table.items tbody tr{border-bottom:1px solid #f3f4f6}
+  table.items tbody tr:last-child{border-bottom:2px solid #e5e7eb}
+  table.items td{padding:11px 13px;font-size:12.5px;color:#374151;vertical-align:top}
+  table.items td.r{text-align:right}
+  .iname{font-weight:600;color:#111827;margin-bottom:2px}
+  .idesc{font-size:11px;color:#9ca3af;margin-top:3px;line-height:1.5}
+  .isku{display:inline-block;font-size:10px;font-family:'Courier New',monospace;color:#9ca3af;background:#f3f4f6;padding:1px 5px;border-radius:3px}
+  .iamt{font-weight:700;color:#111827}
+  .tot-wrap{display:flex;justify-content:flex-end;margin:10px 0 24px}
+  .tot-inner{width:270px}
+  .tot-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;font-size:12.5px;border-bottom:1px solid #f3f4f6}
+  .tot-lbl{color:#6b7280}
+  .tot-val{font-weight:600;color:#111827}
+  .tot-val.disc{color:#dc2626}
+  .tot-val.cr{color:#059669}
+  .grand-row{display:flex;justify-content:space-between;align-items:center;background:#0d2044;border-radius:5px;padding:13px 16px;margin-top:8px}
+  .grand-lbl{font-size:11px;font-weight:700;color:rgba(255,255,255,0.8);text-transform:uppercase;letter-spacing:0.5px}
+  .grand-val{font-size:22px;font-weight:900;color:#fff}
+  .info-box{padding:13px 16px;border-radius:6px;margin-top:16px}
+  .info-box-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:2px;margin-bottom:6px}
+  .pay-box{background:#f0fdf4;border:1px solid #bbf7d0}
+  .pay-box .info-box-lbl{color:#15803d}
+  .pay-box p{font-size:12px;color:#166534;line-height:1.6}
+  .notes-box{background:#fffbeb;border:1px solid #fde68a}
+  .notes-box .info-box-lbl{color:#b45309}
+  .notes-box p{font-size:12px;color:#78350f;line-height:1.75}
+  .doc-footer{margin-top:40px;padding-top:14px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center}
+  .foot-l,.foot-r{font-size:10px;color:#9ca3af}
+  @media print{body{padding:0}@page{margin:22px 36px;size:A4}}
 </style></head>
 <body><div class="page">
 
-  <!-- Centered letterhead -->
-  <div class="letterhead">
-    <img src="${logoSrc}" alt="${profile.name}" class="lh-logo" />
-    <div class="lh-name">${fromName}</div>
-    ${profile.tagline ? `<div class="lh-tag">${profile.tagline}</div>` : ""}
-  </div>
-
-  <!-- Document type + number -->
-  <div class="doc-header">
-    <div class="doc-type">INVOICE</div>
-    <div class="doc-meta">
-      <div class="doc-num">${effectiveInvoiceNum}</div>
-      <div><span class="status-badge badge-${badgeClass}">${badgeLabel}</span></div>
-      ${invoice.trackingNumber ? `<div><div class="ref-pill"><span class="rl">Ref&nbsp;</span><span class="rv">${invoice.trackingNumber}</span></div></div>` : ""}
+  <div class="doc-hdr">
+    <div class="co-left">
+      <img src="${logoSrc}" class="co-logo" alt="${fromName}"/>
+      <div>
+        <div class="co-name">${fromName}</div>
+        <div class="co-addr">${fromLine1}<br/>${fromLine2}${fromPhone ? `<br/>${fromPhone}` : ""}</div>
+      </div>
+    </div>
+    <div class="doc-right">
+      <div class="doc-type">INVOICE</div>
+      <div class="mrow"><span class="mlbl">Invoice No.</span><span class="mval">${effectiveInvoiceNum}</span></div>
+      <div class="mrow"><span class="mlbl">Date Issued</span><span class="mval">${formatDate(invoice.createdAt)}</span></div>
+      ${invoice.dueDate ? `<div class="mrow"><span class="mlbl">Due Date</span><span class="mval${isOverdue ? " alert" : ""}">${formatDate(invoice.dueDate)}</span></div>` : ""}
+      ${invoice.paidAt ? `<div class="mrow"><span class="mlbl">Paid On</span><span class="mval ok">${formatDate(invoice.paidAt)}</span></div>` : ""}
+      ${invoice.trackingNumber ? `<div class="mrow"><span class="mlbl">Reference</span><span class="mval" style="font-family:'Courier New',monospace;font-size:11px">${invoice.trackingNumber}</span></div>` : ""}
+      <div><span class="spill s-${badgeClass}">${badgeLabel}</span></div>
     </div>
   </div>
 
-  <!-- From / Bill To -->
-  <div class="info-grid">
-    <div class="info-block">
-      <h4>From</h4>
-      <div class="biz-name">${fromName}</div>
-      <div class="addr">${fromLine1}<br/>${fromLine2}</div>
-      ${fromPhone ? `<div class="contact-row" style="margin-top:5px">${fromPhone}</div>` : ""}
+  <div class="addr-grid">
+    <div class="addr-block">
+      <div class="addr-lbl">From</div>
+      <div class="addr-name">${fromName}</div>
+      <div class="addr-text">${fromLine1}<br/>${fromLine2}${fromPhone ? `<br/>${fromPhone}` : ""}</div>
     </div>
-    <div class="info-block">
-      <h4>Bill To</h4>
-      <div class="biz-name">${invoice.customerName ?? "—"}</div>
-      ${customerAddrHTML}
+    <div class="addr-block">
+      <div class="addr-lbl">Bill To</div>
+      <div class="addr-name">${invoice.customerName ?? "—"}</div>
+      ${customerAddrHTML ? `<div class="addr-text">${customerAddrHTML}</div>` : ""}
     </div>
   </div>
 
-  <!-- Dates -->
-  <div class="dates-row">
-    <div class="date-chip">
-      <div class="lbl">Issue Date</div>
-      <div class="val">${formatDate(invoice.createdAt)}</div>
-    </div>
-    ${invoice.dueDate ? `<div class="date-chip${isOverdue ? " alert" : ""}"><div class="lbl">Due Date</div><div class="val">${formatDate(invoice.dueDate)}</div></div>` : ""}
-    ${invoice.paidAt ? `<div class="date-chip paid-chip"><div class="lbl">Paid On</div><div class="val">${formatDate(invoice.paidAt)}</div></div>` : ""}
-  </div>
-
-  <!-- Line items -->
-  <table>
-    <thead>
-      <tr>
-        <th>Item / Description</th>
-        <th>SKU</th>
-        <th class="right">Qty</th>
-        <th>Unit</th>
-        <th class="right">Unit Price</th>
-        <th class="right">Amount</th>
-      </tr>
-    </thead>
+  <table class="items">
+    <thead><tr>
+      <th style="width:36%">Description</th>
+      <th style="width:10%">SKU</th>
+      <th class="r" style="width:7%">Qty</th>
+      <th style="width:7%">Unit</th>
+      <th class="r" style="width:15%">Unit Price</th>
+      <th class="r" style="width:15%">Amount</th>
+    </tr></thead>
     <tbody>${lineItemsHTML}</tbody>
   </table>
 
-  <!-- Totals -->
-  <div class="totals-section">
-    <div class="totals-box">
-      <div class="total-row"><span class="tl">Subtotal</span><span class="tv">${formatCurrency(invoice.subtotal)}</span></div>
-      ${invoice.discountTotal > 0 ? `<div class="total-row discount"><span class="tl">Discount</span><span class="tv">−${formatCurrency(invoice.discountTotal)}</span></div>` : ""}
-      <div class="total-row"><span class="tl">Tax</span><span class="tv">${formatCurrency(invoice.taxTotal)}</span></div>
-      ${credits.map((c: any) => `<div class="total-row" style="color:#16a34a"><span class="tl">Credit CM-${String(c.id).padStart(4,"0")}</span><span class="tv">−${formatCurrency(Number(c.refundAmount))}</span></div>`).join("")}
-      <div class="grand-total"><span class="gl">${creditTotal > 0 ? "Net Due" : "Total Due"}</span><span class="gv">${formatCurrency(Math.max(0, invoice.total - creditTotal))}</span></div>
+  <div class="tot-wrap">
+    <div class="tot-inner">
+      <div class="tot-row"><span class="tot-lbl">Subtotal</span><span class="tot-val">${formatCurrency(invoice.subtotal)}</span></div>
+      ${invoice.discountTotal > 0 ? `<div class="tot-row"><span class="tot-lbl">Discount</span><span class="tot-val disc">−${formatCurrency(invoice.discountTotal)}</span></div>` : ""}
+      <div class="tot-row"><span class="tot-lbl">Tax</span><span class="tot-val">${formatCurrency(invoice.taxTotal)}</span></div>
+      ${credits.map((c: any) => `<div class="tot-row"><span class="tot-lbl">Credit CM-${String(c.id).padStart(4,"0")}</span><span class="tot-val cr">−${formatCurrency(Number(c.refundAmount))}</span></div>`).join("")}
+      <div class="grand-row">
+        <span class="grand-lbl">${creditTotal > 0 ? "Net Due" : "Total Due"}</span>
+        <span class="grand-val">${formatCurrency(Math.max(0, invoice.total - creditTotal))}</span>
+      </div>
     </div>
   </div>
 
   ${paymentHTML}
   ${notesHTML}
 
-  <!-- Footer — address only, no marketing copy -->
-  <div class="footer">
-    <div class="footer-addr">${fromLine1} · ${fromLine2}${fromPhone ? ` · ${fromPhone}` : ""}</div>
+  <div class="doc-footer">
+    <div class="foot-l">${fromLine1} · ${fromLine2}${fromPhone ? ` · ${fromPhone}` : ""}</div>
+    <div class="foot-r">Thank you for your business</div>
   </div>
 
 </div></body></html>`;

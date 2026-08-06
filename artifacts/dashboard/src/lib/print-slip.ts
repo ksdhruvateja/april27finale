@@ -65,103 +65,118 @@ export async function printShippingSlip(shipment: any, fromAddr?: CompanyAddress
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<title>Packing Slip ${slipNum}</title>
+<title>Packing Slip ${slipNum} — ${fromName}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#111827;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:13px}
-  @media print{body{padding:0}@page{margin:28px 36px;size:letter}}
+  body{font-family:'Helvetica Neue',Arial,sans-serif;background:#fff;color:#1f2937;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-size:13px;line-height:1.5}
+  .page{max-width:800px;margin:0 auto;padding:36px 48px}
+  .doc-hdr{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:20px;border-bottom:2.5px solid #0d2044;margin-bottom:26px}
+  .co-left{display:flex;align-items:flex-start;gap:14px}
+  .co-logo{width:52px;height:52px;object-fit:contain;border-radius:8px;flex-shrink:0}
+  .co-name{font-size:17px;font-weight:800;color:#0d2044;letter-spacing:-0.3px;line-height:1.2}
+  .co-addr{font-size:11px;color:#6b7280;margin-top:5px;line-height:1.7}
+  .doc-right{text-align:right}
+  .doc-type{font-size:28px;font-weight:900;color:#0d2044;letter-spacing:-0.3px;line-height:1;margin-bottom:12px}
+  .mrow{display:flex;justify-content:flex-end;align-items:baseline;gap:14px;line-height:2.1}
+  .mlbl{font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap}
+  .mval{font-size:12.5px;font-weight:700;color:#111827;min-width:120px;text-align:right}
+  .carrier-pill{display:inline-block;margin-top:8px;padding:3px 11px;border-radius:3px;font-size:10px;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe}
+  .addr-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px}
+  .addr-block{padding:14px 16px;border:1px solid #e5e7eb;border-radius:6px;background:#fafafa}
+  .addr-block.highlight{border-color:#0d2044;border-width:2px;background:#fff}
+  .addr-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#9ca3af;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #efefef}
+  .addr-block.highlight .addr-lbl{color:#0d2044}
+  .addr-name{font-size:13.5px;font-weight:700;color:#0d2044;margin-bottom:3px}
+  .addr-text{font-size:11.5px;color:#6b7280;line-height:1.75}
+  .tracking-bar{display:flex;justify-content:space-between;align-items:center;background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:6px;padding:11px 16px;margin-bottom:20px}
+  .tracking-lbl{font-size:10px;font-weight:700;color:#3b82f6;text-transform:uppercase;letter-spacing:1.5px}
+  .tracking-val{font-size:15px;font-family:'Courier New',monospace;font-weight:800;color:#1d4ed8;letter-spacing:2px}
+  .section-lbl{font-size:9.5px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px}
+  table.items{width:100%;border-collapse:collapse;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden;margin-bottom:20px}
+  table.items thead tr{background:#0d2044}
+  table.items th{padding:10px 14px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.85);text-align:left}
+  table.items th.c{text-align:center}
+  table.items th.r{text-align:right}
+  table.items tbody tr{border-bottom:1px solid #f0f0f0}
+  table.items tbody tr:last-child{border-bottom:none}
+  table.items td{padding:11px 14px;font-size:12.5px;color:#374151;vertical-align:middle}
+  table.items td.c{text-align:center;color:#6b7280}
+  table.items td.r{text-align:right;font-weight:700;color:#111827}
+  .iname{font-weight:600;color:#111827}
+  .notes-box{background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:12px 16px;margin-bottom:20px}
+  .notes-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:#b45309;margin-bottom:5px}
+  .notes-box p{font-size:12px;color:#78350f;line-height:1.7}
+  .sig-grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:24px;margin-top:28px;margin-bottom:32px}
+  .sig-block .sig-line{border-bottom:1.5px solid #cbd5e1;height:30px;margin-bottom:5px}
+  .sig-block .sig-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#94a3b8}
+  .doc-footer{padding-top:14px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center}
+  .foot-l,.foot-r{font-size:10px;color:#9ca3af}
+  @media print{body{padding:0}@page{margin:22px 36px;size:letter}}
 </style>
 </head>
 <body>
-<div style="max-width:740px;margin:0 auto;padding:40px 48px;background:#fff">
+<div class="page">
 
-  <!-- ── Centered letterhead ── -->
-  <div style="text-align:center;padding-bottom:20px;border-bottom:2px solid #0f172a;margin-bottom:24px">
-    <img src="${logoSrc}" alt="${fromName}" style="width:60px;height:60px;object-fit:contain;border-radius:12px;display:block;margin:0 auto 10px"/>
-    <div style="font-size:22px;font-weight:900;color:#0f172a;letter-spacing:-0.5px;line-height:1">${fromName}</div>
-    ${companyProfile.tagline ? `<div style="font-size:9px;color:#94a3b8;letter-spacing:3px;text-transform:uppercase;margin-top:4px">${companyProfile.tagline}</div>` : ""}
-  </div>
-
-  <!-- ── Doc header ── -->
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px">
-    <div style="font-size:32px;font-weight:900;color:#0f172a;letter-spacing:-1.5px">PACKING SLIP</div>
-    <div style="text-align:right">
-      <div style="font-size:13px;font-weight:700;color:#64748b;margin-bottom:4px;letter-spacing:0.5px">${slipNum}</div>
-      <div style="font-size:11px;color:#94a3b8">${today}</div>
-      ${invNum ? `<div style="font-size:11px;color:#64748b;margin-top:3px">Invoice: <strong>${invNum}</strong></div>` : ""}
-      ${shipment.carrier ? `<div style="margin-top:8px;display:inline-block;padding:3px 12px;background:#dbeafe;color:#1d4ed8;font-size:10px;font-weight:700;border-radius:99px;border:1px solid #bfdbfe">${shipment.carrier}</div>` : ""}
+  <div class="doc-hdr">
+    <div class="co-left">
+      <img src="${logoSrc}" class="co-logo" alt="${fromName}"/>
+      <div>
+        <div class="co-name">${fromName}</div>
+        <div class="co-addr">${fromLine1}<br/>${fromLine2}</div>
+      </div>
+    </div>
+    <div class="doc-right">
+      <div class="doc-type">PACKING SLIP</div>
+      <div class="mrow"><span class="mlbl">Slip No.</span><span class="mval">${slipNum}</span></div>
+      <div class="mrow"><span class="mlbl">Date</span><span class="mval">${today}</span></div>
+      ${invNum ? `<div class="mrow"><span class="mlbl">Invoice</span><span class="mval" style="font-family:'Courier New',monospace;font-size:11px">${invNum}</span></div>` : ""}
+      ${shipment.carrier ? `<div><span class="carrier-pill">${shipment.carrier}</span></div>` : ""}
     </div>
   </div>
 
-  <!-- ── Address blocks ── -->
-  <table style="width:100%;border-collapse:collapse;margin-bottom:22px">
-    <tr>
-      <td style="width:48%;vertical-align:top;padding-right:12px">
-        <div style="border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;background:#f8fafc">
-          <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px;border-bottom:1px solid #e2e8f0;padding-bottom:6px">From</div>
-          <div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:4px">${fromName}</div>
-          <div style="font-size:12px;color:#475569;line-height:1.7">${fromLine1}<br/>${fromLine2}</div>
-        </div>
-      </td>
-      <td style="width:52%;vertical-align:top;padding-left:12px">
-        <div style="border:2px solid #0f172a;border-radius:8px;padding:14px 16px;background:#fff">
-          <div style="font-size:9px;font-weight:700;color:#1d4ed8;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px;border-bottom:1px solid #e2e8f0;padding-bottom:6px">Ship To</div>
-          <div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:4px">${toName}</div>
-          ${toContact ? `<div style="font-size:11.5px;color:#64748b;margin-bottom:4px">Attn: ${toContact}</div>` : ""}
-          <div style="font-size:12px;color:#475569;line-height:1.7">${toAddr1 ? toAddr1 + "<br/>" : ""}${toAddr2 || (toAddr1 ? "" : "<em style='color:#9ca3af'>Address not on file</em>")}${toCountry ? "<br/>" + toCountry : ""}</div>
-        </div>
-      </td>
-    </tr>
-  </table>
-
-  ${shipment.trackingNumber ? `
-  <div style="margin-bottom:20px;padding:12px 16px;background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:8px;display:flex;align-items:center;justify-content:space-between">
-    <div style="font-size:10px;font-weight:700;color:#3b82f6;text-transform:uppercase;letter-spacing:1.5px">Tracking Number</div>
-    <div style="font-size:15px;font-family:'Courier New',monospace;font-weight:800;color:#1d4ed8;letter-spacing:2.5px">${shipment.trackingNumber}</div>
-  </div>` : ""}
-
-  <!-- ── Items ── -->
-  <div style="margin-bottom:${shipment.notes ? "18px" : "28px"}">
-    <div style="font-size:9.5px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px">Package Contents</div>
-    <table style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
-      <thead>
-        <tr style="background:#f1f5f9">
-          <th style="padding:9px 14px;text-align:left;font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:1px;border-bottom:1px solid #e5e7eb">Description</th>
-          <th style="padding:9px 14px;text-align:center;font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:1px;width:80px;border-bottom:1px solid #e5e7eb">Unit</th>
-          <th style="padding:9px 14px;text-align:right;font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:1px;width:70px;border-bottom:1px solid #e5e7eb">Qty</th>
-        </tr>
-      </thead>
-      <tbody>${itemsHTML}</tbody>
-    </table>
+  <div class="addr-grid">
+    <div class="addr-block">
+      <div class="addr-lbl">From</div>
+      <div class="addr-name">${fromName}</div>
+      <div class="addr-text">${fromLine1}<br/>${fromLine2}</div>
+    </div>
+    <div class="addr-block highlight">
+      <div class="addr-lbl">Ship To</div>
+      <div class="addr-name">${toName}</div>
+      ${toContact ? `<div class="addr-text" style="margin-bottom:2px">Attn: ${toContact}</div>` : ""}
+      <div class="addr-text">${toAddr1 ? toAddr1 + "<br/>" : ""}${toAddr2 || (!toAddr1 ? "<em style='color:#9ca3af'>Address not on file</em>" : "")}${toCountry ? "<br/>" + toCountry : ""}</div>
+    </div>
   </div>
 
-  ${shipment.notes ? `
-  <div style="margin-bottom:24px;padding:12px 16px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px">
-    <div style="font-size:9.5px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Shipping Notes</div>
-    <div style="font-size:12px;color:#78350f;line-height:1.6">${shipment.notes}</div>
+  ${shipment.trackingNumber ? `
+  <div class="tracking-bar">
+    <div class="tracking-lbl">Tracking Number</div>
+    <div class="tracking-val">${shipment.trackingNumber}</div>
   </div>` : ""}
 
-  <!-- ── Signature ── -->
-  <table style="width:100%;border-collapse:collapse;margin-top:8px;margin-bottom:32px">
-    <tr>
-      <td style="width:50%;padding-right:20px;vertical-align:bottom">
-        <div style="border-bottom:1.5px solid #cbd5e1;padding-bottom:4px;margin-bottom:5px">&nbsp;</div>
-        <div style="font-size:10px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:1px">Received By</div>
-      </td>
-      <td style="width:30%;padding-right:20px;vertical-align:bottom">
-        <div style="border-bottom:1.5px solid #cbd5e1;padding-bottom:4px;margin-bottom:5px">&nbsp;</div>
-        <div style="font-size:10px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:1px">Date Received</div>
-      </td>
-      <td style="width:20%;vertical-align:bottom">
-        <div style="border-bottom:1.5px solid #cbd5e1;padding-bottom:4px;margin-bottom:5px">&nbsp;</div>
-        <div style="font-size:10px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:1px">Condition</div>
-      </td>
-    </tr>
+  <div class="section-lbl">Package Contents</div>
+  <table class="items">
+    <thead>
+      <tr>
+        <th style="width:60%">Description</th>
+        <th class="c" style="width:20%">Unit</th>
+        <th class="r" style="width:20%">Qty Shipped</th>
+      </tr>
+    </thead>
+    <tbody>${itemsHTML}</tbody>
   </table>
 
-  <!-- ── Footer — address only ── -->
-  <div style="border-top:1px solid #e5e7eb;padding-top:14px;text-align:center">
-    <div style="font-size:10px;color:#94a3b8">${fromLine1} · ${fromLine2}</div>
+  ${shipment.notes ? `<div class="notes-box"><div class="notes-lbl">Shipping Notes</div><p>${shipment.notes}</p></div>` : ""}
+
+  <div class="sig-grid">
+    <div class="sig-block"><div class="sig-line"></div><div class="sig-lbl">Received By (Signature &amp; Print)</div></div>
+    <div class="sig-block"><div class="sig-line"></div><div class="sig-lbl">Date Received</div></div>
+    <div class="sig-block"><div class="sig-line"></div><div class="sig-lbl">Condition</div></div>
+  </div>
+
+  <div class="doc-footer">
+    <div class="foot-l">${fromLine1} · ${fromLine2}</div>
+    <div class="foot-r">Please inspect contents upon receipt</div>
   </div>
 
 </div>
