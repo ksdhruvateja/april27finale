@@ -25,16 +25,22 @@ const ALLOWED_ORIGINS = new Set([
   "http://localhost:8080",
 ]);
 
+// Railway injects RAILWAY_PUBLIC_DOMAIN for the service's public URL
+if (process.env.RAILWAY_PUBLIC_DOMAIN) {
+  ALLOWED_ORIGINS.add(`https://${process.env.RAILWAY_PUBLIC_DOMAIN}`);
+}
+
 app.use(
   cors({
     origin(origin, callback) {
-      // Same-origin requests (no Origin header) or Replit preview domains
       if (
-        !origin ||
+        !origin ||                                    // same-origin / server-to-server
         ALLOWED_ORIGINS.has(origin) ||
         /\.replit\.dev$/.test(origin) ||
         /\.replit\.app$/.test(origin) ||
-        /\.repl\.co$/.test(origin)
+        /\.repl\.co$/.test(origin) ||
+        /\.up\.railway\.app$/.test(origin) ||         // Railway preview domains
+        /\.railway\.app$/.test(origin)                // Railway custom domains
       ) {
         callback(null, true);
       } else {
