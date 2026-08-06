@@ -1,4 +1,4 @@
-FROM node:22-alpine
+FROM node:22-slim
 
 # Disable corepack and install pnpm 9 directly (no corepack version-lock)
 RUN corepack disable && npm install -g pnpm@10.26.1
