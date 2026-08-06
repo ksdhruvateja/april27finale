@@ -100,6 +100,7 @@ function CreditMemoView({
   record: ReturnRecord;
   onClose: () => void;
 }) {
+  const profile = useCompanyProfile();
   const cmNumber = `CM-${String(record.id).padStart(4, "0")}`;
   const lineItems: any[] = Array.isArray(record.lineItems) ? record.lineItems : [];
   const hasLines = lineItems.length > 0;
