@@ -11,7 +11,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 # Copy all source packages
 COPY lib/ ./lib/
 COPY artifacts/ ./artifacts/
-COPY scripts/ ./scripts/ 2>/dev/null || true
+COPY scripts/ ./scripts/
 
 # Install all dependencies
 RUN pnpm install --frozen-lockfile --prod=false

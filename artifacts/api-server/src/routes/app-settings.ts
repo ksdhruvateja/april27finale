@@ -42,8 +42,8 @@ router.get("/app-settings", async (_req, res): Promise<void> => {
 router.get("/app-settings/:key", async (req, res): Promise<void> => {
   const key = req.params.key;
   const [row] = await db.select().from(appSettingsTable).where(eq(appSettingsTable.key, key));
-  if (!row) { res.status(404).json({ error: "Not found" }); return; }
-  res.json({ key: row.key, value: row.value });
+  // Return null value for settings that haven't been saved yet (not a 404)
+  res.json({ key, value: row?.value ?? null });
 });
 
 router.put("/app-settings/:key", async (req, res): Promise<void> => {
