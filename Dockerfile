@@ -5,8 +5,8 @@ RUN corepack disable && npm install -g pnpm@10.26.1
 
 WORKDIR /app
 
-# Copy workspace manifests first for better layer caching
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+# Copy workspace manifests and root TypeScript configs
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.json tsconfig.base.json ./
 
 # Copy all source packages
 COPY lib/ ./lib/
