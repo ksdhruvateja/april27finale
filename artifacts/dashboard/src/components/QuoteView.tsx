@@ -13,7 +13,7 @@ interface CompanyAddress {
   phone?: string;
 }
 import { formatCurrency, formatDate } from "@/lib/utils";
-import forézLogo from "@assets/image_1785249843852.png";
+import forézLogo from "@/assets/image_1785249843852.png";
 
 // BUSINESS is now loaded dynamically via useCompanyProfile() inside the component
 

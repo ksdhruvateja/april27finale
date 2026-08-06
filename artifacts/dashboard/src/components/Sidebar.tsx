@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useEffect, useRef } from "react";
-import brandLogo from "@assets/image_1785249843852.png";
+import brandLogo from "@/assets/image_1785249843852.png";
 import { useRole, UserRole, checkAccess } from "@/context/RoleContext";
 import { useCompanyProfile } from "@/lib/companyProfile";
 
