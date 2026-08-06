@@ -28,6 +28,7 @@ import returnsRouter         from "./returns.js";
 import plaidRouter           from "./plaid.js";
 import ticketsRouter         from "./tickets.js";
 import transactionsRouter    from "./transactions.js";
+import stripeRouter          from "./stripe.js";
 import { requireAuth }       from "../middleware/requireAuth.js";
 
 const router: IRouter = Router();
@@ -70,5 +71,6 @@ router.use(returnsRouter);
 router.use(plaidRouter);
 router.use(ticketsRouter);
 router.use(transactionsRouter);
+router.use(stripeRouter);
 
 export default router;

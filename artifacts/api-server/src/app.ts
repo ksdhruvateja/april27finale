@@ -7,6 +7,7 @@ import path from "node:path";
 import { existsSync } from "node:fs";
 import router from "./routes/index.js";
 import { logger } from "./lib/logger.js";
+import { stripeWebhookHandler } from "./routes/stripe.js";
 
 const app: Express = express();
 
@@ -65,6 +66,10 @@ app.use(
     },
   }),
 );
+
+/* ── Stripe webhook (raw body — must be BEFORE express.json) ────────────── */
+// Stripe requires the raw request body to verify the signature.
+app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), stripeWebhookHandler);
 
 /* ── Body parsing ───────────────────────────────────────────────────────── */
 app.use(express.json({ limit: "2mb" }));

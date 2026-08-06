@@ -235,6 +235,13 @@ export default function Invoices() {
   const [transactionId, setTransactionId] = useState(""); // stripe / bank_transfer
   const [chequeNumber, setChequeNumber] = useState("");   // check
   const [refNumber, setRefNumber]       = useState("");   // check
+  // Stripe direct checkout state
+  const [stripeLoading, setStripeLoading]             = useState(false);
+  const [stripeSessionId, setStripeSessionId]         = useState<string | null>(null);
+  const [stripeCheckoutUrl, setStripeCheckoutUrl]     = useState<string | null>(null);
+  const [stripeStatusLoading, setStripeStatusLoading] = useState(false);
+  const [stripeError, setStripeError]                 = useState<string | null>(null);
+  const [stripePaid, setStripePaid]                   = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [applyCreditFor, setApplyCreditFor] = useState<InvoiceData | null>(null);
 
@@ -455,6 +462,12 @@ export default function Invoices() {
     setTransactionId("");
     setChequeNumber("");
     setRefNumber("");
+    setStripeLoading(false);
+    setStripeSessionId(null);
+    setStripeCheckoutUrl(null);
+    setStripeStatusLoading(false);
+    setStripeError(null);
+    setStripePaid(false);
   };
 
   // Fetch available credits whenever the Pay dialog opens
@@ -639,6 +652,80 @@ export default function Invoices() {
       setExpandedInvId(null);
     } finally {
       setSavingInvItems(null);
+    }
+  };
+
+  /* ── Stripe direct checkout ───────────────────────────────────────────── */
+  const createStripeCheckout = async () => {
+    if (!payDialog) return;
+    const inv = (invoices as any[])?.find(i => i.id === payDialog.id);
+    if (!inv) return;
+    const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+    const cust = (customers as any[])?.find(c => c.id === inv.customerId);
+    setStripeLoading(true);
+    setStripeError(null);
+    try {
+      const res = await fetch(`${base}/api/stripe/create-checkout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          invoiceId: payDialog.id,
+          amount: Number(inv.total),
+          description: `Invoice #${inv.invoiceNumber ?? String(payDialog.id).padStart(4, "0")}`,
+          customerEmail: cust?.email ?? null,
+          customerName: displayName(inv),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to create payment link");
+      setStripeSessionId(data.sessionId);
+      setStripeCheckoutUrl(data.checkoutUrl);
+      window.open(data.checkoutUrl, "_blank");
+    } catch (err: any) {
+      setStripeError(err.message);
+    } finally {
+      setStripeLoading(false);
+    }
+  };
+
+  const checkStripePayment = async () => {
+    if (!stripeSessionId || !payDialog) return;
+    const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+    setStripeStatusLoading(true);
+    setStripeError(null);
+    try {
+      const res = await fetch(`${base}/api/stripe/session-status?sessionId=${stripeSessionId}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Status check failed");
+      if (data.paid) {
+        const txId: string = data.transactionId ?? "";
+        // Directly call pay endpoint with confirmed Stripe transaction ID
+        const payRes = await fetch(`${base}/api/invoices/${payDialog.id}/pay`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            paymentMethod: "stripe",
+            paymentNote: `Transaction ID: ${txId}`,
+            externalTxId: txId,
+          }),
+        });
+        if (!payRes.ok) {
+          const e = await payRes.json().catch(() => ({}));
+          throw new Error(e.error ?? "Failed to record payment");
+        }
+        setStripePaid(true);
+        queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
+        queryClient.invalidateQueries({ queryKey: ["accounting-pnl"] });
+        queryClient.invalidateQueries({ queryKey: ["accounting-ar"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard/stats"] });
+        setTimeout(() => { setPayDialog(null); setViewInvoice(null); setStripePaid(false); }, 1500);
+      } else {
+        setStripeError("Payment not completed yet — please finish checkout in the new tab, then check again.");
+      }
+    } catch (err: any) {
+      setStripeError(err.message);
+    } finally {
+      setStripeStatusLoading(false);
     }
   };
 
@@ -1792,28 +1879,79 @@ export default function Invoices() {
                         </>
                       )}
 
-                      {/* ── Credit Card (Stripe) ── link + transaction ID ── */}
+                      {/* ── Credit Card (Stripe) ── direct API checkout ── */}
                       {selectedMethod === "stripe" && (
-                        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 flex flex-col gap-3">
-                          <div className="flex items-start gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 flex flex-col gap-3">
+                          {/* Header */}
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-violet-600 flex items-center justify-center flex-shrink-0">
                               <CreditCard size={15} className="text-white" />
                             </div>
                             <div>
-                              <p className="text-sm font-semibold text-blue-900">Process via Stripe Dashboard</p>
-                              <p className="text-xs text-blue-600 mt-0.5">Charge the customer in Stripe, then paste the transaction ID below.</p>
+                              <p className="text-sm font-semibold text-violet-900">Stripe Secure Checkout</p>
+                              <p className="text-xs text-violet-600 mt-0.5">Opens a Stripe payment page — invoice is marked paid automatically.</p>
                             </div>
                           </div>
-                          <a href="https://dashboard.stripe.com/payments" target="_blank" rel="noreferrer"
-                            className="inline-flex items-center gap-1.5 self-start px-3.5 py-2 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition-colors">
-                            Open Stripe Dashboard <ExternalLink size={11} />
-                          </a>
-                          <div>
-                            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 block">Transaction / Charge ID</label>
-                            <input type="text" value={transactionId} onChange={e => setTransactionId(e.target.value)}
-                              placeholder="ch_xxxxxxxxxx or pi_xxxxxxxxxx"
-                              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 font-mono focus:outline-none focus:border-blue-400 bg-white" />
-                          </div>
+
+                          {/* Step 1: generate link */}
+                          {!stripeSessionId && !stripePaid && (
+                            <button
+                              onClick={createStripeCheckout}
+                              disabled={stripeLoading}
+                              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-violet-600 text-white text-sm font-semibold hover:bg-violet-700 disabled:opacity-60 transition-colors"
+                            >
+                              {stripeLoading ? (
+                                <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Creating payment link…</>
+                              ) : (
+                                <><CreditCard size={14} /> Generate Payment Link</>
+                              )}
+                            </button>
+                          )}
+
+                          {/* Step 2: link generated — waiting for payment */}
+                          {stripeSessionId && !stripePaid && (
+                            <div className="flex flex-col gap-2.5">
+                              <div className="flex items-center gap-2 rounded-lg bg-violet-100 border border-violet-300 px-3 py-2">
+                                <span className="w-2 h-2 rounded-full bg-violet-500 animate-pulse flex-shrink-0" />
+                                <span className="text-xs text-violet-700 font-medium">Payment page opened in new tab — complete payment there</span>
+                              </div>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={checkStripePayment}
+                                  disabled={stripeStatusLoading}
+                                  className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-violet-600 text-white text-xs font-semibold hover:bg-violet-700 disabled:opacity-60 transition-colors"
+                                >
+                                  {stripeStatusLoading ? (
+                                    <><span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Checking…</>
+                                  ) : (
+                                    "Check Payment Status"
+                                  )}
+                                </button>
+                                <button
+                                  onClick={() => stripeCheckoutUrl && window.open(stripeCheckoutUrl, "_blank")}
+                                  className="px-3 py-2 rounded-lg border border-violet-300 bg-white text-violet-700 text-xs font-semibold hover:bg-violet-50 transition-colors"
+                                >
+                                  Reopen <ExternalLink size={11} className="inline ml-0.5" />
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Step 3: paid ✅ */}
+                          {stripePaid && (
+                            <div className="flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-300 px-3 py-2.5">
+                              <CheckCircle2 size={16} className="text-emerald-600 flex-shrink-0" />
+                              <span className="text-sm font-semibold text-emerald-700">Payment confirmed — closing…</span>
+                            </div>
+                          )}
+
+                          {/* Error */}
+                          {stripeError && (
+                            <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-600 flex items-start gap-2">
+                              <AlertCircle size={13} className="flex-shrink-0 mt-0.5" />
+                              <span>{stripeError}</span>
+                            </div>
+                          )}
                         </div>
                       )}
 
